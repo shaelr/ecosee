@@ -10,6 +10,11 @@ degradation** (ADR-0001). Anything whose data is absent is hidden, never faked.
 
 ## Visual language
 
+- **Typeface:** the device uses **Gotham** (Hoefler&Co). It is proprietary and
+  **not bundled** with the card; the font stack (`--ecosee-font`) requests Gotham
+  first (used when the user's HA frontend/theme/system provides it) and falls back
+  to **Montserrat** — the closest freely-licensed Gotham-alike — then the system
+  stack. Numbers use proportional lining figures.
 - **Motif:** flat **squircle** (rounded-square) — big numbers and rounded-square
   bubbles. **No circular dial/ring.**
 - **Canvas:** near-black background, cyan/blue accent text and outlines.
@@ -21,7 +26,9 @@ degradation** (ADR-0001). Anything whose data is absent is hidden, never faked.
   - **Heat** — amber/orange, **♨ heat-coil** icon. The active heat bubble uses a warm
     yellow→orange gradient; the active cool bubble a blue gradient.
   - **Idle / neutral** — default cyan on black.
-- **Weather glyphs:** green (e.g., the sun icon).
+- **Weather glyphs:** green — but only the **condition** glyphs inside the Weather
+  Overlay. The Home Screen's weather **affordance** is cyan like the other top-row
+  glyphs (the device colors it the same as the mode/menu icons, not green).
 - **Sizing:** preserve the device's square-ish aspect ratio, scale to the card's
   column width, cap max size (no circular dial to preserve, but keep the squircle
   proportions). Units follow Home Assistant's configured system.
@@ -54,18 +61,24 @@ picker reached through the Main Menu) returns straight to Home, not one level up
 Top row of glyphs, then the humidity line and large current temperature centered,
 then the Hold pill — see also the equipment edge glow below.
 - **Large current temperature** (e.g., `75`) — the dominant element. This is
-  `current_temperature`, NOT a setpoint.
-- **Humidity** `◊ 60%` — `current_humidity` (hidden if absent).
+  `current_temperature`, NOT a setpoint. Rendered in **thin cyan** glyphs (not pale
+  white) with a faint top-bright sheen (`--ecosee-temp-grad`) and proportional
+  lining figures, matching the device's number.
+- **Humidity** `◊ 60%` — `current_humidity` (hidden if absent). The glyph is the
+  device's small **water droplet** (the `◊` is shorthand), cyan.
 - **System Mode indicator** (top row, center) — the device's mode glyph: `OFF` pill,
   ♨ Heat, ❄ Cool, ❄-leaf Heat / Cool (Auto). From `hvac_mode`; tapping it opens the
   **System Mode picker**. (This is *not* the equipment status — see the edge glow.)
 - **Equipment Status edge glow** — a colored glow around the screen edge: blue while
   cooling, amber while heating, none when idle. From `hvac_action` (inferred if
-  absent); see `reference/home-cooling.jpeg` / `home-heating.jpeg`.
-- **Hold pill** (when on a Hold): the active setpoints (`70 – 75`, heat amber / cool
-  blue) + ✕ to **Resume Schedule**. A single-setpoint pill (Heat/Cool only) shows one
-  value and is tinted to the mode color. The device's `until 5:28pm` expiry is omitted
-  — HA doesn't expose the next transition time (ADR-0003).
+  absent); see `reference/home-cooling.jpeg` / `home-heating.jpeg`. A crisp thin
+  outline tracing the squircle edge with a gentle falloff inward, not a diffuse halo.
+- **Hold pill** (when on a Hold): a **horizontal** pill (as the reference photos
+  show — the setpoints read left-to-right, not rotated) with the active setpoints in
+  **bold** (`70 – 75`, heat amber / cool blue) + ✕ to **Resume Schedule**. A
+  single-setpoint pill (Heat/Cool only) shows one value and is tinted to the mode
+  color. The device's `until 5:28pm` expiry is omitted — HA doesn't expose the next
+  transition time (ADR-0003).
 - **Weather icon** (top row, left) — opens the Weather overlay; shown only if a
   `weather` entity is configured/detected.
 - **Menu affordance** (top row, right) — opens Main Menu.

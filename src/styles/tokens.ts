@@ -12,6 +12,10 @@ export const tokens = css`
     --ecosee-muted: #6f96a3;
     --ecosee-idle: #6f96a3;
 
+    /* The dominant current-temperature number: cyan with the device's faint
+       top-bright sheen (a near-white cyan fading into the accent). */
+    --ecosee-temp-grad: linear-gradient(180deg, #cdeffb 0%, #62cfe9 72%);
+
     --ecosee-heat: #f3a13c;
     --ecosee-heat-grad: linear-gradient(150deg, #f7c84d 0%, #ee7a2c 100%);
     --ecosee-cool: #49b6ea;
@@ -25,6 +29,13 @@ export const tokens = css`
     --ecosee-aspect: 1 / 1;
     --ecosee-radius: 15%;
 
-    --ecosee-font: 'Helvetica Neue', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    /* The device's typeface is Gotham (Hoefler&Co). Gotham is proprietary and
+       cannot be bundled with the card, so we request it by name first — it is used
+       wherever the user's theme/system provides it — then fall back to Montserrat,
+       the closest freely-licensed geometric-sans Gotham-alike, then the system
+       stack. To guarantee Gotham itself, supply it via your Home Assistant frontend. */
+    --ecosee-font:
+      'Gotham', 'Gotham SSm', 'Montserrat', 'Helvetica Neue', 'Segoe UI', system-ui, -apple-system,
+      sans-serif;
   }
 `;
