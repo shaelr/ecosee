@@ -1,5 +1,6 @@
 import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
+import { num } from './parse';
 
 // The graceful-degradation seam (ADR-0001). `toHomeView` is a pure function from
 // raw `hass` + config to a normalized, already-degraded view model: every field
@@ -37,20 +38,11 @@ export interface HomeView {
 
 const UNAVAILABLE = new Set(['unavailable', 'unknown', 'none', '']);
 
-function num(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
 function str(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function toMode(state: string): SystemMode {
+export function toMode(state: string): SystemMode {
   switch (state) {
     case 'heat':
       return 'heat';
@@ -153,7 +145,8 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
   const mode = toMode(entity.state);
   const currentTemp = num(attrs.current_temperature);
   const hold = deriveSetpoints(mode, attrs);
-  const equipment = fromHvacAction(str(attrs.hvac_action)) ?? inferEquipment(mode, currentTemp, hold);
+  const equipment =
+    fromHvacAction(str(attrs.hvac_action)) ?? inferEquipment(mode, currentTemp, hold);
   const humidity =
     num(attrs.current_humidity) ??
     (config.humidity_entity ? num(hass.states[config.humidity_entity]?.state) : null);

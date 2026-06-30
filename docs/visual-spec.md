@@ -58,11 +58,13 @@ Overlays auto-revert to the Home Screen after a configurable inactivity timeout
 - **Omitted (no generic data source):** reminder/alert glyph, glowing status orb.
 
 ### Temperature Adjust — `reference/temp-adjust-cool.jpeg`, `temp-adjust-heat.jpeg`
-- **Horizontal value scrubber:** `… 77 76 [75] 74 73 …`, selected value in a big
-  squircle bubble (blue gradient for cool, warm gradient for heat).
-- **+ / −** buttons above the bubble nudge the selected setpoint; tinted to the
-  active setpoint's color.
-- **Setpoint chips** at the bottom: cool (❄ + temp, blue) and heat (♨ + temp, amber).
+- **Vertical value scrubber** down the center, higher values up:
+  `77 / 76 / [75] / 74 / 73` top-to-bottom, the selected value in a big squircle
+  bubble (blue gradient for cool, warm gradient for heat).
+- **+ / −** buttons stacked on the right (＋ above −) nudge the selected setpoint;
+  tinted to the active setpoint's color.
+- **Setpoint chips** stacked on the left as small circular pucks (glyph over temp):
+  cool (❄, blue) above heat (♨, amber); selected = filled, unselected = outlined.
   - **Single setpoint** (Heat/Cool): one chip, one scrubber.
   - **Dual setpoint** (Heat / Cool (Auto)): both chips; tap a chip to choose which
     setpoint the scrubber edits. Maps to `target_temp_low` / `target_temp_high`.

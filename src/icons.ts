@@ -62,9 +62,25 @@ export const icons = {
     <circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8" />
   `),
 
-  /** Resume Schedule — the ✕ inside the Hold pill. */
+  /** Resume Schedule — the ✕ inside the Hold pill; also the overlay close. */
   close: wrap(svg`
     <path d="M7.5 7.5 L16.5 16.5 M16.5 7.5 L7.5 16.5" fill="none" stroke="currentColor"
       stroke-width="2.2" stroke-linecap="round" />
+  `),
+
+  /** Nudge up — a circled plus, matching the Temperature Adjust buttons. */
+  plus: wrap(svg`
+    <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <circle cx="12" cy="12" r="9.2" />
+      <path d="M12 7.6 V16.4 M7.6 12 H16.4" />
+    </g>
+  `),
+
+  /** Nudge down — a circled minus. */
+  minus: wrap(svg`
+    <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <circle cx="12" cy="12" r="9.2" />
+      <path d="M7.6 12 H16.4" />
+    </g>
   `),
 } as const;

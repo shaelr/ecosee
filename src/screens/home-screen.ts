@@ -4,13 +4,16 @@ import type { EquipmentStatus, HomeView } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
 import { icons } from '../icons';
 
-/** Actions the Home Screen surfaces to the host card. Overlays are the next
- *  milestone, so for now the card stubs them; `resume` is wired through. */
+/** Actions the Home Screen surfaces to the host card. `temperature` opens the
+ *  Temperature Adjust overlay; `weather` / `menu` open later Overlays; `resume`
+ *  clears the active Hold. */
 export type HomeAction = 'menu' | 'temperature' | 'weather' | 'resume';
 
 /**
- * The default Card view: a flat squircle bearing the large current temperature,
- * a left rail of glyphs (humidity / equipment / weather), and the Hold pill.
+ * The default Card view, laid out as the device is (see
+ * docs/reference/home-hold.jpeg): a top row of affordance glyphs (weather left,
+ * equipment center, menu right), the humidity line and the large current
+ * temperature centered beneath, and the horizontal Hold pill below the number.
  * Purely presentational — it renders whatever the already-degraded HomeView says,
  * and emits `ecosee-action` events for the host card to handle.
  */
@@ -32,11 +35,9 @@ export class EcoseeHomeScreen extends LitElement {
       width: clamp(var(--ecosee-min-size, 220px), 100%, var(--ecosee-max-size, 460px));
       aspect-ratio: var(--ecosee-aspect, 1 / 1);
       margin: 0 auto;
-      padding: 9cqw 8cqw;
-      display: grid;
-      grid-template-columns: max-content 1fr max-content;
-      align-items: center;
-      gap: 4cqw;
+      padding: 7cqw 8cqw;
+      display: flex;
+      flex-direction: column;
       background: var(--ecosee-bg, #0a0d10);
       border-radius: var(--ecosee-radius, 15%);
       color: var(--ecosee-fg, #d4eff9);
@@ -59,38 +60,24 @@ export class EcoseeHomeScreen extends LitElement {
       justify-content: center;
     }
 
-    .menu {
-      position: absolute;
-      top: 7cqw;
-      left: 8cqw;
+    /* Top row: weather (left), equipment (center), menu (right). Explicit columns
+       keep each anchored even when weather or equipment is absent. */
+    .top {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+    }
+    .weather {
+      grid-column: 1;
+      justify-self: start;
       width: 11cqw;
       height: 11cqw;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-weather, #7fd08a);
     }
-
-    .rail {
-      grid-column: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 6cqw;
-      color: var(--ecosee-accent, #62cfe9);
-    }
-
-    .hum {
-      display: inline-flex;
-      align-items: center;
-      gap: 1.6cqw;
-      font-size: 7cqw;
-      font-weight: 300;
-      letter-spacing: 0.02em;
-    }
-    .hum .glyph {
-      width: 6.5cqw;
-      height: 6.5cqw;
-    }
-
     .equip {
+      grid-column: 2;
+      justify-self: center;
       width: 12cqw;
       height: 12cqw;
     }
@@ -103,18 +90,40 @@ export class EcoseeHomeScreen extends LitElement {
     .equip.idle {
       color: var(--ecosee-idle, #6f96a3);
     }
-
-    .weather {
+    .menu {
+      grid-column: 3;
+      justify-self: end;
       width: 11cqw;
       height: 11cqw;
-      color: var(--ecosee-weather, #7fd08a);
+      color: var(--ecosee-accent, #62cfe9);
+    }
+
+    /* Centered cluster: humidity above the dominant number, Hold pill below. */
+    .body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3cqw;
+    }
+
+    .hum {
+      display: inline-flex;
+      align-items: center;
+      gap: 1.6cqw;
+      font-size: 7cqw;
+      font-weight: 300;
+      letter-spacing: 0.02em;
+      color: var(--ecosee-accent, #62cfe9);
+    }
+    .hum .glyph {
+      width: 6cqw;
+      height: 6cqw;
     }
 
     .temp {
-      grid-column: 2;
-      justify-self: center;
-      align-self: center;
-      font-size: 44cqw;
+      font-size: 42cqw;
       font-weight: 200;
       line-height: 0.84;
       letter-spacing: -0.04em;
@@ -122,63 +131,49 @@ export class EcoseeHomeScreen extends LitElement {
       cursor: pointer;
     }
 
+    /* Horizontal Hold pill: heat – cool, then the Resume ✕ (the device's
+       "until 5:28pm" expiry is omitted — HA can't express it, ADR-0003). */
     .pill {
-      grid-column: 3;
-      justify-self: end;
       display: inline-flex;
-      flex-direction: column;
       align-items: center;
-      gap: 3cqw;
-      padding: 4cqw 2.5cqw;
+      gap: 2.5cqw;
+      padding: 2.4cqw 4cqw;
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 999px;
-      min-width: 14cqw;
-    }
-    .resume {
-      width: 9cqw;
-      height: 9cqw;
-      border-radius: 50%;
-      border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
-      color: var(--ecosee-accent, #62cfe9);
-      padding: 1.6cqw;
-    }
-    .range {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1cqw;
       font-size: 8cqw;
       font-weight: 500;
       line-height: 1;
     }
-    .range .heat {
+    .pill .heat {
       color: var(--ecosee-heat, #f3a13c);
     }
-    .range .cool {
+    .pill .cool {
       color: var(--ecosee-cool, #49b6ea);
     }
-    .range .dash {
+    .pill .dash {
       color: var(--ecosee-muted, #6f96a3);
-      font-size: 5cqw;
     }
-
-    /* Adapt when the container is narrow: tighten spacing and ease the number down. */
-    @container (max-width: 300px) {
-      .temp {
-        font-size: 40cqw;
-      }
-      .rail {
-        gap: 4.5cqw;
-      }
+    .resume {
+      width: 8.5cqw;
+      height: 8.5cqw;
+      border-radius: 50%;
+      border: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-accent, #62cfe9);
+      padding: 1.4cqw;
+      margin-left: 0.5cqw;
     }
 
     .unavailable {
-      grid-column: 1 / -1;
-      justify-self: center;
-      align-self: center;
       font-size: 8cqw;
       font-weight: 300;
       color: var(--ecosee-muted, #6f96a3);
+    }
+
+    /* Adapt when the container is narrow: ease the number down. */
+    @container (max-width: 300px) {
+      .temp {
+        font-size: 38cqw;
+      }
     }
   `;
 
@@ -198,45 +193,61 @@ export class EcoseeHomeScreen extends LitElement {
 
     return html`
       <div class="face" part="face">
-        <button class="menu" aria-label="Open menu" @click=${() => this._emit('menu')}>
-          ${icons.menu}
-        </button>
-
-        ${this._renderRail(view)}
-
-        ${view.available
-          ? html`<button
-              class="temp"
-              aria-label="Adjust temperature"
-              @click=${() => this._emit('temperature')}
-            >
-              ${formatTemp(view.currentTemp, view.unit)}
-            </button>`
-          : html`<div class="unavailable">${view.name} unavailable</div>`}
-
-        ${this._renderPill(view)}
+        ${this._renderTop(view)}
+        <div class="body">
+          ${
+            view.available
+              ? html`
+                  ${
+                  view.humidity !== null
+                    ? html`<div class="hum">
+                        <span class="glyph">${icons.humidity}</span>${Math.round(view.humidity)}%
+                      </div>`
+                    : nothing
+                }
+                  <button
+                    class="temp"
+                    aria-label="Adjust temperature"
+                    @click=${() => this._emit('temperature')}
+                  >
+                    ${formatTemp(view.currentTemp, view.unit)}
+                  </button>
+                  ${this._renderPill(view)}
+                `
+              : html`<div class="unavailable">${view.name} unavailable</div>`
+          }
+        </div>
       </div>
     `;
   }
 
-  private _renderRail(view: HomeView): TemplateResult {
+  private _renderTop(view: HomeView): TemplateResult {
     return html`
-      <div class="rail">
-        ${view.humidity !== null
-          ? html`<div class="hum">
-              <span class="glyph">${icons.humidity}</span>${Math.round(view.humidity)}%
-            </div>`
-          : nothing}
-        ${view.equipment
-          ? html`<div class="equip ${view.equipment}" aria-label=${this._equipLabel(view.equipment)}>
-              ${this._equipIcon(view.equipment)}
-            </div>`
-          : nothing}
-        ${view.weatherAvailable
-          ? html`<button class="weather" aria-label="Weather" @click=${() => this._emit('weather')}>
-              ${icons.sun}
-            </button>`
-          : nothing}
+      <div class="top">
+        ${
+          view.weatherAvailable
+            ? html`<button
+                class="weather"
+                aria-label="Weather"
+                @click=${() => this._emit('weather')}
+              >
+                ${icons.sun}
+              </button>`
+            : nothing
+        }
+        ${
+          view.equipment
+            ? html`<div
+                class="equip ${view.equipment}"
+                aria-label=${this._equipLabel(view.equipment)}
+              >
+                ${this._equipIcon(view.equipment)}
+              </div>`
+            : nothing
+        }
+        <button class="menu" aria-label="Open menu" @click=${() => this._emit('menu')}>
+          ${icons.menu}
+        </button>
       </div>
     `;
   }
@@ -246,17 +257,28 @@ export class EcoseeHomeScreen extends LitElement {
     if (!hold || (hold.heat === null && hold.cool === null)) return nothing;
     return html`
       <div class="pill" part="hold-pill">
-        ${view.canResume
-          ? html`<button class="resume" aria-label="Resume schedule" @click=${() =>
-              this._emit('resume')}>
-              ${icons.close}
-            </button>`
-          : nothing}
-        <div class="range">
-          ${hold.heat !== null ? html`<span class="heat">${formatTemp(hold.heat, view.unit)}</span>` : nothing}
-          ${hold.heat !== null && hold.cool !== null ? html`<span class="dash">–</span>` : nothing}
-          ${hold.cool !== null ? html`<span class="cool">${formatTemp(hold.cool, view.unit)}</span>` : nothing}
-        </div>
+        ${
+          hold.heat !== null
+            ? html`<span class="heat">${formatTemp(hold.heat, view.unit)}</span>`
+            : nothing
+        }
+        ${hold.heat !== null && hold.cool !== null ? html`<span class="dash">–</span>` : nothing}
+        ${
+          hold.cool !== null
+            ? html`<span class="cool">${formatTemp(hold.cool, view.unit)}</span>`
+            : nothing
+        }
+        ${
+          view.canResume
+            ? html`<button
+                class="resume"
+                aria-label="Resume schedule"
+                @click=${() => this._emit('resume')}
+              >
+                ${icons.close}
+              </button>`
+            : nothing
+        }
       </div>
     `;
   }

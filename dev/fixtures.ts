@@ -43,7 +43,11 @@ function makeHass(options: {
 // current 75, 60% humidity, actively cooling, weather present, ecobee-backed.
 const ecobeeAutoHold: Fixture = {
   label: 'ecobee · Auto hold (the photo)',
-  config: { type: 'custom:ecosee-card', entity: 'climate.living_room', weather_entity: 'weather.home' },
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    weather_entity: 'weather.home',
+  },
   hass: makeHass({
     platform: 'ecobee',
     weather: true,
@@ -59,6 +63,9 @@ const ecobeeAutoHold: Fixture = {
         hvac_action: 'cooling',
         hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
         preset_modes: ['Home', 'Away', 'Sleep'],
+        min_temp: 45,
+        max_temp: 92,
+        target_temp_step: 1,
       },
     },
   }),
@@ -81,6 +88,9 @@ const ecobeeHeating: Fixture = {
         hvac_action: 'heating',
         hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
         preset_modes: ['Home', 'Away', 'Sleep'],
+        min_temp: 45,
+        max_temp: 92,
+        target_temp_step: 1,
       },
     },
   }),
