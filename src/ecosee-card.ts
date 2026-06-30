@@ -2,29 +2,49 @@ import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { CARD_TYPE, parseConfig, type EcoseeCardConfig } from './config';
 import { toHomeView } from './climate/home-view';
+import {
+  toTempAdjustModel,
+  type ServiceCall,
+  type TempAdjustModel,
+} from './climate/temperature-adjust';
 import { tokens } from './styles/tokens';
 import type { HomeAssistant, LovelaceCard } from './types/hass';
 import type { HomeAction } from './screens/home-screen';
 import './screens/home-screen';
+import './overlays/overlay-shell';
+import './overlays/temperature-overlay';
+
+/** The Overlay currently mounted over the Home Screen, if any. More kinds (System
+ *  Mode, Fan, Sensors, Weather) join this union as they land. */
+type OverlayKind = 'temperature';
 
 const VERSION = '0.1.0';
 
 /**
  * `<ecosee-card>` — the host Lovelace element. It owns the `hass` wiring and
  * config, derives the degraded HomeView, and delegates rendering to
- * <ecosee-home-screen>. Overlays arrive in the next milestone; for now the card
- * stubs their actions and wires Resume Schedule through to the entity.
+ * <ecosee-home-screen>. It also owns the overlay shell: opening an Overlay over
+ * the Home Screen, dismissing it, and applying the service calls Overlays emit.
  */
 @customElement(CARD_TYPE)
 export class EcoseeCard extends LitElement implements LovelaceCard {
   @property({ attribute: false }) hass?: HomeAssistant;
   @state() private _config?: EcoseeCardConfig;
+  @state() private _overlay?: OverlayKind;
+  /** Open-time *seed* for the Temperature Adjust overlay (not the live edit
+   *  state — the overlay owns that). Captured once on open and held by reference,
+   *  not recomputed per render, so the overlay's in-progress edits survive `hass`
+   *  updates rather than being reset on every state push. */
+  @state() private _tempSeed?: TempAdjustModel;
 
   static override styles = [
     tokens,
     css`
       :host {
         display: block;
+      }
+      .root {
+        position: relative;
       }
     `,
   ];
@@ -45,7 +65,23 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     if (!this._config || !this.hass) return nothing;
     const view = toHomeView(this.hass, this._config);
     return html`
-      <ecosee-home-screen .view=${view} @ecosee-action=${this._onAction}></ecosee-home-screen>
+      <div class="root">
+        <ecosee-home-screen .view=${view} @ecosee-action=${this._onAction}></ecosee-home-screen>
+        ${this._renderOverlay()}
+      </div>
+    `;
+  }
+
+  private _renderOverlay(): TemplateResult | typeof nothing {
+    if (this._overlay !== 'temperature' || !this._tempSeed || !this._config) return nothing;
+    return html`
+      <ecosee-overlay @ecosee-overlay-dismiss=${this._closeOverlay}>
+        <ecosee-temperature-overlay
+          .model=${this._tempSeed}
+          .entityId=${this._config.entity}
+          @ecosee-set-temperature=${this._onSetTemperature}
+        ></ecosee-temperature-overlay>
+      </ecosee-overlay>
     `;
   }
 
@@ -54,13 +90,35 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       case 'resume':
         this._resumeSchedule();
         break;
-      case 'menu':
       case 'temperature':
+        this._openTemperature();
+        break;
+      case 'menu':
       case 'weather':
-        // Overlays land in the next milestone.
+      case 'system-mode':
+        // The remaining Overlays land in later milestones.
         console.debug(`ecosee: "${event.detail.action}" overlay not yet implemented`);
         break;
     }
+  };
+
+  private _openTemperature(): void {
+    if (!this.hass || !this._config) return;
+    const model = toTempAdjustModel(this.hass, this._config);
+    if (!model.available) return; // nothing editable ⇒ no overlay
+    this._tempSeed = model;
+    this._overlay = 'temperature';
+  }
+
+  private _closeOverlay = (): void => {
+    this._overlay = undefined;
+    this._tempSeed = undefined;
+  };
+
+  private _onSetTemperature = (event: CustomEvent<{ call: ServiceCall }>): void => {
+    if (!this.hass) return;
+    const { domain, service, data } = event.detail.call;
+    void this.hass.callService(domain, service, data);
   };
 
   private _resumeSchedule(): void {

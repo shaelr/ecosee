@@ -13,8 +13,9 @@ degradation** (ADR-0001). Anything whose data is absent is hidden, never faked.
 - **Motif:** flat **squircle** (rounded-square) — big numbers and rounded-square
   bubbles. **No circular dial/ring.**
 - **Canvas:** near-black background, cyan/blue accent text and outlines.
-- **Selected state:** filled light-blue (cyan) bubble with dark text (see the
-  System Mode picker and the active scrubber value).
+- **Selected state:** filled cyan fill. The System Mode picker's selected row uses
+  dark text on cyan; the Temperature Adjust scrubber bubble uses a thin light
+  numeral over its gradient.
 - **Mode/setpoint color language:**
   - **Cool** — blue/cyan, **❄ snowflake** icon.
   - **Heat** — amber/orange, **♨ heat-coil** icon. The active heat bubble uses a warm
@@ -43,26 +44,38 @@ Overlays auto-revert to the Home Screen after a configurable inactivity timeout
 
 ## Screens
 
-### Home Screen — `reference/home-hold.jpeg`
+### Home Screen — `reference/home-hold.jpeg`, `home-off.jpeg`, `home-heat-only.jpeg`, `home-cool-only.jpeg`
+Top row of glyphs, then the humidity line and large current temperature centered,
+then the Hold pill — see also the equipment edge glow below.
 - **Large current temperature** (e.g., `75`) — the dominant element. This is
   `current_temperature`, NOT a setpoint.
 - **Humidity** `◊ 60%` — `current_humidity` (hidden if absent).
-- **Equipment Status indicator** — ❄ when cooling, ♨ when heating, neutral when idle.
-  From `hvac_action`; inferred if absent; hidden if not inferable.
+- **System Mode indicator** (top row, center) — the device's mode glyph: `OFF` pill,
+  ♨ Heat, ❄ Cool, ❄-leaf Heat / Cool (Auto). From `hvac_mode`; tapping it opens the
+  **System Mode picker**. (This is *not* the equipment status — see the edge glow.)
+- **Equipment Status edge glow** — a colored glow around the screen edge: blue while
+  cooling, amber while heating, none when idle. From `hvac_action` (inferred if
+  absent); see `reference/home-cooling.jpeg` / `home-heating.jpeg`.
 - **Hold pill** (when on a Hold): the active setpoints (`70 – 75`, heat amber / cool
-  blue) + ✕ to **Resume Schedule**. The device's `until 5:28pm` expiry is omitted —
-  HA doesn't expose the next transition time (ADR-0003).
-- **Weather icon** — opens the Weather overlay; shown only if a `weather` entity is
-  configured/detected.
-- **Menu affordance** — opens Main Menu.
-- **Omitted (no generic data source):** reminder/alert glyph, glowing status orb.
+  blue) + ✕ to **Resume Schedule**. A single-setpoint pill (Heat/Cool only) shows one
+  value and is tinted to the mode color. The device's `until 5:28pm` expiry is omitted
+  — HA doesn't expose the next transition time (ADR-0003).
+- **Weather icon** (top row, left) — opens the Weather overlay; shown only if a
+  `weather` entity is configured/detected.
+- **Menu affordance** (top row, right) — opens Main Menu.
+- **Omitted (no generic data source):** reminder/alert glyph, glowing status orb (the
+  distinct center orb; the equipment *edge glow* above is backed by `hvac_action`).
 
 ### Temperature Adjust — `reference/temp-adjust-cool.jpeg`, `temp-adjust-heat.jpeg`
-- **Horizontal value scrubber:** `… 77 76 [75] 74 73 …`, selected value in a big
-  squircle bubble (blue gradient for cool, warm gradient for heat).
-- **+ / −** buttons above the bubble nudge the selected setpoint; tinted to the
-  active setpoint's color.
-- **Setpoint chips** at the bottom: cool (❄ + temp, blue) and heat (♨ + temp, amber).
+- **Vertical value scrubber** down the center, higher values up:
+  `77 / 76 / [75] / 74 / 73` top-to-bottom, the selected value in a big squircle
+  bubble (blue gradient for cool, warm gradient for heat) with a thin light numeral.
+  **Drag the scrubber vertically** to change the value (the primary gesture); the
+  neighbors are display-only context.
+- **+ / −** buttons stacked on the right (＋ above −) nudge the selected setpoint
+  one step; tinted to the active setpoint's color.
+- **Setpoint chips** stacked on the left as small circular pucks (glyph over temp):
+  cool (❄, blue) above heat (♨, amber); selected = filled, unselected = outlined.
   - **Single setpoint** (Heat/Cool): one chip, one scrubber.
   - **Dual setpoint** (Heat / Cool (Auto)): both chips; tap a chip to choose which
     setpoint the scrubber edits. Maps to `target_temp_low` / `target_temp_high`.

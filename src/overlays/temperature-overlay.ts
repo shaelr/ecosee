@@ -1,0 +1,379 @@
+import { LitElement, html, css, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { formatTemp } from '../climate/home-view';
+import {
+  nudge,
+  setValue,
+  selectSetpoint,
+  scrubberWindow,
+  setTemperatureCall,
+  type Setpoint,
+  type SetpointEdit,
+  type TempAdjustModel,
+} from '../climate/temperature-adjust';
+import { icons } from '../icons';
+
+/** Neighbors shown on each side of the selected value in the scrubber. */
+const SCRUBBER_RADIUS = 2;
+
+/** Vertical drag distance (px) that scrubs one step. Tuned for a wheel-like feel
+ *  across the card's size range. */
+const PX_PER_STEP = 22;
+
+/**
+ * `<ecosee-temperature-overlay>` — the Temperature Adjust overlay's content
+ * (slotted into <ecosee-overlay>). Laid out as the device is (see
+ * docs/reference/temp-adjust-*.jpeg): a *vertical* value scrubber down the middle
+ * with the selected setpoint in a gradient squircle bubble and higher values
+ * above it, the ± nudge buttons stacked on the right (＋ above −), and the
+ * setpoint chips stacked on the left (Cool above Heat) — one chip in Heat/Cool,
+ * both in Heat / Cool (Auto), where a chip picks which setpoint the scrubber
+ * edits. Tinted per the active setpoint — blue for Cool, warm amber for Heat
+ * (visual-spec.md).
+ *
+ * Unlike the purely presentational <ecosee-home-screen> (which only renders the
+ * card-owned `.view`), this is an interactive editor, so it owns the transient
+ * edit state locally: it seeds `_edit` once from `model`, advances it through the
+ * pure reducers in `temperature-adjust.ts`, and emits `ecosee-set-temperature`
+ * with the `climate.set_temperature` call so the host card applies it as a Hold.
+ * Each ± nudge commits immediately; a drag tracks the finger live but commits
+ * once on release. There is no separate Apply step (and no hold-duration prompt,
+ * ADR-0003).
+ */
+@customElement('ecosee-temperature-overlay')
+export class EcoseeTemperatureOverlay extends LitElement {
+  /** Initial model, built by the host card from `hass` (read once on open). */
+  @property({ attribute: false }) model?: TempAdjustModel;
+  /** The bound entity the emitted `set_temperature` call targets. */
+  @property({ attribute: false }) entityId = '';
+  @state() private _edit?: TempAdjustModel;
+
+  static override styles = css`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    button {
+      appearance: none;
+      background: none;
+      border: none;
+      margin: 0;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* The overlay shell makes slotted content pointer-transparent so empty areas
+       dismiss; our actual controls opt back in. Chips that aren't switchable stay
+       transparent (a single-mode chip is a label, not a button). */
+    .nudge button,
+    .scrubber,
+    button.chip {
+      pointer-events: auto;
+    }
+
+    /* Three columns: setpoint chips (left) | vertical scrubber (center) | ±
+       nudge buttons (right). Chips and buttons are centered on the row so they
+       sit level with the selected-value bubble at the scrubber's midpoint. */
+    .adjust {
+      container-type: size;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      padding: 8cqw 7cqw;
+      display: grid;
+      grid-template-columns: max-content 1fr max-content;
+      align-items: center;
+      gap: 3cqw;
+    }
+
+    /* ± nudge buttons (right), stacked ＋ over −, tinted to the active setpoint. */
+    .nudge {
+      grid-column: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14cqw;
+    }
+    .nudge button {
+      width: 12cqw;
+      height: 12cqw;
+    }
+    .adjust.cool .nudge button {
+      color: var(--ecosee-cool, #49b6ea);
+    }
+    .adjust.heat .nudge button {
+      color: var(--ecosee-heat, #f3a13c);
+    }
+
+    /* Vertical scrubber (center): higher values above the bubble, lower below.
+       The 1fr/auto/1fr rows keep the bubble centered even when the value is near
+       a bound and one side has fewer neighbors. */
+    .scrubber {
+      grid-column: 2;
+      align-self: stretch;
+      display: grid;
+      grid-template-rows: 1fr auto 1fr;
+      justify-items: center;
+      gap: 3cqw;
+      /* Drag-to-scrub surface: swipe vertically to change the value. */
+      touch-action: none;
+      cursor: ns-resize;
+    }
+    .scrubber:focus-visible {
+      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      outline-offset: 1.5cqw;
+      border-radius: 8cqw;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4cqw;
+    }
+    .stack.above {
+      align-self: end;
+    }
+    .stack.below {
+      align-self: start;
+    }
+    .neighbor {
+      font-size: 11cqw;
+      font-weight: 300;
+      color: var(--ecosee-muted, #6f96a3);
+      opacity: 0.85;
+    }
+    .neighbor.far {
+      font-size: 9cqw;
+      opacity: 0.5;
+    }
+    .bubble {
+      width: 36cqw;
+      height: 36cqw;
+      border-radius: 28%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22cqw;
+      font-weight: 200;
+      /* Thin light numeral, as on the device (not dark) — reads on both gradients. */
+      color: var(--ecosee-fg, #d4eff9);
+    }
+    .adjust.cool .bubble {
+      background: var(--ecosee-cool-grad, #49b6ea);
+    }
+    .adjust.heat .bubble {
+      background: var(--ecosee-heat-grad, #f3a13c);
+    }
+
+    /* Setpoint chips (left): small circular pucks, glyph over value, stacked
+       Cool over Heat. Selected = filled; unselected = outlined. */
+    .chips {
+      grid-column: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5cqw;
+    }
+    .chip {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5cqw;
+      width: 17cqw;
+      height: 17cqw;
+      border-radius: 50%;
+      font-size: 7cqw;
+      font-weight: 500;
+      line-height: 1;
+      border: 0.7cqw solid transparent;
+    }
+    .chip .glyph {
+      width: 7cqw;
+      height: 7cqw;
+    }
+    .chip.cool {
+      color: var(--ecosee-cool, #49b6ea);
+      border-color: var(--ecosee-cool, #49b6ea);
+    }
+    .chip.heat {
+      color: var(--ecosee-heat, #f3a13c);
+      border-color: var(--ecosee-heat, #f3a13c);
+    }
+    .chip.cool.selected {
+      background: var(--ecosee-cool, #49b6ea);
+      color: var(--ecosee-bg, #0a0d10);
+    }
+    .chip.heat.selected {
+      background: var(--ecosee-heat, #f3a13c);
+      color: var(--ecosee-bg, #0a0d10);
+    }
+  `;
+
+  /** In-progress drag: the pointer Y and active value at press, plus the step,
+   *  so each move maps absolute travel → whole steps without drift. */
+  private _drag: { startY: number; startValue: number; step: number } | null = null;
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    // Seed (and re-seed on a fresh open) the live edit state from the model.
+    if (changed.has('model') && this.model) this._edit = this.model;
+  }
+
+  /** Emit the `climate.set_temperature` call for the current edit (a Hold). */
+  private _emit(model: TempAdjustModel): void {
+    const call = setTemperatureCall(model, this.entityId);
+    if (!call) return;
+    this.dispatchEvent(
+      new CustomEvent('ecosee-set-temperature', {
+        detail: { call },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** A discrete change (nudge / chip): update the edit and commit immediately. */
+  private _commit(next: TempAdjustModel): void {
+    this._edit = next;
+    this._emit(next);
+  }
+
+  // Drag-to-scrub: the scrubber is a vertical wheel — drag up to raise the active
+  // setpoint, down to lower it (~PX_PER_STEP px = one step). The value tracks the
+  // finger live, but the service call fires once on release, not per move.
+  private _onScrubberDown = (event: PointerEvent): void => {
+    const model = this._edit;
+    const edit = model && model[model.active];
+    if (!edit) return;
+    this._drag = { startY: event.clientY, startValue: edit.value, step: edit.step };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  private _onScrubberMove = (event: PointerEvent): void => {
+    if (!this._drag || !this._edit) return;
+    const steps = Math.round((this._drag.startY - event.clientY) / PX_PER_STEP);
+    this._edit = setValue(this._edit, this._drag.startValue + steps * this._drag.step);
+  };
+
+  private _onScrubberUp = (event: PointerEvent): void => {
+    const drag = this._drag;
+    if (!drag) return;
+    this._drag = null;
+    const el = event.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+    // Commit only when the drag actually moved the value — a tap (or a drag that
+    // nets back to where it started) must not create an unrequested Hold.
+    const edit = this._edit && this._edit[this._edit.active];
+    if (this._edit && edit && edit.value !== drag.startValue) this._emit(this._edit);
+  };
+
+  // Keyboard equivalent of the drag, so the scrubber slider is operable without a
+  // pointer: ↑/→ raise, ↓/← lower the active setpoint by one step.
+  private _onScrubberKey = (event: KeyboardEvent): void => {
+    const model = this._edit;
+    if (!model) return;
+    if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      this._commit(nudge(model, 1));
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      this._commit(nudge(model, -1));
+    }
+  };
+
+  override render(): TemplateResult | typeof nothing {
+    const model = this._edit;
+    if (!model || !model.available) return nothing;
+    const edit = model[model.active];
+    if (!edit) return nothing;
+
+    return html`
+      <div class="adjust ${model.active}">
+        ${this._renderChips(model)} ${this._renderScrubber(model, edit)}
+        <div class="nudge">
+          <button aria-label="Increase" @click=${() => this._commit(nudge(model, 1))}>
+            ${icons.plus}
+          </button>
+          <button aria-label="Decrease" @click=${() => this._commit(nudge(model, -1))}>
+            ${icons.minus}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderScrubber(model: TempAdjustModel, edit: SetpointEdit): TemplateResult {
+    const values = scrubberWindow(edit, SCRUBBER_RADIUS);
+    // Higher values above the bubble, lower below — matching the device. Each
+    // side runs nearest-the-bubble last so the columns read toward the center.
+    const above = values.filter((v) => v > edit.value).reverse();
+    const below = values.filter((v) => v < edit.value).reverse();
+    // Neighbors are display-only context; the value is changed by dragging the
+    // scrubber (or the ± buttons), as on the device.
+    const neighbor = (value: number): TemplateResult => {
+      const far = Math.abs(value - edit.value) > edit.step * 1.5;
+      return html`<div class="neighbor ${far ? 'far' : ''}">${formatTemp(value, model.unit)}</div>`;
+    };
+    return html`
+      <div
+        class="scrubber"
+        role="slider"
+        tabindex="0"
+        aria-label=${`${model.active === 'cool' ? 'Cool' : 'Heat'} setpoint`}
+        aria-valuenow=${edit.value}
+        aria-valuemin=${edit.min ?? nothing}
+        aria-valuemax=${edit.max ?? nothing}
+        aria-valuetext=${formatTemp(edit.value, model.unit)}
+        @pointerdown=${this._onScrubberDown}
+        @pointermove=${this._onScrubberMove}
+        @pointerup=${this._onScrubberUp}
+        @pointercancel=${this._onScrubberUp}
+        @keydown=${this._onScrubberKey}
+      >
+        <div class="stack above">${above.map(neighbor)}</div>
+        <div class="bubble">${formatTemp(edit.value, model.unit)}</div>
+        <div class="stack below">${below.map(neighbor)}</div>
+      </div>
+    `;
+  }
+
+  private _renderChips(model: TempAdjustModel): TemplateResult {
+    return html`
+      <div class="chips">${this._renderChip(model, 'cool')} ${this._renderChip(model, 'heat')}</div>
+    `;
+  }
+
+  private _renderChip(model: TempAdjustModel, setpoint: Setpoint): TemplateResult | typeof nothing {
+    const edit = model[setpoint];
+    if (!edit) return nothing;
+    const selected = model.active === setpoint;
+    const glyph = setpoint === 'cool' ? icons.snowflake : icons.heat;
+    const label = `${setpoint === 'cool' ? 'Cool' : 'Heat'} setpoint`;
+    // A chip is only a control when there is another setpoint to switch to.
+    const switchable = model.heat !== null && model.cool !== null;
+    const body = html`<span class="glyph">${glyph}</span>${formatTemp(edit.value, model.unit)}`;
+    const cls = `chip ${setpoint} ${selected ? 'selected' : ''}`;
+    return switchable
+      ? html`<button
+          class=${cls}
+          aria-pressed=${selected}
+          aria-label=${label}
+          @click=${() => (this._edit = selectSetpoint(model, setpoint))}
+        >
+          ${body}
+        </button>`
+      : html`<div class=${cls} aria-label=${label}>${body}</div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'ecosee-temperature-overlay': EcoseeTemperatureOverlay;
+  }
+}
