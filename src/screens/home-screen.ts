@@ -239,7 +239,7 @@ export class EcoseeHomeScreen extends LitElement {
     if (!view) return nothing;
 
     return html`
-      <div class="face ${view.equipment ?? ''}" part="face">
+      <div class="face ${view.equipment ?? ''}" part="screen">
         ${
           view.equipment
             ? html`<span class="sr-only">${this._equipLabel(view.equipment)}</span>`
