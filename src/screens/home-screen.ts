@@ -8,6 +8,7 @@ import type {
   UvIndexView,
 } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
+import { systemModeGlyph } from '../climate/system-mode';
 import { icons, weatherIcon } from '../icons';
 
 /**
@@ -152,13 +153,16 @@ export class EcoseeHomeScreen extends LitElement {
        the row below the squircle's top curve and pulls the corner glyphs in off the
        rounded corners, matching the device (home-*.jpeg) — the superellipse cuts in
        sharply near the top, so the padding that frames the centered cluster leaves
-       the corner glyphs too high and too close to the edge without this. */
+       the corner glyphs too high and too close to the edge without this. The
+       horizontal inset also gives the top-left and top-right clusters an even bit of
+       breathing room off the edges so they don't hug the border (issue #54); the 1fr
+       side tracks keep the center indicator put as both corners pull in. */
     .top {
       position: relative;
       z-index: 1;
       box-sizing: border-box;
       width: 100%;
-      padding: 3cqw 4cqw 0;
+      padding: 3cqw 6cqw 0;
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
@@ -213,7 +217,12 @@ export class EcoseeHomeScreen extends LitElement {
       color: var(--ecosee-top-row, #ffffff);
     }
 
-    /* Centered cluster: humidity above the dominant number, setpoint ovals below. */
+    /* Centered cluster: humidity above the dominant number, setpoint ovals below.
+       The bottom inset shifts the centering axis up so the whole cluster sits in the
+       upper-middle of the screen, matching the Home Screen reference photos (the
+       humidity line, big number, and oval(s) all sit noticeably above true center in
+       the Heat/Cool hold and System Off shots — issue #55) rather than floating at
+       dead center. */
     .body {
       position: relative;
       z-index: 1;
@@ -223,6 +232,7 @@ export class EcoseeHomeScreen extends LitElement {
       align-items: center;
       justify-content: center;
       gap: 3cqw;
+      padding-bottom: 18cqw;
     }
 
     .hum {
@@ -307,18 +317,13 @@ export class EcoseeHomeScreen extends LitElement {
     }
 
     /* Optional air-quality element (issue #10): a subtle badge at the foot of the
-       cluster — a wind glyph + the AQI number on top, the category beneath. The CSS
-       color carries the severity band (the glyph and number inherit it; the badge
-       tints from it), so the band reads at a glance the way the device colors air
-       quality. The category sits on its own centered line and the badge is capped at
-       the container width, so the long "Unhealthy for Sensitive Groups" label wraps
-       instead of overflowing the squircle at any size. */
+       cluster — a wind glyph + the AQI number (issue #66 dropped the visible category
+       word). The CSS color carries the severity band (the glyph and number inherit it;
+       the badge tints from it), so the band reads at a glance the way the device colors
+       air quality. */
     .aqi {
       display: inline-flex;
-      flex-direction: column;
       align-items: center;
-      gap: 0.6cqw;
-      max-width: 100%;
       box-sizing: border-box;
       padding: 1.6cqw 3.6cqw;
       border-radius: 6cqw;
@@ -337,20 +342,6 @@ export class EcoseeHomeScreen extends LitElement {
     .aqi .glyph {
       width: 6cqw;
       height: 6cqw;
-    }
-    /* The category stays a muted neutral so the colored number carries the band;
-       smaller and centered. Capped at a fraction of the container so the long
-       "Unhealthy for Sensitive Groups" label wraps between words onto a few centered
-       lines instead of overflowing the squircle — at any card size, since the cap is
-       proportional (cqw). */
-    .aqi .cat {
-      max-width: 66cqw;
-      font-size: 4.4cqw;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-      text-align: center;
-      text-wrap: balance;
-      color: var(--ecosee-muted, #6f96a3);
     }
     .aqi.moderate {
       color: var(--ecosee-aqi-moderate, #e6c84d);
@@ -573,7 +564,7 @@ export class EcoseeHomeScreen extends LitElement {
     const content =
       mode === 'off'
         ? html`<span class="mode-off">OFF</span>`
-        : html`<span class="glyph">${this._modeGlyph(mode)}</span>`;
+        : html`<span class="glyph">${systemModeGlyph(mode)}</span>`;
     return html`<button
       class="mode"
       aria-label=${this._modeLabel(mode)}
@@ -612,18 +603,19 @@ export class EcoseeHomeScreen extends LitElement {
 
   /** The optional air-quality element (issue #10). Rendered only when the seam
    *  supplies a model — absent/unavailable data leaves `airQuality` null, so the
-   *  element simply isn't shown (ADR-0001 graceful degradation). The `sr-only`
-   *  prefix gives the bare number + category screen-reader context. */
+   *  element simply isn't shown (ADR-0001 graceful degradation). Shows just the glyph
+   *  and AQI number (issue #66): the band color already carries the severity, so the
+   *  visible category word is dropped — the `sr-only` label still announces the band
+   *  ("Air quality: Good") so the reading stays accessible. */
   private _renderAirQuality(airQuality: AirQualityView | null): TemplateResult | typeof nothing {
     if (!airQuality) return nothing;
     return html`
       <div class="aqi ${airQuality.level}" part="air-quality">
-        <span class="sr-only">Air quality</span>
+        <span class="sr-only">Air quality: ${airQuality.category}</span>
         <span class="reading">
           <span class="glyph">${icons.wind}</span>
           <span class="num">${airQuality.aqi}</span>
         </span>
-        <span class="cat">${airQuality.category}</span>
       </div>
     `;
   }
@@ -665,14 +657,6 @@ export class EcoseeHomeScreen extends LitElement {
         <span class="cat">${uvIndex.category}</span>
       </div>
     `;
-  }
-
-  private _modeGlyph(mode: SystemMode): TemplateResult {
-    if (mode === 'cool') return icons.snowflake;
-    if (mode === 'heat') return icons.heat;
-    if (mode === 'dry') return icons.drop;
-    if (mode === 'fan_only') return icons.fan;
-    return icons.auto; // heat_cool
   }
 
   private _modeLabel(mode: SystemMode): string {

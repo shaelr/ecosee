@@ -20,15 +20,31 @@ import { CARD_TYPE } from '../config';
 // Keeping all of this pure makes it unit-testable without rendering a Lit element
 // (the editor element itself is presentational and untested, like the overlays).
 
+/** One clause of an entity selector's `filter` (OR-combined when several are given).
+ *  Lets the sensors picker scope to temperature sensors while still allowing a
+ *  `climate` entity as a temperature source. */
+export interface EntityFilter {
+  domain?: string | string[];
+  device_class?: string | string[];
+}
+
 /** An `ha-form` selector descriptor — the subset of HA's selectors this editor
- *  uses. A bare entity id → a domain-scoped `entity` picker; the sensors list → a
- *  `multiple` entity picker; a free string → `text`; the comfort glyph → `select`;
- *  the idle timeout → `number`. */
+ *  uses. A bare entity id → a domain- (and optionally device-class-) scoped `entity`
+ *  picker; the sensors list → a `multiple` entity picker filtered to temperature
+ *  sensors; a free string → `text`; the idle timeout → `number`; an opt-in toggle →
+ *  `boolean`. */
 export type EditorSelector =
-  | { entity: { domain?: string | string[]; multiple?: boolean } }
+  | {
+      entity: {
+        domain?: string | string[];
+        device_class?: string | string[];
+        multiple?: boolean;
+        filter?: EntityFilter[];
+      };
+    }
   | { text: Record<string, never> }
   | { number: { min?: number; mode?: 'box'; unit_of_measurement?: string } }
-  | { select: { mode?: 'dropdown'; options: ReadonlyArray<{ value: string; label: string }> } };
+  | { boolean: Record<string, never> };
 
 /** One `ha-form` field. `name`/`selector`/`required` are what `ha-form` consumes;
  *  `label`/`helper` ride along for the element's `computeLabel`/`computeHelper`
@@ -45,80 +61,77 @@ export interface EditorField {
   selector: EditorSelector;
 }
 
-const COMFORT_ICON_OPTIONS = [
-  { value: 'home', label: 'Home' },
-  { value: 'away', label: 'Away' },
-  { value: 'sleep', label: 'Sleep' },
-  { value: 'comfort', label: 'Comfort' },
-] as const;
-
-/** The form, in display order, tracking the config schema (issue #14). Every key in
- *  `EcoseeCardConfig` (bar `type`, which HA owns) has exactly one field here; a new
- *  config key must be added alongside its overlay, mirroring `parseConfig`. */
+/** The form, in display order, tracking the config schema (issue #14). Most keys in
+ *  `EcoseeCardConfig` (bar `type`, which HA owns) have exactly one field here,
+ *  mirroring `parseConfig`; a new config key must be added alongside its overlay. A
+ *  few keys `parseConfig` still accepts for backward compatibility are intentionally
+ *  not surfaced (the fan minimum-runtime entity, removed in #57; the comfort-icon
+ *  override, removed in #58) — an existing config that sets one keeps loading and its
+ *  value survives a GUI edit untouched. */
 export function editorSchema(): EditorField[] {
   return [
     {
       name: 'entity',
       label: 'Thermostat',
-      helper: 'The climate entity this Card is bound to.',
+      helper: 'Required. The climate entity this Card is bound to.',
       required: true,
       selector: { entity: { domain: 'climate' } },
     },
     {
       name: 'name',
       label: 'Name',
-      helper: "Overrides the thermostat's friendly name.",
+      helper: "Optional. Overrides the thermostat's friendly name.",
       selector: { text: {} },
     },
     {
       name: 'weather_entity',
       label: 'Weather entity',
-      helper: 'Enables the weather icon and the Weather sub-screen.',
+      helper: 'Optional. Adds the weather icon and Weather sub-screen; hidden until an entity is set.',
       selector: { entity: { domain: 'weather' } },
     },
     {
       name: 'humidity_entity',
       label: 'Humidity entity',
-      helper: 'Humidity source when the thermostat reports none.',
-      selector: { entity: { domain: 'sensor' } },
+      helper: 'Optional. Humidity source used only when the thermostat reports none.',
+      selector: { entity: { domain: 'sensor', device_class: 'humidity' } },
     },
     {
       name: 'air_quality_entity',
       label: 'Air quality entity',
-      helper: 'Surfaces the air-quality element (a US-EPA air-quality index).',
-      selector: { entity: { domain: 'sensor' } },
+      helper:
+        'Optional. Adds the air-quality element (a US-EPA air-quality index); hidden until an entity is set.',
+      selector: { entity: { domain: 'sensor', device_class: 'aqi' } },
     },
     {
       name: 'uv_index_entity',
       label: 'UV index entity',
-      helper: 'Surfaces the UV-index gauge (a sensor carrying a UV index).',
+      helper: 'Optional. Adds the UV-index gauge; hidden until an entity is set.',
       selector: { entity: { domain: 'sensor' } },
-    },
-    {
-      name: 'fan_min_on_time_entity',
-      label: 'Fan minimum-runtime entity',
-      helper: 'A number entity backing the Fan minimum-runtime selector.',
-      selector: { entity: { domain: 'number' } },
-    },
-    {
-      name: 'default_comfort_icon',
-      label: 'Custom Comfort Setting icon',
-      helper: 'Glyph for Comfort Settings without a built-in mapping.',
-      selector: { select: { mode: 'dropdown', options: COMFORT_ICON_OPTIONS } },
     },
     {
       name: 'sensors',
       label: 'Sensors',
       helper:
-        'Extra temperature entities for the Sensors sub-screen. Per-sensor name and occupancy overrides remain YAML-only.',
-      selector: { entity: { domain: ['sensor', 'climate'], multiple: true } },
+        'Optional. Extra temperature entities for the Sensors sub-screen, hidden until you add one. Per-sensor name and occupancy overrides remain YAML-only.',
+      selector: {
+        entity: {
+          multiple: true,
+          filter: [{ domain: 'sensor', device_class: 'temperature' }, { domain: 'climate' }],
+        },
+      },
     },
     {
       name: 'inactivity_timeout',
       label: 'Inactivity timeout',
       helper:
-        'Seconds an open overlay waits before reverting to the Home Screen. 0 disables; unset uses 12s.',
+        'Optional. Seconds an open overlay waits before reverting to the Home Screen. 0 disables; unset uses 25s.',
       selector: { number: { min: 0, mode: 'box', unit_of_measurement: 'seconds' } },
+    },
+    {
+      name: 'standby_screen',
+      label: 'Standby Screen',
+      helper: 'Optional. Enables the Standby Screen. Off by default.',
+      selector: { boolean: {} },
     },
   ];
 }
@@ -199,7 +212,14 @@ export function normalizeEditorConfig(
       else delete next[field.name];
       continue;
     }
-    // String-ish: a single entity picker, free text, or a select.
+    if ('boolean' in field.selector) {
+      // An opt-in toggle stays absent when off (graceful default), so only `true`
+      // is written back; `false`/unset drops the key.
+      if (raw === true) next[field.name] = true;
+      else delete next[field.name];
+      continue;
+    }
+    // String-ish: a single entity picker or free text.
     if (typeof raw === 'string' && raw !== '') next[field.name] = raw;
     else delete next[field.name];
   }
