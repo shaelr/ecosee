@@ -41,18 +41,20 @@ export class EcoseeSystemOverlay extends LitElement {
     }
 
     /* Title near the top, the selectors beneath, then the equipment line
-       (visual-spec.md / menu-system.jpeg). Sized container so type scales with cqw. */
+       (visual-spec.md / menu-system.jpeg). Inline-size container so type scales
+       with cqw off the definite width, with the root's own padding/gap in the fixed unit (calc · --ecosee-u) so they can't couple to the viewport, the real bug — a container-type element resolves its OWN cqw against the viewport (issue #35). */
     .system {
-      container-type: size;
+      container-type: inline-size;
       box-sizing: border-box;
-      width: 100%;
-      height: 100%;
+      width: var(--ecosee-base-size, 460px);
+      height: var(--ecosee-base-size, 460px);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      gap: 8cqw;
-      padding: 14cqw 8cqw 10cqw;
+      gap: calc(8 * var(--ecosee-u, 4.6px));
+      padding: calc(14 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+        calc(10 * var(--ecosee-u, 4.6px));
       text-align: center;
     }
 

@@ -59,16 +59,17 @@ export class EcoseeComfortSettingOverlay extends LitElement {
       height: 100%;
     }
 
-    /* Center the list within the shell; sized container so rows scale with cqw. */
+    /* Center the list within the shell; inline-size container so rows scale with
+       cqw off the definite width, with the root's own padding/gap in the fixed unit (calc · --ecosee-u) so they can't couple to the viewport, the real bug — a container-type element resolves its OWN cqw against the viewport (issue #35). */
     .picker {
-      container-type: size;
+      container-type: inline-size;
       box-sizing: border-box;
-      width: 100%;
-      height: 100%;
+      width: var(--ecosee-base-size, 460px);
+      height: var(--ecosee-base-size, 460px);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10cqw;
+      padding: calc(10 * var(--ecosee-u, 4.6px));
     }
 
     /* The cyan-outlined segmented list. overflow:hidden clips the selected row's
@@ -76,7 +77,7 @@ export class EcoseeComfortSettingOverlay extends LitElement {
        shell makes slotted content transparent so empty areas dismiss). */
     .list {
       width: 68cqw;
-      max-height: 80cqh;
+      max-height: 80cqw;
       overflow-y: auto;
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 6cqw;
