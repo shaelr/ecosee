@@ -225,6 +225,64 @@ describe('Temperature Adjust — scrubber ghost-click guard (issue #112)', () =>
   });
 });
 
+// Bubble sizing regression guard: the center scrubber bubble is a fixed-size
+// squircle (36cqw), so a Celsius half-degree reading ("22.5") is wider than a
+// whole Fahrenheit reading ("75") at the same font size and overflowed the
+// bubble. The `.bubble.len-*` modifiers step the font size down per extra
+// character so any formatTemp output fits.
+describe('Temperature Adjust — scrubber bubble sizing (Celsius decimals)', () => {
+  async function mountCelsius(temp: number): Promise<Overlay> {
+    const { hass } = fakeHass({
+      unit: '°C',
+      entities: [
+        climateEntity('heat', {
+          temperature: temp,
+          min_temp: 7,
+          max_temp: 35,
+          target_temp_step: 0.5,
+        }),
+      ],
+    });
+    const el = document.createElement('ecosee-temperature-overlay') as Overlay;
+    el.model = toTempAdjustModel(hass, config);
+    el.entityId = 'climate.t';
+    document.body.appendChild(el);
+    await el.updateComplete;
+    return el;
+  }
+
+  const bubbleOf = (el: Overlay): HTMLElement =>
+    el.shadowRoot!.querySelector('.bubble') as HTMLElement;
+
+  it('applies no size modifier for a whole 2-digit Fahrenheit value', async () => {
+    const el = await mount(); // 68°F
+    const bubble = bubbleOf(el);
+    expect(bubble.textContent?.trim()).toBe('68');
+    expect(bubble.className.trim()).toBe('bubble');
+  });
+
+  it('steps the font size down for a Celsius half-degree reading ("22.5")', async () => {
+    const el = await mountCelsius(22.5);
+    const bubble = bubbleOf(el);
+    expect(bubble.textContent?.trim()).toBe('22.5');
+    expect(bubble.classList.contains('len-4')).toBe(true);
+  });
+
+  it('applies no modifier for a whole 2-digit Celsius reading ("22")', async () => {
+    const el = await mountCelsius(22);
+    const bubble = bubbleOf(el);
+    expect(bubble.textContent?.trim()).toBe('22');
+    expect(bubble.className.trim()).toBe('bubble');
+  });
+
+  it('steps down for a single-digit Celsius half-degree reading ("9.5")', async () => {
+    const el = await mountCelsius(9.5);
+    const bubble = bubbleOf(el);
+    expect(bubble.textContent?.trim()).toBe('9.5');
+    expect(bubble.classList.contains('len-3')).toBe(true);
+  });
+});
+
 describe('Temperature Adjust — debounced write + optimistic hold', () => {
   const nudgeUp = async (el: Overlay): Promise<void> => {
     (el.shadowRoot!.querySelector('button[aria-label="Increase"]') as HTMLButtonElement).click();

@@ -1,7 +1,7 @@
 import type { HassEntityBase, HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig, SensorConfig } from '../config';
 import { num } from '../climate/parse';
-import { UNAVAILABLE } from '../climate/home-view';
+import { resolveCurrentTemp, UNAVAILABLE } from '../climate/home-view';
 
 // The derivation seam for the Sensors sub-screen (the sibling of `toHomeView` /
 // `toSystemModeModel`). `toSensorsModel` builds an
@@ -114,11 +114,13 @@ function toSensorCard(hass: HomeAssistant, sensor: SensorConfig): SensorCard | n
 
 /** The thermostat's own temperature card (always first when present). Its
  *  occupancy is always `null` — there is no generic occupancy source for the bound
- *  `climate` entity itself. */
+ *  `climate` entity itself. Honors the configured `temperature_entity` override
+ *  (climate/home-view.ts) the same way the Home Screen's number does, so this card
+ *  never shows a different reading than the rest of the Card. */
 function toThermostatCard(hass: HomeAssistant, config: EcoseeCardConfig): SensorCard | null {
   const entity = isUsable(hass, config.entity);
   if (!entity) return null;
-  const temp = num(entity.attributes.current_temperature);
+  const temp = resolveCurrentTemp(hass, config, num(entity.attributes.current_temperature));
   if (temp === null) return null;
   return {
     key: config.entity,

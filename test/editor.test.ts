@@ -4,6 +4,7 @@ import {
   editorSchema,
   composeEditorSchema,
   sensorNameKey,
+  sensorOccupancyKey,
   sensorEntityKey,
   toEditorData,
   normalizeEditorConfig,
@@ -20,12 +21,19 @@ describe('editorSchema — coverage', () => {
       'entity',
       'name',
       'weather_entity',
+      'temperature_entity',
       'humidity_entity',
       'air_quality_entity',
       'uv_index_entity',
       'sensors',
       'show_fan',
+      'fan_min_on_time_entity',
       'inactivity_timeout',
+      'min_gap',
+      'resume_program',
+      'corner_style',
+      'equipment_glow',
+      'mode_color',
       'standby_screen',
     ]);
   });
@@ -42,6 +50,7 @@ describe('editorSchema — coverage', () => {
     const byName = Object.fromEntries(editorSchema().map((field) => [field.name, field.selector]));
     expect(byName.weather_entity).toEqual({ entity: { domain: 'weather' } });
     expect(byName.uv_index_entity).toEqual({ entity: { domain: 'sensor' } });
+    expect(byName.fan_min_on_time_entity).toEqual({ entity: { domain: 'number' } });
   });
 
   it('narrows the sensor-backed pickers to their device class (#56)', () => {
@@ -54,8 +63,10 @@ describe('editorSchema — coverage', () => {
     });
   });
 
-  it('has no fan minimum-runtime field (removed in #57)', () => {
-    expect(editorSchema().some((field) => field.name === 'fan_min_on_time_entity')).toBe(false);
+  it('surfaces the fan minimum-runtime entity, scoped to the number domain', () => {
+    const field = editorSchema().find((field) => field.name === 'fan_min_on_time_entity');
+    expect(field?.selector).toEqual({ entity: { domain: 'number' } });
+    expect(field?.required).toBeFalsy();
   });
 
   it('anchors the sensors block with a temperature-scoped entity picker (#56)', () => {
@@ -76,6 +87,18 @@ describe('editorSchema — coverage', () => {
     const standby = editorSchema().find((field) => field.name === 'standby_screen');
     expect(standby?.selector).toEqual({ boolean: {} });
     expect(standby?.required).toBeFalsy();
+  });
+
+  it('uses a boolean selector for the opt-in mode_color toggle, off by default', () => {
+    const modeColor = editorSchema().find((field) => field.name === 'mode_color');
+    expect(modeColor?.selector).toEqual({ boolean: {} });
+    expect(modeColor?.required).toBeFalsy();
+  });
+
+  it('uses a boolean selector for the opt-in resume_program toggle, off by default', () => {
+    const resumeProgram = editorSchema().find((field) => field.name === 'resume_program');
+    expect(resumeProgram?.selector).toEqual({ boolean: {} });
+    expect(resumeProgram?.required).toBeFalsy();
   });
 
   it('uses a dropdown select for show_fan with auto default first', () => {
@@ -139,7 +162,7 @@ describe('composeEditorSchema — per-sensor rows', () => {
     expect(names.some((name) => name.startsWith(sensorNameKey('')))).toBe(false);
   });
 
-  it('puts each display-name field directly beneath the sensor it names, then a trailing add picker', () => {
+  it('puts each display-name and occupancy field directly beneath the sensor they belong to, then a trailing add picker', () => {
     const config = {
       ...base,
       sensors: [{ entity: 'sensor.hallway', name: 'Hallway' }, 'sensor.kitchen'],
@@ -147,17 +170,27 @@ describe('composeEditorSchema — per-sensor rows', () => {
     const schema = composeEditorSchema(config);
     const names = schema.map((field) => field.name);
     const sensorsAt = names.indexOf(sensorEntityKey(0));
-    // entity picker → its name field → entity picker → its name field → add picker.
-    expect(names.slice(sensorsAt, sensorsAt + 5)).toEqual([
+    // entity picker → its name field → its occupancy field → entity picker → its
+    // name field → its occupancy field → add picker.
+    expect(names.slice(sensorsAt, sensorsAt + 7)).toEqual([
       sensorEntityKey(0),
       sensorNameKey('sensor.hallway'),
+      sensorOccupancyKey('sensor.hallway'),
       sensorEntityKey(1),
       sensorNameKey('sensor.kitchen'),
+      sensorOccupancyKey('sensor.kitchen'),
       sensorEntityKey(2),
     ]);
     const nameField = schema.find((field) => field.name === sensorNameKey('sensor.hallway'));
     expect(nameField?.selector).toEqual({ text: {} });
     expect(nameField?.required).toBeFalsy();
+    const occupancyField = schema.find(
+      (field) => field.name === sensorOccupancyKey('sensor.hallway'),
+    );
+    expect(occupancyField?.selector).toEqual({
+      entity: { filter: [{ domain: 'binary_sensor', device_class: 'occupancy' }] },
+    });
+    expect(occupancyField?.required).toBeFalsy();
     // The single `sensors` field never renders — it is expanded into the rows above.
     expect(names).not.toContain('sensors');
   });
@@ -209,6 +242,24 @@ describe('toEditorData', () => {
     // A stored value is reflected verbatim.
     expect(toEditorData({ ...base, show_fan: 'always' }).show_fan).toBe('always');
   });
+
+  it('defaults corner_style to squircle for the dropdown when the key is absent', () => {
+    expect(toEditorData({ ...base }).corner_style).toBe('squircle');
+    expect(toEditorData({ ...base, corner_style: 'square' }).corner_style).toBe('square');
+  });
+
+  it('defaults equipment_glow to true for the checkbox when the key is absent', () => {
+    expect(toEditorData({ ...base }).equipment_glow).toBe(true);
+    expect(toEditorData({ ...base, equipment_glow: false }).equipment_glow).toBe(false);
+  });
+
+  it('surfaces each stored occupancy entity under its per-sensor occupancy field', () => {
+    const data = toEditorData({
+      ...base,
+      sensors: [{ entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' }],
+    });
+    expect(data[sensorOccupancyKey('sensor.hallway')]).toBe('binary_sensor.hall');
+  });
 });
 
 describe('normalizeEditorConfig — optional-config-key hygiene', () => {
@@ -258,6 +309,22 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
       'standby_screen' in normalizeEditorConfig({ ...base, standby_screen: false }, base),
     ).toBe(false);
     expect('standby_screen' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+  });
+
+  it('keeps mode_color when on but drops it when off or unset (off by default)', () => {
+    expect(normalizeEditorConfig({ ...base, mode_color: true }, base).mode_color).toBe(true);
+    expect('mode_color' in normalizeEditorConfig({ ...base, mode_color: false }, base)).toBe(false);
+    expect('mode_color' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+  });
+
+  it('keeps resume_program when on but drops it when off or unset (off by default, ADR-0012)', () => {
+    expect(normalizeEditorConfig({ ...base, resume_program: true }, base).resume_program).toBe(
+      true,
+    );
+    expect(
+      'resume_program' in normalizeEditorConfig({ ...base, resume_program: false }, base),
+    ).toBe(false);
+    expect('resume_program' in normalizeEditorConfig({ ...base }, base)).toBe(false);
   });
 
   it('writes a non-default show_fan choice but drops the auto default', () => {
@@ -327,7 +394,7 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
     expect(next.sensors).toEqual(['sensor.hallway']);
   });
 
-  it('keeps YAML-only occupancy_entity when a name is set via the GUI', () => {
+  it('preserves a stored occupancy_entity when its field is untouched by an unrelated GUI edit', () => {
     const prev = {
       ...base,
       sensors: [{ entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' }],
@@ -345,16 +412,80 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
     ]);
   });
 
+  it('writes an occupancy entity picked in the GUI into object-form', () => {
+    const next = normalizeEditorConfig(
+      {
+        ...base,
+        [sensorEntityKey(0)]: 'sensor.hallway',
+        [sensorOccupancyKey('sensor.hallway')]: 'binary_sensor.hall',
+      },
+      base,
+    );
+    expect(next.sensors).toEqual([
+      { entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' },
+    ]);
+  });
+
+  it('clears a stored occupancy entity when its field is emptied in the GUI', () => {
+    const prev = {
+      ...base,
+      sensors: [{ entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' }],
+    };
+    const next = normalizeEditorConfig(
+      {
+        ...base,
+        [sensorEntityKey(0)]: 'sensor.hallway',
+        [sensorOccupancyKey('sensor.hallway')]: '',
+      },
+      prev,
+    );
+    expect(next.sensors).toEqual(['sensor.hallway']);
+  });
+
+  it('keeps a non-zero min_gap but drops an unset one', () => {
+    expect(normalizeEditorConfig({ ...base, min_gap: 0 }, base).min_gap).toBe(0);
+    expect(normalizeEditorConfig({ ...base, min_gap: 4 }, base).min_gap).toBe(4);
+    expect('min_gap' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+  });
+
+  it('writes a non-default corner_style choice but drops the squircle default (#131)', () => {
+    expect(normalizeEditorConfig({ ...base, corner_style: 'rounded' }, base).corner_style).toBe(
+      'rounded',
+    );
+    expect(normalizeEditorConfig({ ...base, corner_style: 'square' }, base).corner_style).toBe(
+      'square',
+    );
+    expect(
+      'corner_style' in normalizeEditorConfig({ ...base, corner_style: 'squircle' }, base),
+    ).toBe(false);
+    expect('corner_style' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+  });
+
+  it('keeps an explicit equipment_glow: false but drops true/unset (on by default, #131)', () => {
+    expect(normalizeEditorConfig({ ...base, equipment_glow: false }, base).equipment_glow).toBe(
+      false,
+    );
+    expect('equipment_glow' in normalizeEditorConfig({ ...base, equipment_glow: true }, base)).toBe(
+      false,
+    );
+    expect('equipment_glow' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+  });
+
   it('preserves keys the GUI does not yet surface (forward compatibility)', () => {
     const prev = { ...base, future_key: 'keep-me' };
     expect(normalizeEditorConfig({ ...base }, prev).future_key).toBe('keep-me');
   });
 
-  it('preserves a stored fan_min_on_time_entity through an edit (removed from editor, #57)', () => {
+  it('keeps a fan_min_on_time_entity picked in the GUI but drops it when cleared', () => {
+    expect(
+      normalizeEditorConfig({ ...base, fan_min_on_time_entity: 'number.fan_min_on_time' }, base)
+        .fan_min_on_time_entity,
+    ).toBe('number.fan_min_on_time');
     const prev = { ...base, fan_min_on_time_entity: 'number.fan_min_on_time' };
-    expect(normalizeEditorConfig({ ...base }, prev).fan_min_on_time_entity).toBe(
-      'number.fan_min_on_time',
-    );
+    expect(
+      'fan_min_on_time_entity' in
+        normalizeEditorConfig({ ...base, fan_min_on_time_entity: '' }, prev),
+    ).toBe(false);
   });
 
   it('preserves a stored default_comfort_icon through an edit (removed from editor, #58)', () => {

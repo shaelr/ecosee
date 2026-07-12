@@ -143,8 +143,11 @@ then the setpoint ovals — see also the equipment edge glow below.
   cool right**; **Heat-only** shows just the amber oval, centered; **Cool-only** just
   the blue oval, centered. Each oval is a **tap target** that opens Temperature
   Adjust foregrounding *that* setpoint (as on the device). There is no combined
-  range pill, no Hold pill, and no Resume ✕ (ADR-0004); the device's `until 5:28pm`
-  expiry is likewise omitted — HA doesn't expose the next transition time (ADR-0003).
+  range pill (ADR-0004); the device's `until 5:28pm` expiry is likewise omitted — HA
+  doesn't expose the next transition time (ADR-0003). An opt-in **Resume Schedule**
+  pill (config `resume_program`, ADR-0012) can render beneath the ovals — text plus
+  a small circled ✕ — for a bound entity driven by Home Assistant's `ecobee`
+  integration; off by default, and never replaces the ovals above it.
 - **Air-quality & UV-index foot cluster** — two optional indicators at the **foot of
   the cluster**, below the setpoint ovals, each backed by its own sensor entity
   (independent of the bound climate entity). The **air-quality gauge** is a small arc

@@ -11,6 +11,7 @@ import {
 import { toSystemModeModel } from './climate/system-mode';
 import { toComfortSettingModel } from './climate/comfort-setting';
 import { toFanModel } from './climate/fan';
+import { resumeProgramCall } from './climate/resume-schedule';
 import { toTabBarModel, TAB_SECTIONS, type TabBarModel, type TabTarget } from './menu/tab-bar';
 import { InactivityTimer, inactivityTimeoutMs, standbyReturnMs } from './overlays/inactivity-timer';
 import type { SystemSelectTarget } from './overlays/system-overlay';
@@ -50,13 +51,7 @@ import './editor/ecosee-card-editor';
  *  are the Main Menu sections, reached via the gear and switched between with the
  *  bottom tab bar. */
 type OverlayKind =
-  | 'temperature'
-  | 'system-mode'
-  | 'comfort-setting'
-  | 'system'
-  | 'fan'
-  | 'sensors'
-  | 'weather';
+  'temperature' | 'system-mode' | 'comfort-setting' | 'system' | 'fan' | 'sensors' | 'weather';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -450,6 +445,8 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           >
             <ecosee-standby-screen
               .view=${toStandbyView(this.hass, this._config)}
+              .cornerStyle=${this._config.corner_style}
+              .equipmentGlow=${this._config.equipment_glow}
             ></ecosee-standby-screen>
           </div>
         </div>
@@ -461,6 +458,9 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         <div class="root">
           <ecosee-home-screen
             .view=${view}
+            .cornerStyle=${this._config.corner_style}
+            .equipmentGlow=${this._config.equipment_glow}
+            .modeColor=${this._config.mode_color}
             @ecosee-action=${this._onAction}
             @pointerdown=${this._onHomeActivity}
             @mouseover=${this._onHomeActivity}
@@ -486,6 +486,8 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       <ecosee-overlay
         .tabs=${this._tabBar(view)}
         .equipment=${view.equipment}
+        .cornerStyle=${this._config?.corner_style}
+        .equipmentGlow=${this._config?.equipment_glow}
         @ecosee-overlay-dismiss=${this._closeOverlay}
         @ecosee-service-call=${this._onServiceCall}
         @ecosee-system-select=${this._onSystemSelect}
@@ -522,8 +524,25 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       case 'weather':
         this._open('weather', 'home');
         break;
+      case 'resume-schedule':
+        this._resumeSchedule();
+        break;
     }
   };
+
+  /** Tap on the Resume Schedule pill (config `resume_program`, ADR-0012): calls
+   *  `ecobee.resume_program` directly — there is no Overlay involved, so this
+   *  bypasses the Overlay-only `ecosee-service-call` path and calls `hass` straight
+   *  from the Home Screen action, the same way `_openMenu` and the other Home
+   *  Screen actions are handled inline here. Re-checks the config toggle rather than
+   *  trusting the pill's own render gate, mirroring `_open`'s availability re-check
+   *  for Overlays — a stray/stale `resume-schedule` action must not write against a
+   *  config that never opted in. */
+  private _resumeSchedule(): void {
+    if (!this.hass || !this._config?.resume_program) return;
+    const call = resumeProgramCall(this._config.entity);
+    void this.hass.callService(call.domain, call.service, call.data);
+  }
 
   /** Open an Overlay: gate on its availability, run its open side-effect, then place
    *  it on the nav stack. `'home'` replaces the bare Home Screen (so dismissing

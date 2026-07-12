@@ -153,6 +153,132 @@ describe('toHomeView — edge cases', () => {
     );
     expect(view.humidity).toBe(45);
   });
+
+  it('overrides the humidity reading with humidity_entity even when the climate entity reports its own', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'cool',
+          attributes: { current_temperature: 72, temperature: 74, current_humidity: 60 },
+        },
+        extraStates: {
+          'sensor.hum': { entity_id: 'sensor.hum', state: '45', attributes: {} },
+        },
+      }),
+      config({ humidity_entity: 'sensor.hum' }),
+    );
+    expect(view.humidity).toBe(45);
+  });
+
+  it('hides humidity when humidity_entity is configured but unavailable, even if the climate entity has its own', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'cool',
+          attributes: { current_temperature: 72, temperature: 74, current_humidity: 60 },
+        },
+        extraStates: {
+          'sensor.hum': { entity_id: 'sensor.hum', state: 'unavailable', attributes: {} },
+        },
+      }),
+      config({ humidity_entity: 'sensor.hum' }),
+    );
+    expect(view.humidity).toBeNull();
+  });
+
+  it('overrides the current temperature with temperature_entity even when the climate entity reports its own', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'cool',
+          attributes: { current_temperature: 72, temperature: 74 },
+        },
+        extraStates: {
+          'sensor.remote': { entity_id: 'sensor.remote', state: '68', attributes: {} },
+        },
+      }),
+      config({ temperature_entity: 'sensor.remote' }),
+    );
+    expect(view.currentTemp).toBe(68);
+  });
+
+  it('reads temperature_entity from current_temperature when it is a climate/remote entity', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'cool',
+          attributes: { current_temperature: 72, temperature: 74 },
+        },
+        extraStates: {
+          'climate.remote': {
+            entity_id: 'climate.remote',
+            state: 'cool',
+            attributes: { current_temperature: 68 },
+          },
+        },
+      }),
+      config({ temperature_entity: 'climate.remote' }),
+    );
+    expect(view.currentTemp).toBe(68);
+  });
+});
+
+describe('toHomeView — resumeAvailable (ADR-0012)', () => {
+  const heatCool = (attrs: Record<string, unknown>) =>
+    hass({
+      climate: {
+        entity_id: 'climate.t',
+        state: 'heat_cool',
+        attributes: { target_temp_low: 68, target_temp_high: 75, ...attrs },
+      },
+    });
+
+  it('is false when resume_program is unset, even on an obvious hold', () => {
+    const view = toHomeView(heatCool({ climate_mode: 'Home', preset_mode: 'temp' }), config());
+    expect(view.resumeAvailable).toBe(false);
+  });
+
+  it('is true when resume_program is on and the entity is on a temperature hold', () => {
+    const view = toHomeView(
+      heatCool({ climate_mode: 'Home', preset_mode: 'temp' }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(true);
+  });
+
+  it('is false when resume_program is on but preset_mode matches the scheduled climate_mode', () => {
+    const view = toHomeView(
+      heatCool({ climate_mode: 'Home', preset_mode: 'Home' }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+  });
+
+  it('is false when resume_program is on but the system is Off (no setpoints to resume)', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'off',
+          attributes: { climate_mode: 'Home', preset_mode: 'temp' },
+        },
+      }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+  });
+
+  it('is always false on the unavailable-entity branch, even with resume_program on', () => {
+    const view = toHomeView(
+      hass({ climate: { entity_id: 'climate.t', state: 'unavailable', attributes: {} } }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+  });
 });
 
 describe('toHomeView — fan glyph availability (issues #45, #73)', () => {

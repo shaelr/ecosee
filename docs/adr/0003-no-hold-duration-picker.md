@@ -1,9 +1,12 @@
 # No hold-duration picker
 
-**Status: Superseded by [ADR-0004](./0004-no-hold-or-resume-schedule.md)** — the Card
-no longer surfaces Hold or Resume Schedule at all, so the Hold indicator and
-`resume_program` action described below are gone. The reasoning here (HA can't
-express per-call durations) is retained as the origin of that broader decision.
+**Status: Superseded by [ADR-0004](./0004-no-hold-or-resume-schedule.md)**, itself
+now extended by **[ADR-0012](./0012-opt-in-resume-schedule.md)**: the Card dropped
+Hold/Resume Schedule entirely (ADR-0004), then reintroduced an opt-in, ecobee-only
+Resume Schedule pill with no Hold indicator (ADR-0012) — the hold-duration prompt
+described below stays gone either way; only the resume half ever came back, and
+only behind an explicit config toggle. The reasoning here (HA can't express
+per-call durations) is retained as the origin of the broader ADR-0004 decision.
 
 The physical ecobee, after a temperature or Comfort Setting change, prompts for a
 hold duration ("2 hours / until next activity / until I change it"). ecosee

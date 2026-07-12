@@ -44,7 +44,13 @@ export type EditorSelector =
     }
   | { text: Record<string, never> }
   | { number: { min?: number; mode?: 'box'; unit_of_measurement?: string } }
-  | { boolean: Record<string, never> }
+  // `default` is the value `normalizeEditorConfig` treats as "unset" (dropped from
+  // the stored config); absent ⇒ `false`, matching every toggle before
+  // `equipment_glow` (opt-in features that default off). `equipment_glow` is the
+  // first toggle that defaults *on*, so it sets `default: true` to keep the
+  // optional-config-key hygiene (unset ⇒ shown) while still letting an explicit
+  // uncheck persist as `equipment_glow: false`.
+  | { boolean: { default?: boolean } }
   | { select: { options: Array<{ value: string; label: string }>; mode?: 'dropdown' | 'list' } };
 
 /** One `ha-form` field. `name`/`selector`/`required` are what `ha-form` consumes;
@@ -74,15 +80,14 @@ const SENSOR_ENTITY_FILTER: EntityFilter[] = [
  *  in the rendered schema, on the trailing "add a sensor" picker. */
 const SENSORS_HELPER =
   'Optional. Extra temperature entities for the Sensors sub-screen, hidden until you add one. ' +
-  'A display-name field sits beneath each sensor; occupancy overrides remain YAML-only.';
+  'A display-name field and an optional occupancy-entity override sit beneath each sensor.';
 
 /** The form, in display order, tracking the config schema (issue #14). Most keys in
  *  `EcoseeCardConfig` (bar `type`, which HA owns) have exactly one field here,
- *  mirroring `parseConfig`; a new config key must be added alongside its overlay. A
- *  few keys `parseConfig` still accepts for backward compatibility are intentionally
- *  not surfaced (the fan minimum-runtime entity, removed in #57; the comfort-icon
- *  override, removed in #58) — an existing config that sets one keeps loading and its
- *  value survives a GUI edit untouched. */
+ *  mirroring `parseConfig`; a new config key must be added alongside its overlay. One
+ *  key `parseConfig` still accepts for backward compatibility is intentionally not
+ *  surfaced (the comfort-icon override, removed in #58) — an existing config that
+ *  sets it keeps loading and its value survives a GUI edit untouched. */
 export function editorSchema(): EditorField[] {
   return [
     {
@@ -106,9 +111,16 @@ export function editorSchema(): EditorField[] {
       selector: { entity: { domain: 'weather' } },
     },
     {
+      name: 'temperature_entity',
+      label: 'Temperature entity',
+      helper:
+        "Optional. Overrides the thermostat's own current-temperature reading with this entity's value.",
+      selector: { entity: { filter: SENSOR_ENTITY_FILTER } },
+    },
+    {
       name: 'humidity_entity',
       label: 'Humidity entity',
-      helper: 'Optional. Humidity source used only when the thermostat reports none.',
+      helper: "Optional. Overrides the thermostat's own humidity reading with this entity's value.",
       selector: { entity: { domain: 'sensor', device_class: 'humidity' } },
     },
     {
@@ -152,11 +164,70 @@ export function editorSchema(): EditorField[] {
       },
     },
     {
+      name: 'fan_min_on_time_entity',
+      label: 'Fan minimum runtime entity',
+      helper:
+        "Optional. A number entity (ecobee's fan_min_on_time). Adds a minimum-runtime selector to " +
+        'the Fan sub-screen; hidden until an entity is set.',
+      selector: { entity: { domain: 'number' } },
+    },
+    {
       name: 'inactivity_timeout',
       label: 'Inactivity timeout',
       helper:
         'Optional. Seconds an open overlay waits before reverting to the Home Screen. 0 disables; unset uses 25s.',
       selector: { number: { min: 0, mode: 'box', unit_of_measurement: 'seconds' } },
+    },
+    {
+      name: 'min_gap',
+      label: 'Heat / Cool minimum gap',
+      helper:
+        'Optional. Minimum separation kept between the heat and cool setpoints in Heat / Cool ' +
+        '(Auto), in your temperature unit. 0 lets them meet. Unset uses the default (3°F / 1.5°C).',
+      selector: { number: { min: 0, mode: 'box' } },
+    },
+    {
+      name: 'resume_program',
+      label: 'Resume Schedule control',
+      helper:
+        'Optional. Adds a Resume Schedule control beneath the setpoints, calling ' +
+        "ecobee.resume_program — only works for a thermostat bound through Home Assistant's " +
+        'ecobee integration. Off by default.',
+      selector: { boolean: {} },
+    },
+    {
+      name: 'corner_style',
+      label: 'Corner style',
+      helper:
+        "Optional. The card's outer corner treatment. Squircle is the ecobee Premium's full-bubble " +
+        'motif; Rounded is a smaller, conventional radius; Square is sharp corners. Default Squircle.',
+      selector: {
+        select: {
+          mode: 'dropdown',
+          options: [
+            { value: 'squircle', label: 'Squircle (full bubble)' },
+            { value: 'rounded', label: 'Rounded (small radius)' },
+            { value: 'square', label: 'Square (sharp corners)' },
+          ],
+        },
+      },
+    },
+    {
+      name: 'equipment_glow',
+      label: 'Equipment status glow',
+      helper:
+        'Optional. Shows the colored edge glow while heating/cooling (blue cooling / amber heating). ' +
+        'On by default; uncheck to hide it on every screen.',
+      selector: { boolean: { default: true } },
+    },
+    {
+      name: 'mode_color',
+      label: 'System Mode icon color',
+      helper:
+        'Optional. Tints the Home Screen System Mode icon by equipment status, like the ecobee ' +
+        'device: blue while cooling, amber while heating (split left/right in Heat / Cool Auto). ' +
+        'Off by default.',
+      selector: { boolean: {} },
     },
     {
       name: 'standby_screen',
@@ -176,6 +247,24 @@ export const SENSOR_NAME_PREFIX = 'sensor_name::';
 export function sensorNameKey(entityId: string): string {
   return `${SENSOR_NAME_PREFIX}${entityId}`;
 }
+
+/** Prefix for the synthetic per-sensor occupancy-entity pickers, mirroring
+ *  SENSOR_NAME_PREFIX. Not a config key — `normalizeEditorConfig` folds these back
+ *  into `sensors[].occupancy_entity` and never writes the prefixed key into the
+ *  stored config. */
+export const SENSOR_OCCUPANCY_PREFIX = 'sensor_occupancy::';
+
+/** The form-data key carrying a sensor's occupancy-entity override (prefix + its
+ *  temperature entity id). */
+export function sensorOccupancyKey(entityId: string): string {
+  return `${SENSOR_OCCUPANCY_PREFIX}${entityId}`;
+}
+
+/** The entity filter for a sensor's occupancy-entity picker: a binary occupancy
+ *  sensor. */
+const OCCUPANCY_ENTITY_FILTER: EntityFilter[] = [
+  { domain: 'binary_sensor', device_class: 'occupancy' },
+];
 
 /** Prefix for the synthetic per-sensor entity pickers. Like SENSOR_NAME_PREFIX,
  *  these keys live only in the form value — one indexed picker per configured
@@ -207,6 +296,14 @@ export function sensorFields(config: Record<string, unknown>): EditorField[] {
       label: `Sensor name — ${entity}`,
       helper: "Optional. Shown in the Sensors sub-screen; defaults to the sensor's own name.",
       selector: { text: {} },
+    });
+    fields.push({
+      name: sensorOccupancyKey(entity),
+      label: `Occupancy entity — ${entity}`,
+      helper:
+        'Optional. Overrides the "Occupied" badge source for this sensor. Unset auto-pairs an ' +
+        "occupancy binary_sensor sharing the sensor's device (e.g. ecobee remote sensors).",
+      selector: { entity: { filter: OCCUPANCY_ENTITY_FILTER } },
     });
   });
   // Trailing empty picker: choosing an entity here appends a new sensor row.
@@ -295,11 +392,19 @@ export function toEditorData(config: Record<string, unknown>): Record<string, un
   // Reflect the effective fan-shortcut choice in the dropdown even when the key is
   // absent (unset ⇒ Auto), so the select never renders blank.
   if (data.show_fan === undefined) data.show_fan = 'auto';
+  // Same for the corner style (unset ⇒ Squircle) and the equipment glow toggle
+  // (unset ⇒ on) — both selects/checkboxes must render their true effective value,
+  // not a blank/unchecked one, when the key has never been set.
+  if (data.corner_style === undefined) data.corner_style = 'squircle';
+  if (data.equipment_glow === undefined) data.equipment_glow = true;
   if (config.sensors !== undefined) {
     delete data.sensors;
     readSensorObjects(config.sensors).forEach((sensor, index) => {
       data[sensorEntityKey(index)] = sensor.entity;
       if (sensor.name !== undefined) data[sensorNameKey(sensor.entity)] = sensor.name;
+      if (sensor.occupancy_entity !== undefined) {
+        data[sensorOccupancyKey(sensor.entity)] = sensor.occupancy_entity;
+      }
     });
   }
   return data;
@@ -327,13 +432,14 @@ function readSensorPickerIds(formValue: Record<string, unknown>): string[] {
   return ids;
 }
 
-/** Fold the per-sensor entity pickers plus their display-name fields back into the
- *  config. An empty set drops the key (Sensors sub-screen hidden). For each selected
- *  sensor, its name comes from the GUI field (blank clears it → defaults to the
- *  friendly name); when the field is absent from the form value we fall back to the
- *  stored name so a name is never silently lost. `occupancy_entity` stays YAML-only,
- *  carried over from `prev`. A sensor with neither a name nor occupancy collapses to
- *  a shorthand string. */
+/** Fold the per-sensor entity pickers plus their display-name and occupancy-entity
+ *  fields back into the config. An empty set drops the key (Sensors sub-screen
+ *  hidden). For each selected sensor, its name and occupancy override come from
+ *  their GUI fields (blank clears either → name defaults to the friendly name,
+ *  occupancy defaults to the auto-paired sensor); when a field is absent from the
+ *  form value we fall back to the stored value so nothing is silently lost. A
+ *  sensor with neither a name nor an occupancy override collapses to a shorthand
+ *  string. */
 function applySensors(
   next: Record<string, unknown>,
   prev: unknown,
@@ -348,10 +454,18 @@ function applySensors(
   for (const sensor of readSensorObjects(prev)) prevById.set(sensor.entity, sensor);
 
   next.sensors = ids.map((entity) => {
-    const key = sensorNameKey(entity);
-    const typed = key in formValue ? formValue[key] : prevById.get(entity)?.name;
-    const name = typeof typed === 'string' && typed.trim() !== '' ? typed : undefined;
-    const occupancy = prevById.get(entity)?.occupancy_entity;
+    const nameKey = sensorNameKey(entity);
+    const typedName = nameKey in formValue ? formValue[nameKey] : prevById.get(entity)?.name;
+    const name = typeof typedName === 'string' && typedName.trim() !== '' ? typedName : undefined;
+
+    const occupancyKey = sensorOccupancyKey(entity);
+    const typedOccupancy =
+      occupancyKey in formValue ? formValue[occupancyKey] : prevById.get(entity)?.occupancy_entity;
+    const occupancy =
+      typeof typedOccupancy === 'string' && typedOccupancy.trim() !== ''
+        ? typedOccupancy
+        : undefined;
+
     if (name === undefined && occupancy === undefined) return entity; // shorthand string
     const object: StoredSensor = { entity };
     if (name !== undefined) object.name = name;
@@ -391,9 +505,13 @@ export function normalizeEditorConfig(
       continue;
     }
     if ('boolean' in field.selector) {
-      // An opt-in toggle stays absent when off (graceful default), so only `true`
-      // is written back; `false`/unset drops the key.
-      if (raw === true) next[field.name] = true;
+      // A toggle stays absent at its own default — `false` for every opt-in
+      // feature before `equipment_glow` (only a `true` override is written back),
+      // `true` for `equipment_glow` itself (on by default; only an explicit
+      // uncheck — `false` — is written back). Keeps the optional-config-key
+      // hygiene: unset always means "whatever the seam already defaults to".
+      const def = field.selector.boolean.default ?? false;
+      if (typeof raw === 'boolean' && raw !== def) next[field.name] = raw;
       else delete next[field.name];
       continue;
     }

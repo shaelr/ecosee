@@ -2,6 +2,7 @@ import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
 import { num } from './parse';
 import { toFanModel, showFanAffordance } from './fan';
+import { resumeAvailable } from './resume-schedule';
 
 // The graceful-degradation seam (ADR-0001). `toHomeView` is a pure function from
 // raw `hass` + config to a normalized, already-degraded view model: every field
@@ -69,6 +70,12 @@ export interface HomeView {
   mode: SystemMode;
   /** Active setpoints, or `null` when none are expressible (e.g. System Mode Off). */
   setpoints: Setpoints | null;
+  /** Whether the opt-in Resume Schedule pill shows beneath the setpoint ovals
+   *  (config `resume_program`, ADR-0012) — a best-effort, `ecobee`-integration-only
+   *  affordance for `ecobee.resume_program`. `false` unless the config key is set,
+   *  setpoints are active, and the entity can't be shown to already be on-schedule.
+   *  See `climate/resume-schedule.ts`. */
+  resumeAvailable: boolean;
   /** Whether a usable `weather` entity is configured (gates the weather icon). */
   weatherAvailable: boolean;
   /** Whether the Home Screen shows its top-row fan glyph — the quick shortcut into
@@ -170,6 +177,45 @@ function deriveSetpoints(mode: SystemMode, attrs: Record<string, unknown>): Setp
   return null; // off / dry / fan_only / unknown ⇒ no setpoints
 }
 
+/** Read a temperature override entity's value: a plain `sensor.*` carries it in
+ *  its state; a `climate`/remote entity carries it in `current_temperature`
+ *  (mirrors sensors.ts's `readTemp`, so a climate entity works as an override
+ *  source too). `null` when the entity is missing, unavailable, or non-numeric. */
+function readEntityTemp(hass: HomeAssistant, entityId: string): number | null {
+  const entity = hass.states[entityId];
+  if (!entity || UNAVAILABLE.has(entity.state)) return null;
+  return num(entity.state) ?? num(entity.attributes.current_temperature);
+}
+
+/** The current-temperature source: the configured `temperature_entity`
+ *  *overrides* the bound entity's own `current_temperature` outright when set
+ *  (not a fallback for when the bound entity lacks one — the override always
+ *  wins). `fallback` is the bound entity's own reading, used only when no
+ *  override is configured. */
+export function resolveCurrentTemp(
+  hass: HomeAssistant,
+  config: EcoseeCardConfig,
+  fallback: number | null,
+): number | null {
+  if (!config.temperature_entity) return fallback;
+  return readEntityTemp(hass, config.temperature_entity);
+}
+
+/** The humidity source: the configured `humidity_entity` *overrides* the bound
+ *  entity's own `current_humidity` outright when set (not merely a fallback for a
+ *  thermostat that reports none — the override always wins). `fallback` is the
+ *  bound entity's own reading, used only when no override is configured. */
+export function resolveHumidity(
+  hass: HomeAssistant,
+  config: EcoseeCardConfig,
+  fallback: number | null,
+): number | null {
+  if (!config.humidity_entity) return fallback;
+  const entity = hass.states[config.humidity_entity];
+  if (!entity || UNAVAILABLE.has(entity.state)) return null;
+  return num(entity.state);
+}
+
 /** The configured `weather` entity's current condition, or `null` when none is
  *  configured/usable. Doubles as the availability check (the Home Screen shows the
  *  weather affordance iff this is non-null) and supplies the glyph the device
@@ -255,6 +301,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
       equipment: null,
       mode: 'unknown',
       setpoints: null,
+      resumeAvailable: false,
       weatherAvailable: weather !== null,
       weatherCondition: weather,
       fanAvailable: false,
@@ -265,13 +312,11 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
 
   const attrs = entity.attributes;
   const mode = toMode(entity.state);
-  const currentTemp = num(attrs.current_temperature);
+  const currentTemp = resolveCurrentTemp(hass, config, num(attrs.current_temperature));
   const setpoints = deriveSetpoints(mode, attrs);
   const equipment =
     fromHvacAction(str(attrs.hvac_action)) ?? inferEquipment(mode, currentTemp, setpoints);
-  const humidity =
-    num(attrs.current_humidity) ??
-    (config.humidity_entity ? num(hass.states[config.humidity_entity]?.state) : null);
+  const humidity = resolveHumidity(hass, config, num(attrs.current_humidity));
 
   return {
     available: true,
@@ -282,6 +327,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
     equipment,
     mode,
     setpoints,
+    resumeAvailable: resumeAvailable(config, setpoints, attrs),
     weatherAvailable: weather !== null,
     weatherCondition: weather,
     fanAvailable: showFanAffordance(toFanModel(hass, config), config.show_fan),

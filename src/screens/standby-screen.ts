@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { EquipmentStatus } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
+import type { CardShape } from '../config';
 import { weatherIcon } from '../icons';
 import { renderShape, shapeStyles } from '../styles/shape';
 
@@ -63,6 +64,12 @@ export function formatClock(date: Date): string {
 @customElement('ecosee-standby-screen')
 export class EcoseeStandbyScreen extends LitElement {
   @property({ attribute: false }) view?: StandbyView;
+  /** The card's outer corner treatment (config `corner_style`). Absent ⇒
+   *  `squircle`, unchanged from before this key existed. */
+  @property({ attribute: false }) cornerStyle?: CardShape;
+  /** Whether the equipment-status edge glow is drawn (config `equipment_glow`).
+   *  Absent ⇒ `true`, unchanged from before this key existed. */
+  @property({ attribute: false }) equipmentGlow?: boolean;
 
   /** The current wall time, re-read on a 1s interval so the clock is live (not a
    *  static timestamp). Reactive so each update re-renders; Lit skips DOM writes
@@ -223,7 +230,7 @@ export class EcoseeStandbyScreen extends LitElement {
     const view = this.view;
     return html`
       <div class="screen ${view?.equipment ?? ''}" part="screen">
-        ${renderShape({ glow: true })}
+        ${renderShape({ glow: this.equipmentGlow ?? true, shape: this.cornerStyle ?? 'squircle' })}
         ${
           view?.equipment
             ? html`<span class="sr-only">${this._equipLabel(view.equipment)}</span>`

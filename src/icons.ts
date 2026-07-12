@@ -156,6 +156,27 @@ export const icons = {
     </g>
   `),
 
+  /** Heat / Cool (Auto) System Mode — the same mark as `auto`, but with its two
+   *  halves in separate groups (`cool-half` / `heat-half`) so a consumer can tint
+   *  each independently by equipment status, mirroring the ecobee device (config
+   *  `mode_color`): the left snowflake half blue while cooling, the right eco-sprig
+   *  half amber while heating, both plain `currentColor` (the Home Screen's default
+   *  white) the rest of the time. Geometry must stay identical to `auto` — the two
+   *  are the same icon, split for independent coloring. */
+  autoSplit: wrap(svg`
+    <g class="cool-half" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path d="M10.8 2 V22 M10.8 12 L3.5 7.4 M10.8 12 L3.5 16.6 M10.8 5.6 L8.5 4.2
+        M10.8 18.4 L8.5 19.8 M4.8 8.6 L4.4 6.4 L6.4 7.1 M4.8 15.4 L4.4 17.6 L6.4 16.9" />
+    </g>
+    <g class="heat-half" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path d="M15 11.2 C13 9 12.9 5 15.9 2.9 C18.4 4.8 17.6 9 15 11.2 Z" />
+      <path d="M13.2 16.8 C14.2 12.6 16.6 9.6 20 8.4 C21.5 11 21.3 15.2 19.2 17.7
+        C17.6 19.5 14.8 19 13.2 16.8 Z" />
+    </g>
+  `),
+
   /** Home Comfort Setting — a house. */
   home: wrap(svg`
     <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"

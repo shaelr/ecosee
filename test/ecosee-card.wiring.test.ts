@@ -177,6 +177,56 @@ describe('ecosee-card wiring — apply path', () => {
   });
 });
 
+describe('ecosee-card wiring — Resume Schedule (ADR-0012)', () => {
+  it('calls ecobee.resume_program with the bound entity when the resume-schedule action fires', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat_cool', {
+          target_temp_low: 68,
+          target_temp_high: 76,
+          climate_mode: 'Home',
+          preset_mode: 'temp',
+        }),
+      ],
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({ type: 'custom:ecosee-card', entity: 'climate.t', resume_program: true });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    // The pill itself is a pure reflection of view.resumeAvailable (covered in
+    // home-screen.test.ts); this proves the action reaches hass.callService with
+    // the right payload once fired.
+    fireAction(card, 'resume-schedule');
+    await card.updateComplete;
+
+    expect(calls).toEqual([
+      {
+        domain: 'ecobee',
+        service: 'resume_program',
+        data: { entity_id: 'climate.t', resume_all: false },
+        returnResponse: undefined,
+      },
+    ]);
+  });
+
+  it('does nothing when resume_program is unset, even if the action somehow fires', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [climateEntity('heat_cool', { target_temp_low: 68, target_temp_high: 76 })],
+    });
+    // Default config (no resume_program) — the pill never renders to fire this, but
+    // `_resumeSchedule` re-checks the config toggle itself (mirroring `_open`'s
+    // availability re-check for Overlays), so a stray action is a safe no-op.
+    const card = await mountCard(hass);
+
+    fireAction(card, 'resume-schedule');
+    await card.updateComplete;
+
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('ecosee-card wiring — navigation (tab bar)', () => {
   it('the gear opens a Main Menu section directly; a tab switch replaces it; dismiss returns Home', async () => {
     const { hass } = fakeHass({

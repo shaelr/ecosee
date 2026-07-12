@@ -49,6 +49,7 @@ const HOME_VIEW: HomeView = {
   equipment: null,
   mode: 'heat_cool',
   setpoints: { heat: 70, cool: 75 },
+  resumeAvailable: false,
   weatherAvailable: false,
   fanAvailable: false,
   weatherCondition: null,

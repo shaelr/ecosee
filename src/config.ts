@@ -20,6 +20,13 @@ export interface SensorConfig {
   occupancy_entity?: string;
 }
 
+/** The card's outer corner treatment. `squircle` (the default) is the ecobee
+ *  Premium's superellipse motif; `rounded` is a smaller, conventional
+ *  border-radius; `square` is sharp/unrounded corners. Purely cosmetic — it
+ *  swaps the shared silhouette every screen draws (styles/shape.ts), so it
+ *  applies uniformly to the Home Screen, every Overlay, and the Standby Screen. */
+export type CardShape = 'squircle' | 'rounded' | 'square';
+
 /** When to show the Home Screen's top-row fan shortcut glyph (issues #45, #73).
  *  `auto` (the default) shows it only when the entity exposes a real *speed*
  *  control beyond On/Auto; `always` shows it whenever the Fan sub-screen is
@@ -55,7 +62,15 @@ export interface EcoseeCardConfig {
   name?: string;
   /** A `weather` entity that enables the weather icon + (later) overlay. */
   weather_entity?: string;
-  /** Override humidity source when the climate entity has no `current_humidity`. */
+  /** Override the current-temperature source: when set, its numeric state (or, for
+   *  a `climate`/remote entity, its `current_temperature` attribute) replaces the
+   *  bound entity's own `current_temperature` everywhere the Card shows it (the
+   *  Home Screen number, the Standby Screen, and the Sensors screen's thermostat
+   *  card). Unset ⇒ the bound entity's own reading, as before. */
+  temperature_entity?: string;
+  /** Override humidity source: when set, its numeric state replaces the bound
+   *  entity's own `current_humidity` outright (not merely a fallback for a
+   *  thermostat that reports none). Unset ⇒ the bound entity's own reading. */
   humidity_entity?: string;
   /** Glyph for custom Comfort Settings (presets without a built-in mapping). One of
    *  the Skin's icon names — `home` / `away` / `sleep` / `comfort`; anything else
@@ -99,6 +114,28 @@ export interface EcoseeCardConfig {
    *  scrubber keeps this gap by *pushing* the paired setpoint instead of stalling.
    *  Absent ⇒ the unit default (3°F / 1.5°C). `0` lets the two setpoints meet. */
   min_gap?: number;
+  /** Opt-in Resume Schedule control (ADR-0012): a pill beneath the setpoint ovals
+   *  that calls `ecobee.resume_program`, mirroring the ecobee device's own
+   *  manual-override → Resume Schedule affordance. Absent ⇒ `false` — no control,
+   *  matching ADR-0004's default. Only meaningful for a bound entity actually driven
+   *  by Home Assistant's `ecobee` integration; the Card cannot verify this and takes
+   *  the key itself as the user's assertion that it's true. */
+  resume_program?: boolean;
+  /** The card's outer corner treatment (`squircle` / `rounded` / `square`). Absent
+   *  ⇒ `squircle` — the ecobee Premium's superellipse motif, unchanged from before
+   *  this key existed. Purely cosmetic; see CardShape. */
+  corner_style?: CardShape;
+  /** Whether the equipment-status edge glow (the colored border tracing the card's
+   *  outline while heating/cooling) is shown. Absent ⇒ `true`, unchanged from
+   *  before this key existed. Set `false` to hide it on every screen. */
+  equipment_glow?: boolean;
+  /** Whether the Home Screen's System Mode indicator glyph tints by equipment
+   *  status, mirroring the ecobee device: Cool mode turns blue while cooling, Heat
+   *  mode turns amber while heating, and Heat / Cool (Auto) tints its two halves
+   *  independently (blue left / amber right) by which side is active. Absent ⇒
+   *  `false` — the indicator stays the top-row white it always has, unaffected by
+   *  equipment status. */
+  mode_color?: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -122,6 +159,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     key:
       | 'name'
       | 'weather_entity'
+      | 'temperature_entity'
       | 'humidity_entity'
       | 'default_comfort_icon'
       | 'fan_min_on_time_entity'
@@ -141,6 +179,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     entity,
     name: optionalString('name'),
     weather_entity: optionalString('weather_entity'),
+    temperature_entity: optionalString('temperature_entity'),
     humidity_entity: optionalString('humidity_entity'),
     default_comfort_icon: optionalString('default_comfort_icon'),
     fan_min_on_time_entity: optionalString('fan_min_on_time_entity'),
@@ -152,7 +191,48 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     standby: parseStandby(raw.standby),
     show_fan: parseShowFan(raw.show_fan),
     min_gap: parseMinGap(raw.min_gap),
+    resume_program: parseResumeProgram(raw.resume_program),
+    corner_style: parseCornerStyle(raw.corner_style),
+    equipment_glow: parseEquipmentGlow(raw.equipment_glow),
+    mode_color: parseModeColor(raw.mode_color),
   };
+}
+
+/** The legal `corner_style` values; `squircle` (the default) is first. */
+const CARD_SHAPE_VALUES: readonly CardShape[] = ['squircle', 'rounded', 'square'];
+
+/** Parse the optional `corner_style` control. Returns `undefined` when absent so
+ *  the seam applies the `squircle` default (unchanged from before this key
+ *  existed). Throws a user-facing error for anything outside the small enum. */
+function parseCornerStyle(raw: unknown): CardShape | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || !CARD_SHAPE_VALUES.includes(raw as CardShape)) {
+    throw new Error("ecosee: `corner_style` must be one of 'squircle', 'rounded', 'square'.");
+  }
+  return raw as CardShape;
+}
+
+/** Parse the optional `equipment_glow` toggle. Returns `undefined` when absent so
+ *  the seam applies the `true` default (unchanged from before this key existed).
+ *  Throws a user-facing error for any non-boolean value. */
+function parseEquipmentGlow(raw: unknown): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'boolean') {
+    throw new Error('ecosee: `equipment_glow` must be a boolean.');
+  }
+  return raw;
+}
+
+/** Parse the optional `mode_color` toggle. Returns `undefined` when absent so the
+ *  seam applies the `false` default (the System Mode indicator stays plain white,
+ *  unchanged from before this key existed). Throws a user-facing error for any
+ *  non-boolean value. */
+function parseModeColor(raw: unknown): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'boolean') {
+    throw new Error('ecosee: `mode_color` must be a boolean.');
+  }
+  return raw;
 }
 
 /** Parse the optional `min_gap` (minimum heat/cool separation, in the display
@@ -163,6 +243,17 @@ function parseMinGap(raw: unknown): number | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'number' || Number.isNaN(raw) || raw < 0) {
     throw new Error('ecosee: `min_gap` must be a non-negative number of degrees.');
+  }
+  return raw;
+}
+
+/** Parse the optional `resume_program` toggle (ADR-0012). Returns `undefined` when
+ *  absent so the seam applies the `false` default (no Resume Schedule control,
+ *  matching ADR-0004). Throws a user-facing error for any non-boolean value. */
+function parseResumeProgram(raw: unknown): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'boolean') {
+    throw new Error('ecosee: `resume_program` must be a boolean.');
   }
   return raw;
 }

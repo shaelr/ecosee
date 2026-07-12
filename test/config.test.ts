@@ -151,6 +151,99 @@ describe('parseConfig — min_gap', () => {
   });
 });
 
+describe('parseConfig — temperature_entity', () => {
+  it('leaves temperature_entity undefined when the key is absent', () => {
+    expect(parseConfig(base).temperature_entity).toBeUndefined();
+  });
+
+  it('accepts an entity id string', () => {
+    expect(
+      parseConfig({ ...base, temperature_entity: 'sensor.living_room' }).temperature_entity,
+    ).toBe('sensor.living_room');
+  });
+
+  it('throws when temperature_entity is not a string', () => {
+    expect(() => parseConfig({ ...base, temperature_entity: 5 })).toThrow(
+      /`temperature_entity` must be a string entity id/,
+    );
+  });
+});
+
+describe('parseConfig — corner_style', () => {
+  it('leaves corner_style undefined when the key is absent (squircle default)', () => {
+    expect(parseConfig(base).corner_style).toBeUndefined();
+  });
+
+  it('accepts each legal value', () => {
+    for (const value of ['squircle', 'rounded', 'square'] as const) {
+      expect(parseConfig({ ...base, corner_style: value }).corner_style).toBe(value);
+    }
+  });
+
+  it('throws on an unknown value', () => {
+    expect(() => parseConfig({ ...base, corner_style: 'circle' })).toThrow(
+      /`corner_style` must be one of/,
+    );
+  });
+
+  it('throws on a non-string value', () => {
+    expect(() => parseConfig({ ...base, corner_style: 1 })).toThrow(
+      /`corner_style` must be one of/,
+    );
+  });
+});
+
+describe('parseConfig — equipment_glow', () => {
+  it('leaves equipment_glow undefined when the key is absent (shown by default)', () => {
+    expect(parseConfig(base).equipment_glow).toBeUndefined();
+  });
+
+  it('accepts an explicit boolean', () => {
+    expect(parseConfig({ ...base, equipment_glow: false }).equipment_glow).toBe(false);
+    expect(parseConfig({ ...base, equipment_glow: true }).equipment_glow).toBe(true);
+  });
+
+  it('throws when equipment_glow is not a boolean', () => {
+    expect(() => parseConfig({ ...base, equipment_glow: 'no' })).toThrow(
+      /`equipment_glow` must be a boolean/,
+    );
+  });
+});
+
+describe('parseConfig — mode_color', () => {
+  it('leaves mode_color undefined when the key is absent (plain white by default)', () => {
+    expect(parseConfig(base).mode_color).toBeUndefined();
+  });
+
+  it('accepts an explicit boolean', () => {
+    expect(parseConfig({ ...base, mode_color: true }).mode_color).toBe(true);
+    expect(parseConfig({ ...base, mode_color: false }).mode_color).toBe(false);
+  });
+
+  it('throws when mode_color is not a boolean', () => {
+    expect(() => parseConfig({ ...base, mode_color: 'no' })).toThrow(
+      /`mode_color` must be a boolean/,
+    );
+  });
+});
+
+describe('parseConfig — resume_program', () => {
+  it('leaves resume_program undefined when the key is absent (no control, ADR-0004 default)', () => {
+    expect(parseConfig(base).resume_program).toBeUndefined();
+  });
+
+  it('accepts an explicit boolean', () => {
+    expect(parseConfig({ ...base, resume_program: true }).resume_program).toBe(true);
+    expect(parseConfig({ ...base, resume_program: false }).resume_program).toBe(false);
+  });
+
+  it('throws when resume_program is not a boolean', () => {
+    expect(() => parseConfig({ ...base, resume_program: 'no' })).toThrow(
+      /`resume_program` must be a boolean/,
+    );
+  });
+});
+
 describe('parseConfig — standby_screen', () => {
   it('leaves standby_screen undefined when the key is absent (off by default)', () => {
     expect(parseConfig(base).standby_screen).toBeUndefined();

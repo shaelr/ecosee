@@ -9,7 +9,8 @@ import type { HomeView } from '../src/climate/home-view';
 // presents active setpoints as amber Heat / blue Cool ovals — two side by side in
 // Heat / Cool (Auto), one centered in a single-setpoint mode — each a tap target
 // that opens Temperature Adjust for its own setpoint. There is no combined range
-// pill / Hold pill / Resume ✕ (ADR-0004).
+// pill (ADR-0004); the opt-in Resume Schedule pill (ADR-0012, tested in its own
+// describe block below) renders beneath these without ever replacing them.
 
 function view(overrides: Partial<HomeView> = {}): HomeView {
   return {
@@ -21,6 +22,7 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
     equipment: null,
     mode: 'heat_cool',
     setpoints: { heat: 70, cool: 75 },
+    resumeAvailable: false,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,
@@ -105,6 +107,39 @@ describe('Home Screen setpoint ovals', () => {
       { action: 'temperature', setpoint: 'heat' },
       { action: 'temperature', setpoint: 'cool' },
     ]);
+  });
+});
+
+// The opt-in Resume Schedule pill (config `resume_program`, ADR-0012): rendered
+// beneath the setpoint ovals — never replacing them — only when the already-derived
+// `view.resumeAvailable` says so. The Home Screen itself does nothing but reflect
+// that flag; the gating logic lives in climate/resume-schedule.ts (tested there).
+describe('Home Screen Resume Schedule pill (resume_program, ADR-0012)', () => {
+  function resumeButton(el: EcoseeHomeScreen): HTMLButtonElement | null {
+    return el.shadowRoot!.querySelector('.resume');
+  }
+
+  it('is absent when resumeAvailable is false', async () => {
+    const el = await mount(view({ resumeAvailable: false }));
+    expect(resumeButton(el)).toBeNull();
+  });
+
+  it('renders beneath the setpoint ovals when resumeAvailable is true, without hiding them', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
+    expect(ovals(el)).toHaveLength(2); // the ovals still show — no combined pill (ADR-0004)
+    const resume = resumeButton(el);
+    expect(resume).not.toBeNull();
+    expect(resume!.textContent).toContain('Resume Schedule');
+  });
+
+  it('emits a resume-schedule action on tap', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
+    const fired: HomeActionDetail[] = [];
+    el.addEventListener('ecosee-action', (e) =>
+      fired.push((e as CustomEvent<HomeActionDetail>).detail),
+    );
+    resumeButton(el)!.click();
+    expect(fired).toEqual([{ action: 'resume-schedule' }]);
   });
 });
 
@@ -204,6 +239,98 @@ describe('Home Screen top-row layout', () => {
     expect(el.shadowRoot!.querySelector('.fan')).toBeNull();
     expect(el.shadowRoot!.querySelector('.top-anchor')).not.toBeNull();
     expect(topChildClasses(el)).toEqual(['top-anchor', 'mode raised', 'menu']);
+  });
+});
+
+// System Mode icon coloring (config `mode_color`, opt-in — mirrors the ecobee
+// device): Cool/Heat tint the whole glyph while actively cooling/heating; Heat /
+// Cool (Auto) renders the split glyph (icons.autoSplit) and tints only the active
+// half. Off by default, and never tints an idle/inactive mode.
+describe('Home Screen System Mode icon coloring (mode_color)', () => {
+  function modeButton(el: EcoseeHomeScreen): HTMLButtonElement {
+    return el.shadowRoot!.querySelector('.mode') as HTMLButtonElement;
+  }
+
+  it('stays plain (no mode-color class) when mode_color is unset, even while cooling', async () => {
+    const el = await mount(view({ mode: 'cool', equipment: 'cooling' }));
+    const classes = modeButton(el).className;
+    expect(classes).not.toMatch(/mode-color|mode-cooling|mode-heating/);
+  });
+
+  it('tints Cool mode blue while actively cooling', async () => {
+    const el = await mount(view({ mode: 'cool', equipment: 'cooling' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-color')).toBe(true);
+    expect(btn.classList.contains('mode-cooling')).toBe(true);
+    expect(btn.classList.contains('mode-split')).toBe(false);
+  });
+
+  it('does not tint Cool mode when idle (not actively cooling)', async () => {
+    const el = await mount(view({ mode: 'cool', equipment: 'idle' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-cooling')).toBe(false);
+    expect(btn.classList.contains('mode-heating')).toBe(false);
+  });
+
+  it('tints Heat mode amber while actively heating', async () => {
+    const el = await mount(view({ mode: 'heat', equipment: 'heating' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-color')).toBe(true);
+    expect(btn.classList.contains('mode-heating')).toBe(true);
+    expect(btn.classList.contains('mode-split')).toBe(false);
+  });
+
+  it('renders the split glyph with cool-half/heat-half groups for Heat / Cool (Auto)', async () => {
+    const el = await mount(view({ mode: 'heat_cool', equipment: 'cooling' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-split')).toBe(true);
+    expect(btn.classList.contains('mode-cooling')).toBe(true);
+    expect(btn.querySelector('.cool-half')).not.toBeNull();
+    expect(btn.querySelector('.heat-half')).not.toBeNull();
+  });
+
+  it('renders the plain (non-split) glyph for Heat / Cool (Auto) when mode_color is off', async () => {
+    const el = await mount(view({ mode: 'heat_cool', equipment: 'cooling' }));
+    const btn = modeButton(el);
+    expect(btn.querySelector('.cool-half')).toBeNull();
+    expect(btn.querySelector('.heat-half')).toBeNull();
+  });
+
+  it('marks Heat / Cool (Auto) as heating (not cooling) while actively heating', async () => {
+    const el = await mount(view({ mode: 'heat_cool', equipment: 'heating' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-heating')).toBe(true);
+    expect(btn.classList.contains('mode-cooling')).toBe(false);
+  });
+
+  it('tints neither half of Heat / Cool (Auto) when idle', async () => {
+    const el = await mount(view({ mode: 'heat_cool', equipment: 'idle' }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.classList.contains('mode-cooling')).toBe(false);
+    expect(btn.classList.contains('mode-heating')).toBe(false);
+    expect(btn.classList.contains('mode-split')).toBe(true); // still the split glyph
+  });
+
+  it('leaves the OFF text mark untouched by mode_color', async () => {
+    const el = await mount(view({ mode: 'off', equipment: null, setpoints: null }));
+    el.modeColor = true;
+    await el.updateComplete;
+    const btn = modeButton(el);
+    expect(btn.querySelector('.mode-off')?.textContent).toBe('OFF');
+    expect(btn.classList.contains('mode-cooling')).toBe(false);
+    expect(btn.classList.contains('mode-heating')).toBe(false);
   });
 });
 

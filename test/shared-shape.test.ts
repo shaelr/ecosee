@@ -8,7 +8,7 @@ import '../src/overlays/overlay-shell';
 import { EcoseeHomeScreen } from '../src/screens/home-screen';
 import { EcoseeStandbyScreen } from '../src/screens/standby-screen';
 import { EcoseeOverlay } from '../src/overlays/overlay-shell';
-import { SQUIRCLE_PATH, shapeStyles } from '../src/styles/shape';
+import { SQUIRCLE_PATH, shapePath, shapeStyles } from '../src/styles/shape';
 import type { HomeView } from '../src/climate/home-view';
 import type { StandbyView } from '../src/screens/standby-screen';
 
@@ -33,6 +33,7 @@ function homeView(overrides: Partial<HomeView> = {}): HomeView {
     equipment: null,
     mode: 'heat_cool',
     setpoints: { heat: 68, cool: 75 },
+    resumeAvailable: false,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,
@@ -84,7 +85,10 @@ function shapeFillPath(root: ParentNode): string | null {
 }
 
 function cssTextOf(styles: CSSResult | CSSResult[]): string {
-  return [styles].flat().map((s) => s.cssText).join('\n');
+  return [styles]
+    .flat()
+    .map((s) => s.cssText)
+    .join('\n');
 }
 
 afterEach(() => {
@@ -173,4 +177,76 @@ describe('no surface falls back to a rounded-rectangle silhouette (issue #76)', 
       expect(cssTextOf(styles)).toContain(shapeStyles.cssText);
     });
   }
+});
+
+describe('shapePath — configurable corner style', () => {
+  it('returns the squircle superellipse for "squircle" (and as the default)', () => {
+    expect(shapePath('squircle')).toBe(SQUIRCLE_PATH);
+  });
+
+  it('returns a distinct rounded-rect path for "rounded"', () => {
+    const path = shapePath('rounded');
+    expect(path).not.toBe(SQUIRCLE_PATH);
+    // Uses arc commands for its corners, unlike the sharp-cornered "square" path.
+    expect(path).toMatch(/A\d/);
+  });
+
+  it('returns a sharp-cornered rect path (no arcs) for "square"', () => {
+    const path = shapePath('square');
+    expect(path).not.toBe(SQUIRCLE_PATH);
+    expect(path).not.toMatch(/A\d/);
+  });
+
+  it('produces three distinct paths across the three styles', () => {
+    const paths = new Set([shapePath('squircle'), shapePath('rounded'), shapePath('square')]);
+    expect(paths.size).toBe(3);
+  });
+});
+
+describe('corner_style / equipment_glow wiring (issue #131)', () => {
+  it('Home Screen draws the squircle by default (cornerStyle unset)', async () => {
+    const el = await mountHome();
+    expect(shapeFillPath(el.shadowRoot!)).toBe(SQUIRCLE_PATH);
+  });
+
+  it('Home Screen draws the configured corner style', async () => {
+    const el = await mountHome();
+    el.cornerStyle = 'square';
+    await el.updateComplete;
+    expect(shapeFillPath(el.shadowRoot!)).toBe(shapePath('square'));
+  });
+
+  it('Standby Screen and Overlay shell draw the configured corner style too', async () => {
+    const standby = await mountStandby();
+    standby.cornerStyle = 'rounded';
+    await standby.updateComplete;
+    expect(shapeFillPath(standby.shadowRoot!)).toBe(shapePath('rounded'));
+
+    const overlay = await mountOverlay();
+    overlay.cornerStyle = 'square';
+    await overlay.updateComplete;
+    expect(shapeFillPath(overlay.shadowRoot!)).toBe(shapePath('square'));
+  });
+
+  it('draws the equipment glow group by default (equipmentGlow unset)', async () => {
+    const el = await mountHome();
+    expect(el.shadowRoot!.querySelector('svg.shape .glow')).not.toBeNull();
+  });
+
+  it('omits the equipment glow group entirely when equipmentGlow is false', async () => {
+    const home = await mountHome();
+    home.equipmentGlow = false;
+    await home.updateComplete;
+    expect(home.shadowRoot!.querySelector('svg.shape .glow')).toBeNull();
+
+    const standby = await mountStandby();
+    standby.equipmentGlow = false;
+    await standby.updateComplete;
+    expect(standby.shadowRoot!.querySelector('svg.shape .glow')).toBeNull();
+
+    const overlay = await mountOverlay();
+    overlay.equipmentGlow = false;
+    await overlay.updateComplete;
+    expect(overlay.shadowRoot!.querySelector('svg.shape .glow')).toBeNull();
+  });
 });

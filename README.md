@@ -163,11 +163,17 @@ type: custom:ecosee-card
 entity: climate.living_room # required, a climate.* entity
 name: Living Room # optional, defaults to the entity's friendly name
 weather_entity: weather.home # optional, shows the weather icon and screen
-humidity_entity: sensor.hallway_humidity # optional, if the thermostat has no humidity
+temperature_entity: sensor.living_room_temperature # optional, overrides the thermostat's own current temperature
+humidity_entity: sensor.hallway_humidity # optional, overrides the thermostat's own humidity
 air_quality_entity: sensor.air_quality_index # optional, adds the AQI gauge
 uv_index_entity: sensor.uv_index # optional, adds the UV gauge
 show_fan: auto # optional, auto | always | never — the Home Screen fan shortcut
 standby_screen: true # optional, dims to a clock when left idle
+corner_style: squircle # optional, squircle | rounded | square — the card's corner treatment
+equipment_glow: true # optional, the colored heating/cooling edge glow
+mode_color: false # optional, tints the System Mode icon by equipment status like the ecobee
+resume_program: false # optional, adds a Resume Schedule control (ecobee integration only)
+min_gap: 3 # optional, minimum heat/cool separation in Heat / Cool (Auto)
 sensors: # optional, the Sensors screen (see below)
   - sensor.kitchen_temperature
   - entity: sensor.hallway_temperature
@@ -175,29 +181,58 @@ sensors: # optional, the Sensors screen (see below)
     occupancy_entity: binary_sensor.hallway_occupancy
 ```
 
-| Option                   | Required | Description                                                                                                                                        |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `entity`                 | yes      | The `climate.*` entity the card is bound to. One card drives one thermostat.                                                                       |
-| `name`                   | no       | Label override. Defaults to the entity's friendly name.                                                                                            |
-| `weather_entity`         | no       | A `weather` entity. Enables the weather icon and the Weather screen.                                                                               |
-| `humidity_entity`        | no       | Humidity source, for when the climate entity does not report humidity itself.                                                                      |
-| `air_quality_entity`     | no       | An entity carrying a US EPA air-quality index. Adds the AQI gauge.                                                                                 |
-| `uv_index_entity`        | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                  |
-| `fan_min_on_time_entity` | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                      |
-| `sensors`                | no       | Temperature entities for the Sensors screen (see below).                                                                                           |
-| `inactivity_timeout`     | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                              |
-| `standby_screen`         | no       | Dim to a minimal clock display when left idle. Default off.                                                                                        |
+| Option                   | Required | Description                                                                                                                                                                               |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entity`                 | yes      | The `climate.*` entity the card is bound to. One card drives one thermostat.                                                                                                              |
+| `name`                   | no       | Label override. Defaults to the entity's friendly name.                                                                                                                                   |
+| `weather_entity`         | no       | A `weather` entity. Enables the weather icon and the Weather screen.                                                                                                                      |
+| `temperature_entity`     | no       | Overrides the thermostat's own current-temperature reading everywhere the card shows it (Home Screen, Standby Screen, and the Sensors screen's thermostat card) with this entity's value. |
+| `humidity_entity`        | no       | Overrides the thermostat's own humidity reading with this entity's value.                                                                                                                 |
+| `air_quality_entity`     | no       | An entity carrying a US EPA air-quality index. Adds the AQI gauge.                                                                                                                        |
+| `uv_index_entity`        | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                                                         |
+| `fan_min_on_time_entity` | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                                                             |
+| `sensors`                | no       | Temperature entities for the Sensors screen (see below).                                                                                                                                  |
+| `inactivity_timeout`     | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                                                                     |
+| `standby_screen`         | no       | Dim to a minimal clock display when left idle. Default off.                                                                                                                               |
 
 #### Advanced
 
-Finer-grained knobs for tuning specific screens. `show_fan` is also in the visual
-editor; `standby` and `min_gap` are YAML-only.
+Finer-grained knobs for tuning specific screens. `show_fan`, `min_gap`,
+`resume_program`, `corner_style`, `equipment_glow`, and `mode_color` are all also in
+the visual editor; `standby` is YAML-only.
 
-| Option     | Required | Description                                                                            |
-| ---------- | -------- | -------------------------------------------------------------------------------------- |
-| `show_fan` | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`. |
-| `standby`  | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                          |
-| `min_gap`  | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet.   |
+| Option           | Required | Description                                                                                                                                                                          |
+| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `show_fan`       | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                   |
+| `standby`        | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                            |
+| `mode_color`     | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.   |
+| `min_gap`        | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet.                                     |
+| `corner_style`   | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`. |
+| `equipment_glow` | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                       |
+| `resume_program` | no       | Adds a Resume Schedule control beneath the setpoints — see below. **ecobee integration only.** Default off.                                                                          |
+
+##### Resume Schedule (ecobee integration only)
+
+Changing a setpoint puts an ecobee into a manual override ("Hold") until the next
+scheduled transition; the physical device offers a **Resume Schedule** control to
+clear that and hand control back to the program. Home Assistant has no portable way
+to represent this for an arbitrary `climate` entity (see
+[ADR-0004](docs/adr/0004-no-hold-or-resume-schedule.md)), so it stays off by
+default and does not appear for other thermostats.
+
+Turning `resume_program` on adds that control beneath the setpoint ovals — text
+plus a small circled ✕ — for a thermostat bound through Home Assistant's own
+**ecobee integration**. Tapping it calls `ecobee.resume_program`. The card shows it
+on a best-effort basis: it compares the entity's `climate_mode` (what the schedule
+currently calls for) against `preset_mode` (what's actually active) and shows the
+control when they differ or when it can't tell (see
+[ADR-0012](docs/adr/0012-opt-in-resume-schedule.md) for the full reasoning). There
+is no `until 5:28pm` countdown — Home Assistant doesn't expose a hold's end time,
+so the card doesn't fake one.
+
+```yaml
+resume_program: true
+```
 
 ##### Heat / Cool (Auto) minimum gap
 
@@ -233,7 +268,9 @@ standby:
 `sensors` curates which temperature readings appear under the Sensors screen. The
 thermostat's own temperature is listed first automatically, so this is for the
 extra rooms you want alongside it. Each item is either a bare entity id or an
-object:
+object; `name` and `occupancy_entity` are both settable from the visual editor
+(each sensor's entity picker shows a name field and an occupancy-entity field
+beneath it) as well as in YAML.
 
 | Field              | Required | Description                                                                                                                   |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------- |

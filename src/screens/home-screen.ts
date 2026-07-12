@@ -9,13 +9,15 @@ import type {
 } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
 import { systemModeGlyph } from '../climate/system-mode';
+import type { CardShape } from '../config';
 import { icons, weatherIcon } from '../icons';
 import { renderShape, shapeStyles } from '../styles/shape';
 
 /** Actions the Home Screen surfaces to the host card. `temperature` opens the
  *  Temperature Adjust overlay; `system-mode` / `weather` / `fan` / `menu` open later
  *  Overlays. `fan` is the top-row shortcut into the Fan sub-screen (issue #45). */
-export type HomeAction = 'menu' | 'temperature' | 'weather' | 'system-mode' | 'fan';
+export type HomeAction =
+  'menu' | 'temperature' | 'weather' | 'system-mode' | 'fan' | 'resume-schedule';
 
 /** Which setpoint a tap should foreground. Carried on a `temperature` action when
  *  it fires from a specific setpoint oval, so the overlay opens editing that one. */
@@ -43,6 +45,16 @@ export interface HomeActionDetail {
 @customElement('ecosee-home-screen')
 export class EcoseeHomeScreen extends LitElement {
   @property({ attribute: false }) view?: HomeView;
+  /** The card's outer corner treatment (config `corner_style`). Absent ⇒
+   *  `squircle`, unchanged from before this key existed. */
+  @property({ attribute: false }) cornerStyle?: CardShape;
+  /** Whether the equipment-status edge glow is drawn (config `equipment_glow`).
+   *  Absent ⇒ `true`, unchanged from before this key existed. */
+  @property({ attribute: false }) equipmentGlow?: boolean;
+  /** Whether the System Mode indicator tints by equipment status (config
+   *  `mode_color`). Absent ⇒ `false` — the indicator stays plain top-row white,
+   *  unchanged from before this key existed. */
+  @property({ attribute: false }) modeColor?: boolean;
 
   static override styles = [
     // The shared superellipse surface (issue #76): positions the `.shape` SVG and
@@ -214,14 +226,38 @@ export class EcoseeHomeScreen extends LitElement {
         color: var(--ecosee-top-row, #ffffff);
       }
       /* System Mode indicator (tap → System Mode picker); white like the rest of the
-       top row — the heat/cool color language is reserved for setpoints/equipment,
-       so the indicator does not carry mode-specific color (issue #37). */
+       top row by default — the heat/cool color language is reserved for
+       setpoints/equipment, so the indicator does not carry mode-specific color
+       (issue #37) UNLESS the opt-in mode_color config mirrors the ecobee device's
+       own tinting (below). */
       .mode {
         color: var(--ecosee-top-row, #ffffff);
       }
       .mode .glyph {
         width: 10cqw;
         height: 10cqw;
+      }
+      /* mode_color (opt-in, off by default): tints the indicator by equipment
+       status like the ecobee device. Heat/Cool tint the WHOLE glyph directly
+       (plain currentColor icons, so recoloring .mode itself is enough); Heat /
+       Cool (Auto) renders the split glyph (icons.autoSplit) instead, whose two
+       sub-groups (.cool-half / .heat-half) are tinted independently — .mode
+       itself stays the default white so the inactive half still reads white,
+       matching the device. The .mode-split class (present only for the split
+       glyph) is what keeps the two coloring paths from fighting each other: a
+       lower-specificity .mode.mode-cooling rule would otherwise also match the
+       split glyph and paint both halves the same color. */
+      .mode.mode-color.mode-cooling:not(.mode-split) {
+        color: var(--ecosee-cool, #49b6ea);
+      }
+      .mode.mode-color.mode-heating:not(.mode-split) {
+        color: var(--ecosee-heat, #f3a13c);
+      }
+      .mode.mode-color.mode-split.mode-cooling .cool-half {
+        color: var(--ecosee-cool, #49b6ea);
+      }
+      .mode.mode-color.mode-split.mode-heating .heat-half {
+        color: var(--ecosee-heat, #f3a13c);
       }
       .mode-off {
         display: inline-flex;
@@ -319,8 +355,9 @@ export class EcoseeHomeScreen extends LitElement {
        Heat oval (♨ + temp) and a blue Cool oval (❄ + temp). Heat / Cool (Auto)
        shows both side by side (heat left, cool right); a single-setpoint mode
        shows just its own, centered by the row. Each oval is a tap target that
-       opens Temperature Adjust for that setpoint. No Hold pill / Resume ✕
-       (ADR-0004). */
+       opens Temperature Adjust for that setpoint. No combined range pill (ADR-0004
+       stands for that). The opt-in Resume Schedule pill (config resume_program,
+       ADR-0012) renders BENEATH these, never replacing them — see .resume below. */
       .setpoints {
         display: inline-flex;
         align-items: center;
@@ -352,6 +389,36 @@ export class EcoseeHomeScreen extends LitElement {
       }
       .oval.cool {
         color: var(--ecosee-cool, #49b6ea);
+      }
+
+      /* Resume Schedule pill (config resume_program, opt-in — ADR-0012): a
+       neutral (not heat/cool-colored) stadium pill beneath the setpoint ovals,
+       mirroring the ecobee device's own manual-override affordance. Text + a
+       small circled ✕ at the trailing edge; the whole pill is the tap target
+       (matching the setpoint ovals' single-button treatment) rather than just the
+       ✕ circle, for a more forgiving touch target. */
+      .resume {
+        display: inline-flex;
+        align-items: center;
+        gap: 3cqw;
+        padding: 1.6cqw 2cqw 1.6cqw 4.4cqw;
+        border: 0.5cqw solid var(--ecosee-muted, #6f96a3);
+        border-radius: 999px;
+        color: var(--ecosee-fg, #d4eff9);
+        font-size: 5.2cqw;
+        font-weight: 400;
+        cursor: pointer;
+      }
+      .resume-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 6.5cqw;
+        height: 6.5cqw;
+        border: 0.5cqw solid currentColor;
+        border-radius: 50%;
+        padding: 1.2cqw;
+        color: var(--ecosee-muted, #6f96a3);
       }
 
       .unavailable {
@@ -525,7 +592,7 @@ export class EcoseeHomeScreen extends LitElement {
                   >
                     ${formatTemp(view.currentTemp, view.unit)}
                   </button>
-                  ${this._renderSetpoints(view)}
+                  ${this._renderSetpoints(view)} ${this._renderResume(view)}
                 `
               : html`<div class="unavailable">${view.name} unavailable</div>`
           }
@@ -548,7 +615,7 @@ export class EcoseeHomeScreen extends LitElement {
    *  stacked strokes, hidden until the equipment class on `.screen` reveals/colors
    *  them. */
   private _renderShape(): TemplateResult {
-    return renderShape({ glow: true });
+    return renderShape({ glow: this.equipmentGlow ?? true, shape: this.cornerStyle ?? 'squircle' });
   }
 
   private _renderTop(view: HomeView): TemplateResult {
@@ -604,12 +671,26 @@ export class EcoseeHomeScreen extends LitElement {
   private _renderMode(view: HomeView): TemplateResult | typeof nothing {
     const mode = view.mode;
     if (mode === 'unknown') return nothing;
+    // `mode_color` (opt-in): Heat / Cool (Auto) needs the split glyph so each half
+    // can tint independently; a single Heat/Cool mode keeps its plain glyph and
+    // tints as a whole (see the `.mode.mode-color.mode-*` CSS).
+    const split = this.modeColor === true && mode === 'heat_cool';
     const content =
       mode === 'off'
         ? html`<span class="mode-off">OFF</span>`
-        : html`<span class="glyph">${systemModeGlyph(mode)}</span>`;
+        : html`<span class="glyph">${split ? icons.autoSplit : systemModeGlyph(mode)}</span>`;
+    const classes = [
+      'mode',
+      'raised',
+      this.modeColor === true ? 'mode-color' : '',
+      this.modeColor === true && view.equipment === 'cooling' ? 'mode-cooling' : '',
+      this.modeColor === true && view.equipment === 'heating' ? 'mode-heating' : '',
+      split ? 'mode-split' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     return html`<button
-      class="mode raised"
+      class=${classes}
       aria-label=${this._modeLabel(mode)}
       @click=${() => this._emit('system-mode')}
     >
@@ -641,6 +722,24 @@ export class EcoseeHomeScreen extends LitElement {
       @click=${() => this._emit('temperature', setpoint)}
     >
       <span class="glyph">${glyph}</span>${formatTemp(value, unit)}
+    </button>`;
+  }
+
+  /** The opt-in Resume Schedule pill (config `resume_program`, ADR-0012), beneath
+   *  the setpoint ovals — never replacing them (the ovals keep showing the live
+   *  heat/cool setpoints exactly as before; ADR-0004's "no combined range pill"
+   *  stands). Rendered only when the seam's best-effort hold check says so
+   *  (`view.resumeAvailable`); tapping it fires `ecosee.resume_program` via the
+   *  `resume-schedule` action. */
+  private _renderResume(view: HomeView): TemplateResult | typeof nothing {
+    if (!view.resumeAvailable) return nothing;
+    return html`<button
+      class="resume"
+      aria-label="Resume Schedule"
+      @click=${() => this._emit('resume-schedule')}
+    >
+      <span class="resume-label">Resume Schedule</span>
+      <span class="resume-close">${icons.close}</span>
     </button>`;
   }
 

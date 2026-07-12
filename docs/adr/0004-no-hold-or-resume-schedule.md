@@ -1,5 +1,11 @@
 # No Hold or Resume Schedule
 
+**Extended by [ADR-0012](./0012-opt-in-resume-schedule.md)**, which adds an
+explicitly **opt-in**, `ecobee`-integration-only Resume Schedule control. The
+reasoning below remains the Card's *default* — this is not a reversal, it's a
+narrow, user-asserted exception for the one case (a real `ecobee`-integration
+entity) where the Card can back the control honestly.
+
 The physical ecobee frames a manual change as a **Hold** and offers a **Resume
 Schedule** action to clear it and hand control back to the program. ecosee does not
 surface either. Home Assistant can't reliably drive the underlying behavior: it has

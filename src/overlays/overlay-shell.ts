@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { EquipmentStatus } from '../climate/home-view';
+import type { CardShape } from '../config';
 import { icons } from '../icons';
 import type { TabBarModel, TabIcon, TabTarget } from '../menu/tab-bar';
 import { renderShape, shapeStyles } from '../styles/shape';
@@ -44,16 +45,16 @@ export class EcoseeOverlay extends LitElement {
     // Standby Screen — the Card's outer shape no longer changes between screens.
     shapeStyles,
     css`
-    :host {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      z-index: 1;
-    }
+      :host {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        z-index: 1;
+      }
 
-    /* The same fixed layout canvas as <ecosee-home-screen>'s .screen, so the
+      /* The same fixed layout canvas as <ecosee-home-screen>'s .screen, so the
        overlay lands squarely on top of it; the whole Card (Home Screen + Overlay)
        is scaled as one unit by <ecosee-card> (issue #35 / #36). The shell's own
        chrome (the ✕) is sized in the fixed unit calc(N * --ecosee-u), not cqw —
@@ -63,26 +64,26 @@ export class EcoseeOverlay extends LitElement {
        (issue #76) — no background or border-radius here, so the superellipse (not a
        rounded rect) fully masks the Home Screen, with overflow: hidden clipping the
        corners outside the curve. */
-    .shell {
-      position: relative;
-      box-sizing: border-box;
-      width: var(--ecosee-base-size, 460px);
-      height: var(--ecosee-base-size, 460px);
-      color: var(--ecosee-fg, #d4eff9);
-      font-family: var(--ecosee-font, system-ui, sans-serif);
-      overflow: hidden;
-      user-select: none;
-      /* Bottom space a section body must leave clear so its content never hides
+      .shell {
+        position: relative;
+        box-sizing: border-box;
+        width: var(--ecosee-base-size, 460px);
+        height: var(--ecosee-base-size, 460px);
+        color: var(--ecosee-fg, #d4eff9);
+        font-family: var(--ecosee-font, system-ui, sans-serif);
+        overflow: hidden;
+        user-select: none;
+        /* Bottom space a section body must leave clear so its content never hides
          behind the tab bar. The shell owns this number (it owns the bar's geometry:
          bottom 7u + height 8u ≈ 15u, plus margin); section overlays read it via
          var(--ecosee-tabbar-inset) rather than re-deriving it. 0 when no bar. */
-      --ecosee-tabbar-inset: 0px;
-    }
-    .shell.tabbed {
-      --ecosee-tabbar-inset: calc(17 * var(--ecosee-u, 4.6px));
-    }
+        --ecosee-tabbar-inset: 0px;
+      }
+      .shell.tabbed {
+        --ecosee-tabbar-inset: calc(17 * var(--ecosee-u, 4.6px));
+      }
 
-    /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp squircle-edge
+      /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp squircle-edge
        line the Home Screen draws (ADR-0011 supersedes ADR-0009's "Overlay shell has
        none" clause): blue cooling / amber heating, nothing idle. The glow markup and
        the reveal/color chain mirror the Home Screen (home-screen.ts) so the surfaces
@@ -90,136 +91,136 @@ export class EcoseeOverlay extends LitElement {
        it uses the Home Screen's full-strength glow (no standby dimming). Without this
        the shell's opaque canvas covers the Home Screen's glow the moment any overlay
        opens, so the "system is running" cue vanished while adjusting the temperature. */
-    .shape .glow {
-      display: none;
-    }
-    .shape .glow path {
-      fill: none;
-      stroke: currentColor;
-    }
-    .shell.cooling .glow {
-      display: block;
-      color: var(--ecosee-cool, #49b6ea);
-    }
-    .shell.heating .glow {
-      display: block;
-      color: var(--ecosee-heat, #f3a13c);
-    }
+      .shape .glow {
+        display: none;
+      }
+      .shape .glow path {
+        fill: none;
+        stroke: currentColor;
+      }
+      .shell.cooling .glow {
+        display: block;
+        color: var(--ecosee-cool, #49b6ea);
+      }
+      .shell.heating .glow {
+        display: block;
+        color: var(--ecosee-heat, #f3a13c);
+      }
 
-    /* The glow conveys equipment state by color alone, so announce it to assistive
+      /* The glow conveys equipment state by color alone, so announce it to assistive
        tech (WCAG), matching the Home Screen and Standby Screen. */
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      white-space: nowrap;
-    }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
 
-    /* Behind the content; catches taps on any non-control area to dismiss. */
-    .backdrop {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      cursor: pointer;
-    }
+      /* Behind the content; catches taps on any non-control area to dismiss. */
+      .backdrop {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        cursor: pointer;
+      }
 
-    /* Sits above the backdrop but stays pointer-transparent so empty taps fall
+      /* Sits above the backdrop but stays pointer-transparent so empty taps fall
        through to .backdrop (→ dismiss); each Overlay's controls opt back in with
        pointer-events: auto. Without this the wrapper itself would swallow
        empty-area taps and outside-tap dismissal would never fire (issue #40). */
-    .content {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      pointer-events: none;
-    }
-    ::slotted(*) {
-      display: block;
-      width: 100%;
-      height: 100%;
-      /* Non-control regions fall through to .backdrop; Overlays re-enable their
+      .content {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+      ::slotted(*) {
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* Non-control regions fall through to .backdrop; Overlays re-enable their
          own controls with pointer-events: auto. */
-      pointer-events: none;
-    }
+        pointer-events: none;
+      }
 
-    /* Inset from the top-LEFT corner, matching the device (its ✕ / back control
+      /* Inset from the top-LEFT corner, matching the device (its ✕ / back control
        sits top-left on every sub-screen). The superellipse curves inward there, so
        a tight corner offset (was 6u) put the ✕ right on the bevel and cramped
        against the edge — uncomfortable to reach on a touch dashboard. 9u pulls it
        into the flat of the surface with a comfortable margin while staying clear of
        centered overlay content below. */
-    .close {
-      appearance: none;
-      background: none;
-      border: none;
-      position: absolute;
-      top: calc(9 * var(--ecosee-u, 4.6px));
-      left: calc(9 * var(--ecosee-u, 4.6px));
-      width: calc(9 * var(--ecosee-u, 4.6px));
-      height: calc(9 * var(--ecosee-u, 4.6px));
-      padding: calc(1.4 * var(--ecosee-u, 4.6px));
-      color: var(--ecosee-muted, #6f96a3);
-      cursor: pointer;
-      z-index: 2;
-    }
+      .close {
+        appearance: none;
+        background: none;
+        border: none;
+        position: absolute;
+        top: calc(9 * var(--ecosee-u, 4.6px));
+        left: calc(9 * var(--ecosee-u, 4.6px));
+        width: calc(9 * var(--ecosee-u, 4.6px));
+        height: calc(9 * var(--ecosee-u, 4.6px));
+        padding: calc(1.4 * var(--ecosee-u, 4.6px));
+        color: var(--ecosee-muted, #6f96a3);
+        cursor: pointer;
+        z-index: 2;
+      }
 
-    /* The device's persistent bottom navigation, shown across the Main Menu section
+      /* The device's persistent bottom navigation, shown across the Main Menu section
        screens (System / Sensors / Fan). Shell chrome like the ✕: absolutely placed,
        sized in the fixed unit (the shell is not a query container), above the content.
        The full-width nav stays pointer-transparent so its empty flanks fall through to
        the dismiss backdrop (outside-tap-to-dismiss); only the buttons opt back in. */
-    .tabbar {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: calc(7 * var(--ecosee-u, 4.6px));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: calc(8 * var(--ecosee-u, 4.6px));
-      z-index: 2;
-      pointer-events: none;
-    }
-    .tab {
-      appearance: none;
-      background: none;
-      border: none;
-      margin: 0;
-      padding: 0;
-      width: calc(8 * var(--ecosee-u, 4.6px));
-      height: calc(8 * var(--ecosee-u, 4.6px));
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: auto;
-      /* Inactive tabs are muted; the active section and the temp badge are accent —
+      .tabbar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: calc(7 * var(--ecosee-u, 4.6px));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: calc(8 * var(--ecosee-u, 4.6px));
+        z-index: 2;
+        pointer-events: none;
+      }
+      .tab {
+        appearance: none;
+        background: none;
+        border: none;
+        margin: 0;
+        padding: 0;
+        width: calc(8 * var(--ecosee-u, 4.6px));
+        height: calc(8 * var(--ecosee-u, 4.6px));
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+        /* Inactive tabs are muted; the active section and the temp badge are accent —
          the device's "you are here" cue. */
-      color: var(--ecosee-muted, #6f96a3);
-      cursor: pointer;
-    }
-    .tab.active {
-      color: var(--ecosee-accent, #62cfe9);
-    }
-    /* Left badge: the current temperature in a cyan ring, tapping it returns to the
+        color: var(--ecosee-muted, #6f96a3);
+        cursor: pointer;
+      }
+      .tab.active {
+        color: var(--ecosee-accent, #62cfe9);
+      }
+      /* Left badge: the current temperature in a cyan ring, tapping it returns to the
        thermostat (Home). Falls back to the wall-display glyph when temp is unknown. */
-    .tab.temp {
-      border: calc(0.5 * var(--ecosee-u, 4.6px)) solid var(--ecosee-accent, #62cfe9);
-      border-radius: 50%;
-      color: var(--ecosee-accent, #62cfe9);
-      font-family: inherit;
-      font-weight: 600;
-      font-size: calc(3.3 * var(--ecosee-u, 4.6px));
-    }
-    .tab.temp.glyph {
-      padding: calc(1.4 * var(--ecosee-u, 4.6px));
-    }
-    .tab svg {
-      width: 100%;
-      height: 100%;
-    }
-  `,
+      .tab.temp {
+        border: calc(0.5 * var(--ecosee-u, 4.6px)) solid var(--ecosee-accent, #62cfe9);
+        border-radius: 50%;
+        color: var(--ecosee-accent, #62cfe9);
+        font-family: inherit;
+        font-weight: 600;
+        font-size: calc(3.3 * var(--ecosee-u, 4.6px));
+      }
+      .tab.temp.glyph {
+        padding: calc(1.4 * var(--ecosee-u, 4.6px));
+      }
+      .tab svg {
+        width: 100%;
+        height: 100%;
+      }
+    `,
   ];
 
   /** The bottom navigation model, supplied by the card for the Main Menu section
@@ -232,6 +233,13 @@ export class EcoseeOverlay extends LitElement {
    *  cooling / amber heating, nothing idle) so the "system is running" cue persists
    *  while any overlay is open (ADR-0011). */
   @property({ attribute: false }) equipment?: EquipmentStatus | null;
+
+  /** The card's outer corner treatment (config `corner_style`). Absent ⇒
+   *  `squircle`, unchanged from before this key existed. */
+  @property({ attribute: false }) cornerStyle?: CardShape;
+  /** Whether the equipment-status edge glow is drawn (config `equipment_glow`).
+   *  Absent ⇒ `true`, unchanged from before this key existed. */
+  @property({ attribute: false }) equipmentGlow?: boolean;
 
   private _dismiss = (): void => {
     emitOverlayDismiss(this);
@@ -252,7 +260,7 @@ export class EcoseeOverlay extends LitElement {
       .join(' ');
     return html`
       <div class=${classes}>
-        ${renderShape({ glow: true })}
+        ${renderShape({ glow: this.equipmentGlow ?? true, shape: this.cornerStyle ?? 'squircle' })}
         ${
           this.equipment
             ? html`<span class="sr-only">${this._equipLabel(this.equipment)}</span>`
