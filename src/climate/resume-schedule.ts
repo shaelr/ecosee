@@ -15,6 +15,13 @@ import type { Setpoints } from './home-view';
  *  integration's `climate_mode` attribute is the *scheduled* comfort setting name;
  *  the standard `preset_mode` is what's *actually* active. They differ exactly when
  *  a manual override (a temperature hold, or a held Comfort Setting) is in effect.
+ *  Compared case-insensitively: the ecobee integration maps `preset_mode`'s three
+ *  built-in presets through HA's generic (lowercase) `PRESET_HOME`/`PRESET_AWAY`/
+ *  `PRESET_SLEEP` constants, but leaves `climate_mode` as ecobee's own raw,
+ *  capitalized comfort-setting name ("Home") — so on-schedule "Home" vs "home"
+ *  differ only by that casing, not by an actual hold, and a strict compare never
+ *  cleared the pill for any of the three built-ins. A custom-named Comfort Setting
+ *  passes through both attributes unchanged, so case-insensitivity is a no-op there.
  *  A bound entity that doesn't expose `climate_mode` (a non-ecobee `climate` entity,
  *  or a HomeKit-paired ecobee) can't be checked this way — rather than hide a
  *  control the user explicitly opted into, this degrades to "assume a hold" (see
@@ -29,7 +36,7 @@ export function resumeAvailable(
   const climateMode = attrs.climate_mode;
   const presetMode = attrs.preset_mode;
   if (typeof climateMode !== 'string' || typeof presetMode !== 'string') return true;
-  return climateMode !== presetMode;
+  return climateMode.toLowerCase() !== presetMode.toLowerCase();
 }
 
 /** Build the `ecobee.resume_program` call. `resume_all: false` clears only the

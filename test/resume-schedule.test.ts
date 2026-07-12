@@ -79,6 +79,40 @@ describe('resumeAvailable — best-effort hold detection', () => {
   });
 });
 
+// Regression guard: the real ecobee integration maps preset_mode's three built-in
+// presets through HA's generic (lowercase) PRESET_HOME/PRESET_AWAY/PRESET_SLEEP
+// constants, but leaves climate_mode as ecobee's own raw, capitalized comfort-setting
+// name. A strict (case-sensitive) compare therefore reported a hold on every
+// built-in preset even while perfectly on-schedule — the pill never cleared. These
+// fixtures use the exact casing the real integration produces.
+describe('resumeAvailable — case-insensitive comparison (real ecobee casing)', () => {
+  const on = config({ resume_program: true });
+
+  it.each(['Home', 'Away', 'Sleep'])(
+    'is false on-schedule for the built-in %s preset (climate_mode capitalized, preset_mode lowercase)',
+    (name) => {
+      expect(
+        resumeAvailable(on, SETPOINTS, { climate_mode: name, preset_mode: name.toLowerCase() }),
+      ).toBe(false);
+    },
+  );
+
+  it('is still true when a different built-in preset is genuinely held, despite the casing difference', () => {
+    expect(resumeAvailable(on, SETPOINTS, { climate_mode: 'Home', preset_mode: 'away' })).toBe(
+      true,
+    );
+  });
+
+  it('is false on-schedule for a custom (unmapped) Comfort Setting name, unaffected either way', () => {
+    expect(
+      resumeAvailable(on, SETPOINTS, {
+        climate_mode: 'Guest Mode',
+        preset_mode: 'Guest Mode',
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('resumeProgramCall', () => {
   it('targets the ecobee.resume_program service with the bound entity', () => {
     expect(resumeProgramCall('climate.living_room')).toEqual({

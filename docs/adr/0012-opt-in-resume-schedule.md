@@ -74,6 +74,35 @@ directly rather than assumed):
 - No hold-expiry text (still unavailable, see above) and no `hass`-based integration
   sniffing (the opt-in key *is* the assertion).
 
+## Correction (post-ship): case-insensitive compare
+
+The initial implementation compared `climate_mode` and `preset_mode` with strict
+(case-sensitive) equality and never cleared the pill for the three built-in Comfort
+Settings, even perfectly on-schedule. Root cause, confirmed in the same integration
+source: the ecobee integration maps `preset_mode`'s three built-ins through HA's
+*generic, lowercase* climate preset constants —
+
+```python
+ECOBEE_TO_HASS_PRESET = {
+    "Away": PRESET_AWAY,    # "away"
+    "Home": PRESET_HOME,    # "home"
+    "Sleep": PRESET_SLEEP,  # "sleep"
+}
+```
+
+— but `climate_mode` is built straight from ecobee's own raw comfort-setting name
+(`"Home"`, capitalized) and never passes through that table. So on-schedule "Home"
+(climate_mode) vs "home" (preset_mode) differ only by casing the integration itself
+introduces, not by an actual hold. The Comfort Setting picker (`comfort-setting.ts`)
+never hit this, because it only ever compares `preset_mode` against `preset_modes` —
+both sides already lowercased consistently by the same table.
+
+The fix is a case-insensitive compare (`climateMode.toLowerCase() !==
+presetMode.toLowerCase()`) rather than reimplementing ecobee's own mapping table on
+this side: it's a no-op for a custom (unmapped) Comfort Setting name, and a genuinely
+different held preset ("Home" vs "away") still differs after lowercasing, so no false
+negatives are introduced.
+
 ## Consequences
 
 - `climate/resume-schedule.ts` is the seam: `resumeAvailable` (the gating logic

@@ -258,6 +258,18 @@ describe('toHomeView — resumeAvailable (ADR-0012)', () => {
     expect(view.resumeAvailable).toBe(false);
   });
 
+  it('is false on-schedule with the real ecobee integration\'s casing (climate_mode "Home", preset_mode "home")', () => {
+    // Regression: the ecobee integration maps preset_mode's built-in presets through
+    // HA's lowercase PRESET_HOME/AWAY/SLEEP constants but leaves climate_mode as
+    // ecobee's own capitalized name — a case-sensitive compare never cleared the
+    // pill for Home/Away/Sleep even on-schedule.
+    const view = toHomeView(
+      heatCool({ climate_mode: 'Home', preset_mode: 'home' }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+  });
+
   it('is false when resume_program is on but the system is Off (no setpoints to resume)', () => {
     const view = toHomeView(
       hass({
