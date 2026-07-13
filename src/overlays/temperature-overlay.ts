@@ -176,10 +176,13 @@ export class EcoseeTemperatureOverlay extends LitElement {
     .stack.below {
       align-self: start;
     }
+    /* Thin (weight 300) — kept fixed rather than theme-following (ADR-0013
+       correction): a theme's text color reliably read as dim/grey at this weight
+       even where it read crisp on bolder text elsewhere. */
     .neighbor {
       font-size: 11cqw;
       font-weight: 300;
-      color: var(--ecosee-text-muted, #6f96a3);
+      color: var(--ecosee-muted, #6f96a3);
       opacity: 0.85;
     }
     .neighbor.far {

@@ -294,6 +294,11 @@ export class EcoseeHomeScreen extends LitElement {
         padding-bottom: 18cqw;
       }
 
+      /* Thin (weight 300) numeral readout — like .temp below, kept the Skin's fixed
+       cyan rather than following the dashboard theme (ADR-0013 correction): a
+       theme's text color reliably read as dim/grey at this weight even when it
+       read crisp and white on bolder text elsewhere, an optical effect of thin
+       strokes against the near-black canvas rather than a color-value bug. */
       .hum {
         display: inline-flex;
         align-items: center;
@@ -301,7 +306,7 @@ export class EcoseeHomeScreen extends LitElement {
         font-size: 7cqw;
         font-weight: 300;
         letter-spacing: 0.02em;
-        color: var(--ecosee-text-accent, #62cfe9);
+        color: var(--ecosee-accent, #62cfe9);
       }
       .hum .glyph {
         width: 6cqw;
@@ -438,10 +443,12 @@ export class EcoseeHomeScreen extends LitElement {
         color: var(--ecosee-muted, #6f96a3);
       }
 
+      /* Thin (weight 300) — kept fixed rather than theme-following, same reasoning
+       as .hum above. */
       .unavailable {
         font-size: 8cqw;
         font-weight: 300;
-        color: var(--ecosee-text-muted, #6f96a3);
+        color: var(--ecosee-muted, #6f96a3);
       }
 
       /* Foot cluster (issue #75): the air-quality element and UV-index gauge share one

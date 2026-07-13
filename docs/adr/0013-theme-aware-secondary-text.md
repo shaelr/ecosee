@@ -144,3 +144,31 @@ exceptions renders it identically. `--ecosee-muted` itself (the non-text token �
 borders, dividers, standalone icon glyphs) is untouched; the "subtext" complaint
 was specifically about *readable copy* looking dimmer than its neighbor, not about
 chrome wanting more visual weight.
+
+## Correction: thin (≤300 weight) numerals stay fixed, not theme-following
+
+Even after both corrections above, the owner reported specific elements still
+looked grey: the Home Screen's humidity reading, and the Weather Overlay's current/
+forecast temperature numerals. Comparing against elements confirmed to look right
+("the text is clearly white") isolated the actual variable — not the color, but the
+**font weight**. This Skin renders numeral readouts thin (weight 200-300) by
+design, following the device (`.temp`, the dominant current-temperature number,
+was already fixed for exactly this reason, being weight 200). At that weight, thin
+strokes against the near-black canvas visibly desaturate even a technically-AAA
+theme color — the same literal `--primary-text-color` value read crisp and white
+on a weight-600 heading and dim/grey on a weight-300 numeral beside it. This is a
+real rendering effect (anti-aliased thin strokes carry proportionally more blended-
+with-background pixels than thick ones), not a contrast-math shortfall — no
+threshold this side of AAA fixes it, because the WCAG contrast formula does not
+account for stroke weight at all.
+
+The fix extends the "kept fixed" exception list (originally just the four elements
+in Context) to every weight-≤300 numeral readout, treating them the same as the
+Skin's other thin numerals rather than trying to find a contrast bar thin type can
+clear: `.hum` and `.unavailable` (Home Screen), `.neighbor` (Temperature Adjust's
+scrubber), and `.current-temp` / `.period-temp` / `.day-high` (Weather Overlay).
+Each reverted to its original fixed `--ecosee-accent` / `--ecosee-muted` token.
+Every remaining theme-following text element is weight ≥400 (headings, labels,
+hints, mode/preset names, sensor readings, captions) and was individually checked
+against this file's own font-weight declarations before being left alone — not
+assumed safe by category.
