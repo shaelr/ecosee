@@ -96,11 +96,11 @@ export class EcoseeFanOverlay extends LitElement {
       border: none;
       margin: 0;
       font: inherit;
-      font-size: 7cqw;
+      font-size: 5.5cqw;
       font-weight: 500;
       color: var(--ecosee-accent, #62cfe9);
-      padding: 3cqw 9cqw;
-      min-width: 22cqw;
+      padding: 2.2cqw 7cqw;
+      min-width: 18cqw;
       border-radius: 100cqw;
       cursor: pointer;
     }
@@ -132,7 +132,7 @@ export class EcoseeFanOverlay extends LitElement {
     .toggle.stacked .segment {
       min-width: 0;
       width: 100%;
-      padding: 3cqw 4cqw;
+      padding: 2.2cqw 4cqw;
     }
 
     /* Minimum-runtime block: bold summary line, instructional hint, then the
@@ -173,21 +173,21 @@ export class EcoseeFanOverlay extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 3cqw;
+      gap: 2.4cqw;
       margin-top: 1cqw;
-      padding: 3cqw 7cqw;
+      padding: 2.2cqw 6cqw;
       border: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 100cqw;
       color: var(--ecosee-accent, #62cfe9);
-      font-size: 6.5cqw;
+      font-size: 5.3cqw;
       font-weight: 500;
     }
     .select-label {
       pointer-events: none;
     }
     .caret {
-      width: 5cqw;
-      height: 5cqw;
+      width: 4.3cqw;
+      height: 4.3cqw;
       flex: none;
       color: var(--ecosee-accent, #62cfe9);
       pointer-events: none;
