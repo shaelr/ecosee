@@ -63,13 +63,13 @@ export class EcoseeSensorsOverlay extends LitElement {
       font-size: 9cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .subtitle {
       margin: 0;
       font-size: 6cqw;
       font-weight: 600;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
 
     /* The card stack. Opts back into pointer events (the shell makes slotted
@@ -121,7 +121,7 @@ export class EcoseeSensorsOverlay extends LitElement {
     .name {
       font-size: 6cqw;
       font-weight: 600;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -132,7 +132,7 @@ export class EcoseeSensorsOverlay extends LitElement {
       gap: 2cqw;
       font-size: 5cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     /* The vertical-bar divider between temperature and occupancy, dimmed. */
     .sep {

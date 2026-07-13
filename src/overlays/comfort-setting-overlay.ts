@@ -101,7 +101,7 @@ export class EcoseeComfortSettingOverlay extends LitElement {
       font: inherit;
       font-size: 7.5cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       text-align: left;
       cursor: pointer;
       /* Hairline divider between rows; the first row has the list's own border.

@@ -73,13 +73,13 @@ export class EcoseeSystemOverlay extends LitElement {
       font-size: 9cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .subtitle {
       margin: 0;
       font-size: 6.5cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
 
     /* Selectors sit side by side as on the device. Each column is only as wide as
@@ -104,7 +104,7 @@ export class EcoseeSystemOverlay extends LitElement {
       font-size: 5cqw;
       font-weight: 600;
       white-space: nowrap;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
 
     /* The cyan-outlined value pill; opts back into pointer events (the shell makes
@@ -124,7 +124,7 @@ export class EcoseeSystemOverlay extends LitElement {
       font: inherit;
       font-size: 6.5cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 4cqw;
       cursor: pointer;
@@ -144,7 +144,7 @@ export class EcoseeSystemOverlay extends LitElement {
       margin: 0;
       font-size: 7cqw;
       font-weight: 600;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
   `;
 

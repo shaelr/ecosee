@@ -83,7 +83,7 @@ export class EcoseeSystemModeOverlay extends LitElement {
       font: inherit;
       font-size: 8cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       text-align: center;
       cursor: pointer;
       /* Hairline divider between rows; the first row has the list's own border.

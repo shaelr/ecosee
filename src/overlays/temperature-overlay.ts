@@ -179,7 +179,7 @@ export class EcoseeTemperatureOverlay extends LitElement {
     .neighbor {
       font-size: 11cqw;
       font-weight: 300;
-      color: var(--ecosee-muted, #6f96a3);
+      color: var(--ecosee-text-muted, #6f96a3);
       opacity: 0.85;
     }
     .neighbor.far {

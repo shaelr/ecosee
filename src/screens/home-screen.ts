@@ -90,7 +90,7 @@ export class EcoseeHomeScreen extends LitElement {
         padding: calc(7 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px));
         display: flex;
         flex-direction: column;
-        color: var(--ecosee-fg, #d4eff9);
+        color: var(--ecosee-text, #d4eff9);
         font-family: var(--ecosee-font, system-ui, sans-serif);
         user-select: none;
       }
@@ -301,7 +301,7 @@ export class EcoseeHomeScreen extends LitElement {
         font-size: 7cqw;
         font-weight: 300;
         letter-spacing: 0.02em;
-        color: var(--ecosee-accent, #62cfe9);
+        color: var(--ecosee-text-accent, #62cfe9);
       }
       .hum .glyph {
         width: 6cqw;
@@ -413,7 +413,7 @@ export class EcoseeHomeScreen extends LitElement {
         padding: 1.6cqw 2cqw 1.6cqw 4.4cqw;
         border: 0.5cqw solid var(--ecosee-muted, #6f96a3);
         border-radius: 999px;
-        color: var(--ecosee-fg, #d4eff9);
+        color: var(--ecosee-text, #d4eff9);
         font-size: 5.2cqw;
         font-weight: 400;
         cursor: pointer;
@@ -441,7 +441,7 @@ export class EcoseeHomeScreen extends LitElement {
       .unavailable {
         font-size: 8cqw;
         font-weight: 300;
-        color: var(--ecosee-muted, #6f96a3);
+        color: var(--ecosee-text-muted, #6f96a3);
       }
 
       /* Foot cluster (issue #75): the air-quality element and UV-index gauge share one
@@ -527,7 +527,7 @@ export class EcoseeHomeScreen extends LitElement {
         font-size: 3.6cqw;
         font-weight: 600;
         letter-spacing: 0.16em;
-        color: var(--ecosee-muted, #6f96a3);
+        color: var(--ecosee-text-muted, #6f96a3);
       }
       .aqi {
         color: var(--ecosee-aqi-good, #5bbf6a);

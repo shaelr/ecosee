@@ -75,7 +75,7 @@ export class EcoseeOverlay extends LitElement {
         box-sizing: border-box;
         width: var(--ecosee-base-size, 460px);
         height: var(--ecosee-base-size, 460px);
-        color: var(--ecosee-fg, #d4eff9);
+        color: var(--ecosee-text, #d4eff9);
         font-family: var(--ecosee-font, system-ui, sans-serif);
         overflow: hidden;
         user-select: none;
@@ -216,7 +216,7 @@ export class EcoseeOverlay extends LitElement {
       .tab.temp {
         border: calc(0.5 * var(--ecosee-u, 4.6px)) solid var(--ecosee-accent, #62cfe9);
         border-radius: 50%;
-        color: var(--ecosee-accent, #62cfe9);
+        color: var(--ecosee-text-accent, #62cfe9);
         font-family: inherit;
         font-weight: 600;
         font-size: calc(3.3 * var(--ecosee-u, 4.6px));

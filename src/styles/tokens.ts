@@ -21,10 +21,33 @@ export const tokens = css`
        overriding the canvas color can never make chip text illegible; defaults to
        the same near-black so the punch-through look is unchanged out of the box. */
     --ecosee-chip-ink: #0a0d10;
+    /* The Temperature Adjust bubble's numeral only — kept a fixed light color (not
+       theme-aware) because it must read on top of BOTH the heat and cool gradients
+       (--ecosee-heat-grad / --ecosee-cool-grad below), a contrast requirement
+       specific to that badge-family element, not the dashboard theme. */
     --ecosee-fg: #d4eff9;
     --ecosee-accent: #62cfe9;
     --ecosee-muted: #6f96a3;
     --ecosee-idle: #6f96a3;
+    /* General readable text (labels, hints, headings, values) — everywhere EXCEPT
+       the big current-temperature number, the Heat/Cool amber/blue badges, the
+       top-row device icons, and the Standby Screen's white-on-black idle display,
+       which stay the Skin's own fixed colors regardless of theme (device-accurate
+       or contrast-critical, not just "text"). <ecosee-card> overrides all three
+       inline with the dashboard's own --primary-text-color (--ecosee-text /
+       --ecosee-text-accent alike) or --secondary-text-color (--ecosee-text-muted)
+       whenever that theme color clears WCAG AA against the canvas actually in play
+       (styles/theme-contrast.ts) — a light HA theme's near-black text would
+       otherwise land on this Skin's near-black canvas and vanish. Two separate
+       "primary text" tokens, not one, exist purely so each call site's fallback (no
+       theme color qualifies, or outside Home Assistant) reproduces its OWN previous
+       fixed color exactly — --ecosee-text for former --ecosee-fg spots (off-white),
+       --ecosee-text-accent for former --ecosee-accent-as-text spots (cyan) — rather
+       than collapsing every fallback to one shared color and visibly recoloring half
+       the Skin even for dashboards that never override either. */
+    --ecosee-text: #d4eff9;
+    --ecosee-text-accent: #62cfe9;
+    --ecosee-text-muted: #6f96a3;
     /* The three top-row Home Screen affordances (weather / System Mode / menu)
        render white, not the cyan accent — the device colors this control row white
        (issue #37). Overridable per dashboard like every other Skin color. */

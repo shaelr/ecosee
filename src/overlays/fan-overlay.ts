@@ -83,7 +83,7 @@ export class EcoseeFanOverlay extends LitElement {
       font-size: 8cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
 
     /* The On / Auto segmented pill: a cyan-outlined pill holding the segments; the
@@ -107,7 +107,7 @@ export class EcoseeFanOverlay extends LitElement {
       font: inherit;
       font-size: 5.5cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       padding: 2.2cqw 7cqw;
       min-width: 18cqw;
       border-radius: 100cqw;
@@ -160,14 +160,14 @@ export class EcoseeFanOverlay extends LitElement {
       margin: 0;
       font-size: 5.5cqw;
       font-weight: 600;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .hint {
       margin: 0;
       font-size: 4.4cqw;
       font-weight: 400;
       line-height: 1.3;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       opacity: 0.85;
     }
 
@@ -185,7 +185,7 @@ export class EcoseeFanOverlay extends LitElement {
       padding: 2.2cqw 6cqw;
       border: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 100cqw;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
       font-size: 5.3cqw;
       font-weight: 500;
     }
@@ -224,7 +224,7 @@ export class EcoseeFanOverlay extends LitElement {
     }
     /* Best-effort skin for the native dropdown list (platform support varies). */
     .select-native option {
-      color: var(--ecosee-fg, #d4eff9);
+      color: var(--ecosee-text, #d4eff9);
       background: var(--ecosee-bg, #0a0d10);
     }
   `;

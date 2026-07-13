@@ -80,13 +80,13 @@ export class EcoseeWeatherOverlay extends LitElement {
       font-size: 8cqw;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .subtitle {
       margin-top: 1.4cqw;
       font-size: 4.6cqw;
       font-weight: 400;
-      color: var(--ecosee-muted, #6f96a3);
+      color: var(--ecosee-text-muted, #6f96a3);
     }
 
     /* The active page occupies the space between title and footer. */
@@ -116,14 +116,14 @@ export class EcoseeWeatherOverlay extends LitElement {
       font-weight: 200;
       line-height: 0.85;
       letter-spacing: -0.03em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .stats {
       display: inline-flex;
       gap: 8cqw;
       font-size: 6cqw;
       font-weight: 400;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .stat {
       display: inline-flex;
@@ -161,11 +161,11 @@ export class EcoseeWeatherOverlay extends LitElement {
     .period-temp {
       font-size: 7cqw;
       font-weight: 300;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .period-label {
       font-size: 4.8cqw;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
 
     /* page 2 — 4-day forecast */
@@ -185,7 +185,7 @@ export class EcoseeWeatherOverlay extends LitElement {
     .day-name {
       font-size: 6cqw;
       font-weight: 500;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .day .glyph {
       width: 11cqw;
@@ -195,7 +195,7 @@ export class EcoseeWeatherOverlay extends LitElement {
       font-size: 13cqw;
       font-weight: 300;
       line-height: 1;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     /* The low sits muted beneath the (accent) high so the pair reads as high/low at
        a glance — the "Lo" label plus the demoted color keep it from being mistaken
@@ -203,7 +203,7 @@ export class EcoseeWeatherOverlay extends LitElement {
     .day-low {
       font-size: 4.6cqw;
       font-weight: 400;
-      color: var(--ecosee-muted, #6f96a3);
+      color: var(--ecosee-text-muted, #6f96a3);
     }
     /* Chance-of-precip as an umbrella glyph + %, no "PoP" jargon (issue #32).
        nowrap keeps the glyph + "100%" on one line in the narrow day column. */
@@ -214,7 +214,7 @@ export class EcoseeWeatherOverlay extends LitElement {
       white-space: nowrap;
       font-size: 4.6cqw;
       font-weight: 400;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-text-accent, #62cfe9);
     }
     .day-pop .glyph {
       width: 4.4cqw;
