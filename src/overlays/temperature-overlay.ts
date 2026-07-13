@@ -186,6 +186,16 @@ export class EcoseeTemperatureOverlay extends LitElement {
       font-size: 9cqw;
       opacity: 0.5;
     }
+    /* The bubble's box is fixed (36cqw), but its content isn't: whole-degree °F
+       values are at most 2 digits ("75"), while °C's half-degree display
+       (formatTemp) adds a decimal point and tenths digit ("22.5") — at a size
+       tuned for 2 digits, the extra width overflowed the squircle bubble (issue:
+       Celsius setpoints spilling past their bubble). font-size is fixed at the
+       size that fits the longest case rather than stepped by content length —
+       stepping made the numeral visibly grow/shrink as you scrubbed between a
+       whole and half degree, which read as more of a bug than the overflow it
+       fixed. One constant size, comfortably fitting up to "22.5", is used for
+       every value. */
     .bubble {
       width: 36cqw;
       height: 36cqw;
@@ -193,27 +203,10 @@ export class EcoseeTemperatureOverlay extends LitElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 22cqw;
+      font-size: 15cqw;
       font-weight: 200;
       /* Thin light numeral, as on the device (not dark) — reads on both gradients. */
       color: var(--ecosee-fg, #d4eff9);
-    }
-    /* The bubble's box is fixed (36cqw), but its content isn't: whole-degree °F
-       values are at most 2 digits ("75"), while °C's half-degree display
-       (formatTemp) adds a decimal point and tenths digit ("22.5") — at the base
-       22cqw size that extra width overflowed the squircle bubble (issue: Celsius
-       setpoints spilling past their bubble). Step the font down per extra
-       character so any width the formatter can produce still fits; whole-number
-       readings are untouched (3cqw text-length modifiers, base .bubble style
-       above is 2-characters wide by design). */
-    .bubble.len-3 {
-      font-size: 18cqw;
-    }
-    .bubble.len-4 {
-      font-size: 15cqw;
-    }
-    .bubble.len-5 {
-      font-size: 12cqw;
     }
     .adjust.cool .bubble {
       background: var(--ecosee-cool-grad, #49b6ea);
@@ -239,20 +232,22 @@ export class EcoseeTemperatureOverlay extends LitElement {
          sits where the font's baseline puts it, and a broken-metric webfont
          can baseline at the middle of the line box (issue #85), floating the
          ink ~0.2em above the box — a hair's gap lets it crash into the glyph.
-         1.2cqw (~0.17em of the 7cqw numeral) absorbs that drift while the
-         glyph + gap + numeral column still fits the 15.6cqw content box. */
+         1.2cqw (~0.2em of the 6cqw numeral) absorbs that drift while the
+         glyph + gap + numeral column still fits the 17cqw circle — smaller than
+         the numeral's own size (7cqw → 6cqw) so a Celsius half-degree value
+         ("22.5") sits comfortably inside the puck instead of crowding it. */
       gap: 1.2cqw;
       width: 17cqw;
       height: 17cqw;
       border-radius: 50%;
-      font-size: 7cqw;
+      font-size: 6cqw;
       font-weight: 500;
       line-height: 1;
       border: 0.7cqw solid transparent;
     }
     .chip .glyph {
-      width: 7cqw;
-      height: 7cqw;
+      width: 6cqw;
+      height: 6cqw;
       /* Keep the glyph its full size in the flex column — never let it shrink out
          of its box under the numeral (the other half of the cramped Firefox chip,
          issue #74). */
@@ -262,7 +257,7 @@ export class EcoseeTemperatureOverlay extends LitElement {
        strut (phantom descender leading) is reserved by Firefox but swallowed by
        Blink, so the glyph rendered taller than its box in Firefox/Zen and
        overlapped the setpoint number. Block layout removes the strut in every
-       engine while the SVG still fills its 7cqw box (width/height 100%). See
+       engine while the SVG still fills its 6cqw box (width/height 100%). See
        docs/adr/0005-cross-browser-typography.md. */
     .glyph svg {
       display: block;
@@ -530,14 +525,6 @@ export class EcoseeTemperatureOverlay extends LitElement {
     `;
   }
 
-  /** CSS class stepping the bubble's font size down for longer formatted values
-   *  (Celsius's "22.5" vs Fahrenheit's "75") so the numeral always fits the fixed
-   *  bubble box — see the `.bubble.len-*` rules. Whole 1–2 digit values (the
-   *  common case) get no modifier, matching the pre-existing size exactly. */
-  private _bubbleSizeClass(formatted: string): string {
-    return formatted.length >= 3 ? `len-${Math.min(formatted.length, 5)}` : '';
-  }
-
   private _renderScrubber(model: TempAdjustModel, edit: SetpointEdit): TemplateResult {
     const values = scrubberWindow(edit, SCRUBBER_RADIUS);
     // Higher values above the bubble, lower below — matching the device. Each
@@ -570,7 +557,7 @@ export class EcoseeTemperatureOverlay extends LitElement {
         @keydown=${this._onScrubberKey}
       >
         <div class="stack above">${above.map(neighbor)}</div>
-        <div class="bubble ${this._bubbleSizeClass(bubbleValue)}">${bubbleValue}</div>
+        <div class="bubble">${bubbleValue}</div>
         <div class="stack below">${below.map(neighbor)}</div>
       </div>
     `;

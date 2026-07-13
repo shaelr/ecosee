@@ -227,9 +227,12 @@ describe('Temperature Adjust — scrubber ghost-click guard (issue #112)', () =>
 
 // Bubble sizing regression guard: the center scrubber bubble is a fixed-size
 // squircle (36cqw), so a Celsius half-degree reading ("22.5") is wider than a
-// whole Fahrenheit reading ("75") at the same font size and overflowed the
-// bubble. The `.bubble.len-*` modifiers step the font size down per extra
-// character so any formatTemp output fits.
+// whole Fahrenheit reading ("75") at the same font size and used to overflow the
+// bubble. That was first fixed by stepping the font size down per extra
+// character, but stepping made the numeral visibly grow/shrink as you scrubbed
+// between a whole and half degree — a jump that read as a bug in its own right.
+// The bubble now uses one constant font size for every value, so there is no
+// class to assert on: only that the box itself, and its size, never changes.
 describe('Temperature Adjust — scrubber bubble sizing (Celsius decimals)', () => {
   async function mountCelsius(temp: number): Promise<Overlay> {
     const { hass } = fakeHass({
@@ -254,32 +257,32 @@ describe('Temperature Adjust — scrubber bubble sizing (Celsius decimals)', () 
   const bubbleOf = (el: Overlay): HTMLElement =>
     el.shadowRoot!.querySelector('.bubble') as HTMLElement;
 
-  it('applies no size modifier for a whole 2-digit Fahrenheit value', async () => {
+  it('uses the same bubble class for a whole 2-digit Fahrenheit value', async () => {
     const el = await mount(); // 68°F
     const bubble = bubbleOf(el);
     expect(bubble.textContent?.trim()).toBe('68');
     expect(bubble.className.trim()).toBe('bubble');
   });
 
-  it('steps the font size down for a Celsius half-degree reading ("22.5")', async () => {
+  it('uses the same bubble class for a Celsius half-degree reading ("22.5")', async () => {
     const el = await mountCelsius(22.5);
     const bubble = bubbleOf(el);
     expect(bubble.textContent?.trim()).toBe('22.5');
-    expect(bubble.classList.contains('len-4')).toBe(true);
+    expect(bubble.className.trim()).toBe('bubble');
   });
 
-  it('applies no modifier for a whole 2-digit Celsius reading ("22")', async () => {
+  it('uses the same bubble class for a whole 2-digit Celsius reading ("22")', async () => {
     const el = await mountCelsius(22);
     const bubble = bubbleOf(el);
     expect(bubble.textContent?.trim()).toBe('22');
     expect(bubble.className.trim()).toBe('bubble');
   });
 
-  it('steps down for a single-digit Celsius half-degree reading ("9.5")', async () => {
+  it('uses the same bubble class for a single-digit Celsius half-degree reading ("9.5")', async () => {
     const el = await mountCelsius(9.5);
     const bubble = bubbleOf(el);
     expect(bubble.textContent?.trim()).toBe('9.5');
-    expect(bubble.classList.contains('len-3')).toBe(true);
+    expect(bubble.className.trim()).toBe('bubble');
   });
 });
 
