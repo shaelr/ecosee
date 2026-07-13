@@ -93,6 +93,32 @@ describe('toHomeView — graceful degradation', () => {
   });
 });
 
+// Regression guard: hvac_action: 'fan' (the ecobee running only its fan, no heat/cool
+// active) was previously falling through the same null result as a genuinely absent
+// hvac_action, which sent it into the temp-vs-setpoint guess (inferEquipment) — and
+// that guess reported 'heating' whenever the room read below the heat setpoint, even
+// though the entity had explicitly said the equipment was not heating. 'fan' and
+// 'drying' both carry an explicit "not heating, not cooling" signal and must resolve
+// to idle without ever reaching the guess.
+describe('toHomeView — hvac_action explicitly not heating/cooling', () => {
+  it.each(['fan', 'drying'] as const)(
+    'reports idle for hvac_action %s, even when current temp is well below the heat setpoint',
+    (action) => {
+      const view = toHomeView(
+        hass({
+          climate: {
+            entity_id: 'climate.t',
+            state: 'heat',
+            attributes: { current_temperature: 60, temperature: 72, hvac_action: action },
+          },
+        }),
+        config(),
+      );
+      expect(view.equipment).toBe('idle');
+    },
+  );
+});
+
 describe('toHomeView — edge cases', () => {
   it('marks a missing/unavailable entity as not available', () => {
     const view = toHomeView(

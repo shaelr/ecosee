@@ -140,9 +140,18 @@ function fromHvacAction(action: string | undefined): EquipmentStatus | null {
       return 'cooling';
     case 'idle':
     case 'off':
+    case 'fan':
+    case 'drying':
+      // The entity has explicitly told us equipment is not heating or cooling —
+      // trust that over guessing. Distinct from the `undefined` (attribute absent)
+      // case below, where there's no signal at all and inferEquipment's temp/setpoint
+      // heuristic is the only option. Conflating the two previously sent a fan-only
+      // reading (hvac_action: 'fan') through that heuristic, which could report
+      // 'heating' whenever the room happened to read below the heat setpoint even
+      // though the entity had already said the equipment wasn't heating.
       return 'idle';
     default:
-      // 'drying' / 'fan' / undefined — not represented on the Home Screen.
+      // undefined — no hvac_action attribute at all, genuinely no signal.
       return null;
   }
 }
