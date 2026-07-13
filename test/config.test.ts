@@ -244,6 +244,34 @@ describe('parseConfig — resume_program', () => {
   });
 });
 
+describe('parseConfig — background_color', () => {
+  it('leaves background_color undefined when the key is absent (near-black default)', () => {
+    expect(parseConfig(base).background_color).toBeUndefined();
+  });
+
+  it('accepts any non-empty CSS color string verbatim', () => {
+    expect(parseConfig({ ...base, background_color: '#1a1a2e' }).background_color).toBe('#1a1a2e');
+    expect(parseConfig({ ...base, background_color: 'transparent' }).background_color).toBe(
+      'transparent',
+    );
+    expect(
+      parseConfig({ ...base, background_color: 'rgba(20, 20, 40, 0.5)' }).background_color,
+    ).toBe('rgba(20, 20, 40, 0.5)');
+  });
+
+  it('throws on an empty string', () => {
+    expect(() => parseConfig({ ...base, background_color: '' })).toThrow(
+      /`background_color` must be a non-empty CSS color string/,
+    );
+  });
+
+  it('throws when background_color is not a string', () => {
+    expect(() => parseConfig({ ...base, background_color: 5 })).toThrow(
+      /`background_color` must be a non-empty CSS color string/,
+    );
+  });
+});
+
 describe('parseConfig — standby_screen', () => {
   it('leaves standby_screen undefined when the key is absent (off by default)', () => {
     expect(parseConfig(base).standby_screen).toBeUndefined();

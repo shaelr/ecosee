@@ -108,9 +108,11 @@ export class EcoseeFanOverlay extends LitElement {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       outline-offset: 0.6cqw;
     }
+    /* --ecosee-chip-ink, not --ecosee-bg, so a custom canvas background (config
+       background_color) can't make this text illegible. */
     .segment.selected {
       background: var(--ecosee-accent, #62cfe9);
-      color: var(--ecosee-bg, #0a0d10);
+      color: var(--ecosee-chip-ink, #0a0d10);
       cursor: default;
     }
 

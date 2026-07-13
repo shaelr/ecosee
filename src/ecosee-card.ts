@@ -256,6 +256,10 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
 
   setConfig(config: unknown): void {
     this._config = parseConfig(config);
+    // Applied as an inline custom property (like --ecosee-scale below) so it beats
+    // the shadow DOM's own `:host { --ecosee-bg: #0a0d10 }` default without needing
+    // a second token or a reactive style block.
+    this._setOrClear('--ecosee-bg', this._config.background_color ?? '');
   }
 
   getCardSize(): number {

@@ -136,6 +136,13 @@ export interface EcoseeCardConfig {
    *  `false` — the indicator stays the top-row white it always has, unaffected by
    *  equipment status. */
   mode_color?: boolean;
+  /** Overrides the card's outer canvas background (any CSS color — hex, rgb(),
+   *  hsl(), a named color, or `transparent` for no background). Absent ⇒ the
+   *  Skin's near-black canvas (`--ecosee-bg`'s own default), unchanged from before
+   *  this key existed. Purely the canvas fill — text/glyph colors and the "ink" on
+   *  a selected accent-filled chip (Comfort Setting, System Mode, Fan) are separate
+   *  tokens and stay legible regardless of this value. */
+  background_color?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -195,6 +202,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     corner_style: parseCornerStyle(raw.corner_style),
     equipment_glow: parseEquipmentGlow(raw.equipment_glow),
     mode_color: parseModeColor(raw.mode_color),
+    background_color: parseBackgroundColor(raw.background_color),
   };
 }
 
@@ -231,6 +239,20 @@ function parseModeColor(raw: unknown): boolean | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'boolean') {
     throw new Error('ecosee: `mode_color` must be a boolean.');
+  }
+  return raw;
+}
+
+/** Parse the optional `background_color` override. Returns `undefined` when
+ *  absent so the seam applies the Skin's own near-black canvas default, unchanged
+ *  from before this key existed. Takes any non-empty string verbatim — validating
+ *  CSS color syntax is the browser's job (an invalid value just fails to paint,
+ *  same as a typo in any other CSS color a dashboard might supply); this only
+ *  rejects the non-string/empty cases that are clearly not a color at all. */
+function parseBackgroundColor(raw: unknown): string | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error('ecosee: `background_color` must be a non-empty CSS color string.');
   }
   return raw;
 }

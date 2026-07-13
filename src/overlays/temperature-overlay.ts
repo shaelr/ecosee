@@ -277,13 +277,15 @@ export class EcoseeTemperatureOverlay extends LitElement {
       color: var(--ecosee-heat, #f3a13c);
       border-color: var(--ecosee-heat, #f3a13c);
     }
+    /* --ecosee-chip-ink, not --ecosee-bg, so a custom canvas background (config
+       background_color) can't make this text illegible. */
     .chip.cool.selected {
       background: var(--ecosee-cool, #49b6ea);
-      color: var(--ecosee-bg, #0a0d10);
+      color: var(--ecosee-chip-ink, #0a0d10);
     }
     .chip.heat.selected {
       background: var(--ecosee-heat, #f3a13c);
-      color: var(--ecosee-bg, #0a0d10);
+      color: var(--ecosee-chip-ink, #0a0d10);
     }
   `;
 

@@ -6,7 +6,17 @@ import { css } from 'lit';
 // near-black canvas, cyan accents, amber Heat / blue Cool (visual-spec.md).
 export const tokens = css`
   :host {
+    /* The card's outer canvas fill (config background_color, absent ⇒ this
+       near-black default). Only the squircle/canvas paint reads this token —
+       selected-chip "ink" is the separate --ecosee-chip-ink below, so a custom
+       background never accidentally makes a picker row's text unreadable. */
     --ecosee-bg: #0a0d10;
+    /* The text color on a selected, accent-filled row/chip/segment (Comfort
+       Setting, System Mode, Fan, Temperature Adjust) — a "punched through to the
+       canvas" look. Split from --ecosee-bg (issue: background_color) so
+       overriding the canvas color can never make chip text illegible; defaults to
+       the same near-black so the punch-through look is unchanged out of the box. */
+    --ecosee-chip-ink: #0a0d10;
     --ecosee-fg: #d4eff9;
     --ecosee-accent: #62cfe9;
     --ecosee-muted: #6f96a3;
@@ -111,7 +121,7 @@ export const tokens = css`
        'Montserrat' is dropped by the quarantine probe (font-probe.ts, issue #85),
        leaving the bundled face to take over. */
     --ecosee-font:
-      'Montserrat', 'ecosee Montserrat', 'Avenir Next', 'Avenir', 'Helvetica Neue',
-      'Segoe UI', system-ui, -apple-system, sans-serif;
+      'Montserrat', 'ecosee Montserrat', 'Avenir Next', 'Avenir', 'Helvetica Neue', 'Segoe UI',
+      system-ui, -apple-system, sans-serif;
   }
 `;

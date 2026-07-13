@@ -99,10 +99,12 @@ export class EcoseeSystemModeOverlay extends LitElement {
       outline-offset: -1.5cqw;
     }
 
-    /* Selected row: filled cyan with dark text (visual-spec.md). */
+    /* Selected row: filled cyan with dark text (visual-spec.md). --ecosee-chip-ink,
+       not --ecosee-bg, so a custom canvas background (config background_color)
+       can't make this text illegible. */
     .option.selected {
       background: var(--ecosee-accent, #62cfe9);
-      color: var(--ecosee-bg, #0a0d10);
+      color: var(--ecosee-chip-ink, #0a0d10);
       cursor: default;
     }
   `;

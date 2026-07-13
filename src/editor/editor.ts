@@ -230,6 +230,14 @@ export function editorSchema(): EditorField[] {
       selector: { boolean: {} },
     },
     {
+      name: 'background_color',
+      label: 'Background color',
+      helper:
+        'Optional. Overrides the card\'s background (any CSS color, e.g. #1a1a2e, or "transparent" ' +
+        'for no background). Chip/picker text stays legible regardless. Default near-black.',
+      selector: { text: {} },
+    },
+    {
       name: 'standby_screen',
       label: 'Standby Screen',
       helper: 'Optional. Enables the Standby Screen. Off by default.',

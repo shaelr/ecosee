@@ -227,6 +227,63 @@ describe('ecosee-card wiring — Resume Schedule (ADR-0012)', () => {
   });
 });
 
+describe('ecosee-card wiring — background_color', () => {
+  it('applies background_color as an inline --ecosee-bg custom property', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: '#1a1a2e',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('#1a1a2e');
+  });
+
+  it('accepts "transparent" for no background', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: 'transparent',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('transparent');
+  });
+
+  it('leaves --ecosee-bg unset (Skin default) when background_color is absent', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = await mountCard(hass);
+
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('');
+  });
+
+  it('clears a previously-set --ecosee-bg when the config is updated to drop background_color', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: '#1a1a2e',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('#1a1a2e');
+
+    card.setConfig({ type: 'custom:ecosee-card', entity: 'climate.t' });
+    await card.updateComplete;
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('');
+  });
+});
+
 describe('ecosee-card wiring — navigation (tab bar)', () => {
   it('the gear opens a Main Menu section directly; a tab switch replaces it; dismiss returns Home', async () => {
     const { hass } = fakeHass({

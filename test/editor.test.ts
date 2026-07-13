@@ -34,6 +34,7 @@ describe('editorSchema — coverage', () => {
       'corner_style',
       'equipment_glow',
       'mode_color',
+      'background_color',
       'standby_screen',
     ]);
   });
@@ -99,6 +100,12 @@ describe('editorSchema — coverage', () => {
     const resumeProgram = editorSchema().find((field) => field.name === 'resume_program');
     expect(resumeProgram?.selector).toEqual({ boolean: {} });
     expect(resumeProgram?.required).toBeFalsy();
+  });
+
+  it('uses a free-text selector for background_color (any CSS color, including transparent)', () => {
+    const backgroundColor = editorSchema().find((field) => field.name === 'background_color');
+    expect(backgroundColor?.selector).toEqual({ text: {} });
+    expect(backgroundColor?.required).toBeFalsy();
   });
 
   it('uses a dropdown select for show_fan with auto default first', () => {
@@ -281,6 +288,19 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
   it('keeps a non-empty optional string key', () => {
     const next = normalizeEditorConfig({ ...base, weather_entity: 'weather.home' }, base);
     expect(next.weather_entity).toBe('weather.home');
+  });
+
+  it('keeps a typed background_color but drops it when cleared', () => {
+    expect(
+      normalizeEditorConfig({ ...base, background_color: '#1a1a2e' }, base).background_color,
+    ).toBe('#1a1a2e');
+    expect(
+      normalizeEditorConfig({ ...base, background_color: 'transparent' }, base).background_color,
+    ).toBe('transparent');
+    const prev = { ...base, background_color: '#1a1a2e' };
+    expect(
+      'background_color' in normalizeEditorConfig({ ...base, background_color: '' }, prev),
+    ).toBe(false);
   });
 
   it('keeps inactivity_timeout 0 (auto-revert off) but drops an unset timeout', () => {

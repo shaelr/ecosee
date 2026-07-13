@@ -173,6 +173,7 @@ corner_style: squircle # optional, squircle | rounded | square — the card's co
 equipment_glow: true # optional, the colored heating/cooling edge glow
 mode_color: false # optional, tints the System Mode icon by equipment status like the ecobee
 resume_program: false # optional, adds a Resume Schedule control (ecobee integration only)
+background_color: '#0a0d10' # optional, the card's background — any CSS color, or "transparent"
 min_gap: 3 # optional, minimum heat/cool separation in Heat / Cool (Auto)
 sensors: # optional, the Sensors screen (see below)
   - sensor.kitchen_temperature
@@ -198,18 +199,19 @@ sensors: # optional, the Sensors screen (see below)
 #### Advanced
 
 Finer-grained knobs for tuning specific screens. `show_fan`, `min_gap`,
-`resume_program`, `corner_style`, `equipment_glow`, and `mode_color` are all also in
-the visual editor; `standby` is YAML-only.
+`resume_program`, `corner_style`, `equipment_glow`, `mode_color`, and
+`background_color` are all also in the visual editor; `standby` is YAML-only.
 
-| Option           | Required | Description                                                                                                                                                                          |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `show_fan`       | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                   |
-| `standby`        | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                            |
-| `mode_color`     | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.   |
-| `min_gap`        | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet.                                     |
-| `corner_style`   | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`. |
-| `equipment_glow` | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                       |
-| `resume_program` | no       | Adds a Resume Schedule control beneath the setpoints — see below. **ecobee integration only.** Default off.                                                                          |
+| Option             | Required | Description                                                                                                                                                                                |
+| ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `show_fan`         | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                         |
+| `standby`          | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                                  |
+| `mode_color`       | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.         |
+| `min_gap`          | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet.                                           |
+| `corner_style`     | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`.       |
+| `equipment_glow`   | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                             |
+| `resume_program`   | no       | Adds a Resume Schedule control beneath the setpoints — see below. **ecobee integration only.** Default off.                                                                                |
+| `background_color` | no       | Overrides the card's background: any CSS color (`#1a1a2e`, `rgba(...)`, a named color), or `transparent` for no background. Picker/chip text stays legible either way. Default near-black. |
 
 ##### Resume Schedule (ecobee integration only)
 
