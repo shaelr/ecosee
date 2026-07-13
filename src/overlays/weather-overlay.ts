@@ -111,14 +111,14 @@ export class EcoseeWeatherOverlay extends LitElement {
       width: 22cqw;
       height: 22cqw;
     }
-    /* Thin (weight 200), like the Home Screen's own dominant number — kept the
-       Skin's fixed cyan rather than theme-following (ADR-0013 correction). */
+    /* Thin (weight 200) — fixed white, not theme-following and not the cyan
+       accent either (ADR-0013 corrections). */
     .current-temp {
       font-size: 30cqw;
       font-weight: 200;
       line-height: 0.85;
       letter-spacing: -0.03em;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-numeral, #ffffff);
     }
     .stats {
       display: inline-flex;
@@ -165,7 +165,7 @@ export class EcoseeWeatherOverlay extends LitElement {
     .period-temp {
       font-size: 7cqw;
       font-weight: 300;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-numeral, #ffffff);
     }
     .period-label {
       font-size: 4.8cqw;
@@ -201,7 +201,7 @@ export class EcoseeWeatherOverlay extends LitElement {
       font-size: 13cqw;
       font-weight: 300;
       line-height: 1;
-      color: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-numeral, #ffffff);
     }
     /* The low sits muted beneath the (accent) high so the pair reads as high/low at
        a glance — the "Lo" label plus the demoted color keep it from being mistaken

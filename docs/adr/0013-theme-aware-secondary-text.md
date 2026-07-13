@@ -172,3 +172,16 @@ Every remaining theme-following text element is weight ≥400 (headings, labels,
 hints, mode/preset names, sensor readings, captions) and was individually checked
 against this file's own font-weight declarations before being left alone — not
 assumed safe by category.
+
+## Correction: the cyan-accent readouts go white, not back to cyan
+
+The previous correction's fallback — reverting to the original fixed
+`--ecosee-accent` — was itself rejected on sight ("i dont want them cyan i want
+them white"): the cyan accent read flat at this thin weight too, same as the theme
+color had. A new fixed token, `--ecosee-numeral` (white), replaces
+`--ecosee-accent` on the four readouts that were on it: `.hum` (Home Screen),
+`.current-temp` / `.period-temp` / `.day-high` (Weather Overlay). It deliberately
+does **not** extend to `.neighbor` / `.unavailable`, which were already
+`--ecosee-muted` (a grey-blue, not cyan) and were never the subject of this
+complaint, nor to `.temp` (the dominant current-temperature number), which keeps
+its own cyan gradient as the Skin's signature look rather than a plain readout.

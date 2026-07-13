@@ -65,6 +65,21 @@ export const tokens = css`
        Skin color. */
     --ecosee-standby-fg: #ffffff;
 
+    /* Thin (weight ≤300) numeral readouts that were on the cyan accent (Home
+       Screen humidity, Weather Overlay current/forecast temperatures) — plain
+       white instead (ADR-0013 correction: owner preference, after the accent read
+       as flat/uninviting at this weight against the near-black canvas — a separate
+       call from the theme-following/contrast work above these tokens, since thin
+       strokes read dim regardless of hue, cyan included). Not theme-following: a
+       dashboard theme's text color has the exact same thin-stroke legibility
+       problem the accent did. Doesn't extend to the thin readouts that were
+       already --ecosee-muted (the Temperature Adjust scrubber's neighboring
+       values, "no data" placeholders) — the complaint was specifically about cyan,
+       and those were never cyan. The dominant current-temperature number (.temp)
+       keeps its own cyan gradient — it is the Skin's signature look, not a plain
+       readout, and wasn't part of this complaint either. */
+    --ecosee-numeral: #ffffff;
+
     /* The Standby Screen shows the SAME equipment edge glow as the Home Screen
        (blue cooling / amber heating, keyed to hvac_action), but dimmed to fit the
        standby display's low idle brightness — applied as opacity on the standby

@@ -294,11 +294,11 @@ export class EcoseeHomeScreen extends LitElement {
         padding-bottom: 18cqw;
       }
 
-      /* Thin (weight 300) numeral readout — like .temp below, kept the Skin's fixed
-       cyan rather than following the dashboard theme (ADR-0013 correction): a
-       theme's text color reliably read as dim/grey at this weight even when it
-       read crisp and white on bolder text elsewhere, an optical effect of thin
-       strokes against the near-black canvas rather than a color-value bug. */
+      /* Thin (weight 300) numeral readout — fixed white, neither theme-following
+       nor the cyan accent (ADR-0013 corrections): a theme's text color reliably
+       read as dim/grey at this weight even when it read crisp and white on bolder
+       text elsewhere (thin strokes against the near-black canvas, not a
+       color-value bug) — and the cyan accent itself read flat at this weight too. */
       .hum {
         display: inline-flex;
         align-items: center;
@@ -306,7 +306,7 @@ export class EcoseeHomeScreen extends LitElement {
         font-size: 7cqw;
         font-weight: 300;
         letter-spacing: 0.02em;
-        color: var(--ecosee-accent, #62cfe9);
+        color: var(--ecosee-numeral, #ffffff);
       }
       .hum .glyph {
         width: 6cqw;
