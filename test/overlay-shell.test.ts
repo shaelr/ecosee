@@ -40,25 +40,24 @@ describe('overlay shell — dismissal', () => {
   });
 });
 
-// Regression guard: the shell's canvas MUST stay opaque even when the Home
-// Screen's own background is transparent (config background_color), or every
-// menu/picker shows the Home Screen bleeding through behind it. The shell reads
-// its own --ecosee-overlay-bg token for the canvas fill — a deliberate override of
-// the shared shapeStyles' .shape .fill rule, which the Home/Standby screens still
-// use unmodified (they key off --ecosee-bg directly, since nothing sits behind
-// them to bleed through).
-describe('overlay shell — canvas fill uses its own token (background_color transparency guard)', () => {
-  it('overrides .shape .fill to read --ecosee-overlay-bg, not the shared --ecosee-bg', () => {
+// Regression guard: the shell shares the Home Screen's own --ecosee-bg for its
+// canvas fill — it must NOT carry a second, shell-specific token that could drift
+// out of sync with it. This is safe (even for background_color: transparent)
+// because <ecosee-card> only ever mounts one of <ecosee-home-screen> / the shell
+// at a time (see test/ecosee-card.wiring.test.ts's "Home Screen unmounts while an
+// Overlay is open" coverage) — there is never anything left underneath the shell
+// to bleed through, transparent or not.
+describe('overlay shell — canvas fill shares the Home Screen’s --ecosee-bg token', () => {
+  it('does not override .shape .fill with a shell-specific token', () => {
     const css = [EcoseeOverlay.styles]
       .flat()
       .map((s) => s.cssText)
       .join('\n');
-    // The LAST `.shape .fill` rule in the concatenated stylesheet is the one that
-    // actually wins (equal specificity, source-order tiebreak) — assert that one.
     const fillRules = [...css.matchAll(/\.shape \.fill\s*\{[^}]*\}/g)];
-    expect(fillRules.length).toBeGreaterThan(0);
-    const lastFillRule = fillRules[fillRules.length - 1][0];
-    expect(lastFillRule).toMatch(/fill:\s*var\(\s*--ecosee-overlay-bg/);
+    // The shared shapeStyles module supplies the one and only .shape .fill rule;
+    // the shell's own stylesheet block adds no override of it.
+    expect(fillRules).toHaveLength(1);
+    expect(fillRules[0][0]).toMatch(/fill:\s*var\(\s*--ecosee-bg\b/);
   });
 });
 

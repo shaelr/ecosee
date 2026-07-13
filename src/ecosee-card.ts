@@ -256,19 +256,13 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
 
   setConfig(config: unknown): void {
     this._config = parseConfig(config);
-    // Applied as inline custom properties (like --ecosee-scale below) so they beat
+    // Applied as an inline custom property (like --ecosee-scale below) so it beats
     // the shadow DOM's own `:host { --ecosee-bg: #0a0d10 }` default without needing
-    // a reactive style block.
-    const bg = this._config.background_color ?? '';
-    this._setOrClear('--ecosee-bg', bg);
-    // The Overlay shell reads a separate --ecosee-overlay-bg (tokens.ts) so it can
-    // stay opaque regardless: it exists to cover the Home Screen while an Overlay
-    // is open, and a transparent shell would let the Home Screen bleed through
-    // every menu/picker behind it. A non-transparent custom color still carries
-    // over — only the literal "transparent" value is withheld here — so Home,
-    // Standby, and the Overlay shell stay visually consistent otherwise.
-    const isTransparent = bg.trim().toLowerCase() === 'transparent';
-    this._setOrClear('--ecosee-overlay-bg', isTransparent ? '' : bg);
+    // a reactive style block. Every surface (Home, Standby, the Overlay shell)
+    // shares this one token — the Overlay shell can safely go transparent too
+    // because `render()` below stops mounting <ecosee-home-screen> whenever an
+    // Overlay is open, so there is nothing underneath it left to bleed through.
+    this._setOrClear('--ecosee-bg', this._config.background_color ?? '');
   }
 
   getCardSize(): number {
@@ -466,18 +460,31 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       `;
     }
     const view = toHomeView(this.hass, this._config);
+    // The Home Screen is only mounted while there is no Overlay on top of it — not
+    // just visually covered, genuinely absent from the DOM. An Overlay's opaque
+    // canvas used to be the only thing hiding it, which meant a transparent
+    // background_color bled the Home Screen through behind every menu/picker; with
+    // nothing mounted underneath, the Overlay shell can honestly share the same
+    // --ecosee-bg token (including "transparent") without anything to bleed
+    // through. Mirrors how Standby already fully replaces the Home Screen above.
     return html`
       <div class="sizer">
         <div class="root">
-          <ecosee-home-screen
-            .view=${view}
-            .cornerStyle=${this._config.corner_style}
-            .equipmentGlow=${this._config.equipment_glow}
-            .modeColor=${this._config.mode_color}
-            @ecosee-action=${this._onAction}
-            @pointerdown=${this._onHomeActivity}
-            @mouseover=${this._onHomeActivity}
-          ></ecosee-home-screen>
+          ${
+            this._overlay
+              ? nothing
+              : html`
+                  <ecosee-home-screen
+                    .view=${view}
+                    .cornerStyle=${this._config.corner_style}
+                    .equipmentGlow=${this._config.equipment_glow}
+                    .modeColor=${this._config.mode_color}
+                    @ecosee-action=${this._onAction}
+                    @pointerdown=${this._onHomeActivity}
+                    @mouseover=${this._onHomeActivity}
+                  ></ecosee-home-screen>
+                `
+          }
           ${this._renderOverlay(view)}
         </div>
       </div>

@@ -17,21 +17,22 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
 
 /**
  * `<ecosee-overlay>` — the overlay shell. A content-agnostic squircle that mounts
- * over the Home Screen (the same silhouette, so it covers the Home Screen exactly),
- * carries the ✕ close affordance, and dismisses on ✕ or an outside (backdrop)
- * tap. Active Overlay content is slotted in. This is the infrastructure every
- * later Overlay (System Mode, Fan, Sensors, Weather) reuses — the Temperature
- * Adjust overlay is just its first occupant.
+ * over the Home Screen (the same silhouette + `--ecosee-bg` fill, so it covers the
+ * Home Screen exactly), carries the ✕ close affordance, and dismisses on ✕ or an
+ * outside (backdrop) tap. Active Overlay content is slotted in. This is the
+ * infrastructure every later Overlay (System Mode, Fan, Sensors, Weather) reuses —
+ * the Temperature Adjust overlay is just its first occupant.
  *
- * The canvas fill is its own token (`--ecosee-overlay-bg`), not the Home Screen's
- * `--ecosee-bg` — the shell must stay opaque to do its one job (hide the Home
- * Screen underneath), so it can't simply inherit a config `background_color:
- * transparent` the way the Home Screen does. See the `.shape .fill` override below.
+ * The shell can share the Home Screen's own `--ecosee-bg` — including a config
+ * `background_color: transparent` — because `<ecosee-card>` only ever mounts this
+ * shell in place of `<ecosee-home-screen>`, never alongside it (see its `render`):
+ * there is nothing underneath left to bleed through even when this canvas is fully
+ * transparent too.
  *
- * Because the shell's opaque canvas covers the Home Screen while an Overlay is open,
- * it also carries the equipment edge glow (blue cooling / amber heating, keyed to the
- * `equipment` property) so the "system is running" cue persists on every Overlay,
- * not just Home / Standby (ADR-0011).
+ * Because the Home Screen isn't mounted at all while an Overlay is open, the shell
+ * also carries its own copy of the equipment edge glow (blue cooling / amber
+ * heating, keyed to the `equipment` property) so the "system is running" cue
+ * persists on every Overlay, not just Home / Standby (ADR-0011).
  *
  * Outside-tap contract: the slotted content fills the whole shell, so a dedicated
  * `.backdrop` layer sits *behind* it and slotted content is `pointer-events: none`
@@ -88,26 +89,15 @@ export class EcoseeOverlay extends LitElement {
         --ecosee-tabbar-inset: calc(17 * var(--ecosee-u, 4.6px));
       }
 
-      /* Overrides shapeStyles' shared .shape .fill rule (fill: var(--ecosee-bg))
-       — this declaration lands later in the stylesheet, so it wins on equal
-       specificity — with the shell's own --ecosee-overlay-bg token. The shell's
-       canvas MUST stay opaque — it exists to cover the Home Screen while an
-       Overlay is open — so it cannot simply share --ecosee-bg with the Home
-       Screen: config background_color: transparent would then make the shell
-       transparent too, and every menu/picker would show the Home Screen bleeding
-       through behind it. See tokens.ts and ecosee-card.ts's setConfig. */
-      .shape .fill {
-        fill: var(--ecosee-overlay-bg, #0a0d10);
-      }
-
       /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp squircle-edge
        line the Home Screen draws (ADR-0011 supersedes ADR-0009's "Overlay shell has
        none" clause): blue cooling / amber heating, nothing idle. The glow markup and
        the reveal/color chain mirror the Home Screen (home-screen.ts) so the surfaces
        never drift; unlike the Standby Screen the overlay is a bright active surface, so
        it uses the Home Screen's full-strength glow (no standby dimming). Without this
-       the shell's opaque canvas covers the Home Screen's glow the moment any overlay
-       opens, so the "system is running" cue vanished while adjusting the temperature. */
+       the Home Screen's own glow simply isn't there the moment any overlay opens (it
+       isn't mounted then), so the "system is running" cue vanished while adjusting
+       the temperature. */
       .shape .glow {
         display: none;
       }
