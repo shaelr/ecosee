@@ -136,23 +136,27 @@ export class EcoseeFanOverlay extends LitElement {
     }
 
     /* Minimum-runtime block: bold summary line, instructional hint, then the
-       dropdown selector. */
+       dropdown selector. Both text sizes were originally tuned in isolation from
+       the rest of the screen and, together with the title + toggle above them,
+       ran taller than the space above the shell's tab bar — the hint wrapped to
+       three lines and its last line sat behind the tab bar icons. Smaller sizes
+       here keep the full block (and the dropdown beneath it) clear of the bar. */
     .runtime {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4cqw;
+      gap: 3cqw;
       margin-top: 2cqw;
     }
     .summary {
       margin: 0;
-      font-size: 6.5cqw;
+      font-size: 5.5cqw;
       font-weight: 600;
       color: var(--ecosee-accent, #62cfe9);
     }
     .hint {
       margin: 0;
-      font-size: 5.5cqw;
+      font-size: 4.4cqw;
       font-weight: 400;
       line-height: 1.3;
       color: var(--ecosee-accent, #62cfe9);
