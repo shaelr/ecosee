@@ -64,8 +64,13 @@ export class EcoseeFanOverlay extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: calc(6 * var(--ecosee-u, 4.6px));
+      /* Reserve the tab bar's zone at the bottom so the runtime dropdown can't hide
+         behind it — matches sensors-overlay.ts's --ecosee-tabbar-inset pattern. The
+         bar's actual height (17u, set by overlay-shell.ts) is well over this screen's
+         plain 9u, so without this the last row sits under the tab bar whenever it's
+         shown. */
       padding: calc(13 * var(--ecosee-u, 4.6px)) calc(9 * var(--ecosee-u, 4.6px))
-        calc(9 * var(--ecosee-u, 4.6px));
+        var(--ecosee-tabbar-inset, calc(9 * var(--ecosee-u, 4.6px)));
       text-align: center;
     }
 

@@ -366,11 +366,20 @@ export class EcoseeHomeScreen extends LitElement {
       }
       /* A stadium-shaped pill tinted to its mode: colored glyph + numeral over a
        faint same-color wash with a matching outline, so the amber/blue reads
-       as a colored oval without a heavy fill fighting the near-black canvas. */
+       as a colored oval without a heavy fill fighting the near-black canvas.
+       min-width is sized for the widest realistic value ("99.5", the decimal
+       °C case) so the oval doesn't visibly grow/shrink as a setpoint crosses
+       between a whole number ("24") and a decimal ("22.5") — the same
+       constant-size treatment already applied to the Temperature Adjust
+       bubble and chips. justify-content centers the (shorter) content within
+       that reserved width instead of hugging the left edge. */
       .oval {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 1.8cqw;
+        min-width: 34cqw;
+        box-sizing: border-box;
         padding: 1.8cqw 4.4cqw;
         border: 0.6cqw solid currentColor;
         border-radius: 999px;
