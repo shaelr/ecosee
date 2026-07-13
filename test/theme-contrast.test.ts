@@ -79,6 +79,24 @@ describe('pickThemeTextColor', () => {
     expect(pickThemeTextColor('var(--primary-text-color)', '', resolve)).toBeNull();
   });
 
+  // Regression guard: a mid-gray theme color (e.g. #808080) clears WCAG AA (4.5:1)
+  // against a near-black canvas but not AAA (7:1) — this Skin's thin type (weight
+  // 300-400) read genuinely hard to read at an AA-only gray in practice (owner
+  // report), so the bar is AAA, not AA. This pins the threshold's real-world effect,
+  // not just its numeric value.
+  it('rejects a mid-gray secondary-text-color that clears AA but not AAA', () => {
+    const resolve = fakeResolve({
+      'var(--secondary-text-color)': [128, 128, 128],
+      [NEAR_BLACK_CANVAS]: NEAR_BLACK_RGB,
+    });
+    const ratio = contrastRatio([128, 128, 128], NEAR_BLACK_RGB);
+    expect(ratio).toBeGreaterThanOrEqual(4.5); // clears AA
+    expect(ratio).toBeLessThan(7); // but not AAA
+    expect(
+      pickThemeTextColor('var(--secondary-text-color)', NEAR_BLACK_CANVAS, resolve),
+    ).toBeNull();
+  });
+
   it('sits right at the MIN_TEXT_CONTRAST boundary consistently with contrastRatio', () => {
     const theme: Rgb = [128, 128, 128];
     const resolve = fakeResolve({ theme, [NEAR_BLACK_CANVAS]: NEAR_BLACK_RGB } as unknown as Record<

@@ -50,16 +50,22 @@ touched.
   `--ecosee-accent` / `--ecosee-fg` / `--ecosee-muted`.
 - **Contrast-gated adoption, not a blind swap.** `<ecosee-card>` reads the
   dashboard's `--primary-text-color` / `--secondary-text-color` and only adopts
-  each as an inline override when it clears WCAG AA (4.5:1) against the canvas
-  color actually in play (`styles/theme-contrast.ts`, `styles/resolve-css-color.ts`
-  — the latter resolves an arbitrary CSS color string by letting the browser parse
-  it via a detached probe element's computed style, rather than hand-rolling a
-  parser for hex/`rgb()`/`hsl()`/named colors). A theme color that would be
-  unreadable on the canvas is silently rejected — the Skin's own fixed color wins,
-  exactly as if no theme variable were present at all. `background_color:
-  'transparent'` skips the check outright: there's nothing of the Skin's own left
-  to contrast against, so whatever the theme color is calibrated for (the
-  dashboard's own surface) is what's actually behind the card.
+  each as an inline override when it clears WCAG **AAA** (7:1, not AA's 4.5:1)
+  against the canvas color actually in play (`styles/theme-contrast.ts`,
+  `styles/resolve-css-color.ts` — the latter resolves an arbitrary CSS color string
+  by letting the browser parse it via a detached probe element's computed style,
+  rather than hand-rolling a parser for hex/`rgb()`/`hsl()`/named colors). AAA, not
+  AA: a mid-gray `--secondary-text-color` that cleared AA by a comfortable margin
+  still read as genuinely hard to read in practice (owner report with a
+  screenshot, on the Weather Overlay's "Overnight / Morning / Afternoon" period
+  labels and its "as of" subtitle) — this Skin's type is thin (weight 300-400
+  throughout, sometimes lighter), which needs more contrast than AA's normal-weight
+  assumption to read comfortably at the same ratio. A theme color that doesn't
+  clear AAA is silently rejected — the Skin's own fixed color wins, exactly as if
+  no theme variable were present at all. `background_color: 'transparent'` skips
+  the check outright: there's nothing of the Skin's own left to contrast against,
+  so whatever the theme color is calibrated for (the dashboard's own surface) is
+  what's actually behind the card.
 - **Two "primary text" tokens, not one, so no dashboard's default appearance
   changes.** `--ecosee-text` (fallback: the old `--ecosee-fg` off-white) and
   `--ecosee-text-accent` (fallback: the old `--ecosee-accent` cyan) both receive

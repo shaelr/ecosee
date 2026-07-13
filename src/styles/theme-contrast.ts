@@ -6,9 +6,9 @@
  * a fixed near-black (config `background_color`, else tokens.ts's `--ecosee-bg`)
  * regardless of the dashboard's light/dark theme, so a light theme's dark text used
  * verbatim on it would read as near-invisible dark-on-near-black. Only trusted once it
- * clears WCAG AA against the actual canvas color in play; the caller falls back to the
- * Skin's own fixed off-white/muted-gray otherwise (tokens.ts's `--ecosee-text` /
- * `--ecosee-text-muted` defaults).
+ * clears WCAG AAA (not just AA — see {@link MIN_TEXT_CONTRAST}) against the actual
+ * canvas color in play; the caller falls back to the Skin's own fixed off-white/
+ * muted-gray otherwise (tokens.ts's `--ecosee-text` / `--ecosee-text-muted` defaults).
  */
 
 export type Rgb = readonly [number, number, number];
@@ -33,9 +33,17 @@ export function contrastRatio(a: Rgb, b: Rgb): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/** WCAG AA's normal-text threshold — the bar a theme color must clear against the
- *  canvas before the Skin trusts it over its own fixed fallback. */
-export const MIN_TEXT_CONTRAST = 4.5;
+/** WCAG AAA's normal-text threshold (not AA's 4.5:1) — the bar a theme color must
+ *  clear against the canvas before the Skin trusts it over its own fixed fallback.
+ *  AA technically passes plenty of theme grays that are only barely legible in
+ *  practice: this Skin's type is thin (weight 300-400 throughout, sometimes
+ *  lighter), which reads noticeably worse than AA's normal-weight assumption at the
+ *  same ratio, and a "muted"/secondary theme color that clears AA by a hair still
+ *  looked genuinely hard to read against the near-black canvas (owner report,
+ *  screenshot). AAA's stricter bar keeps the adopted color meaningfully closer to
+ *  the dashboard's own crisp foreground rather than its dimmest still-technically-
+ *  legible gray. */
+export const MIN_TEXT_CONTRAST = 7;
 
 /** Turns an arbitrary CSS color string (hex, `rgb()`, a cascaded custom property's
  *  resolved value, …) into an RGB triple, or `null` if it can't be resolved. Real
