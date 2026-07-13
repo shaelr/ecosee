@@ -23,6 +23,7 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
     mode: 'heat_cool',
     setpoints: { heat: 70, cool: 75 },
     resumeAvailable: false,
+    resumeReserved: false,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,
@@ -111,29 +112,41 @@ describe('Home Screen setpoint ovals', () => {
 });
 
 // The opt-in Resume Schedule pill (config `resume_program`, ADR-0012): rendered
-// beneath the setpoint ovals — never replacing them — only when the already-derived
-// `view.resumeAvailable` says so. The Home Screen itself does nothing but reflect
-// that flag; the gating logic lives in climate/resume-schedule.ts (tested there).
+// beneath the setpoint ovals — never replacing them — whenever its slot is
+// reserved at all (`view.resumeReserved`), so the rest of the cluster never
+// shifts as the best-effort hold check (`view.resumeAvailable`) flips the pill
+// on and off; the *unavailable-but-reserved* case renders it `visibility:
+// hidden` rather than omitting it. The Home Screen itself does nothing but
+// reflect those two flags; the gating logic lives in climate/resume-schedule.ts
+// (tested there).
 describe('Home Screen Resume Schedule pill (resume_program, ADR-0012)', () => {
   function resumeButton(el: EcoseeHomeScreen): HTMLButtonElement | null {
     return el.shadowRoot!.querySelector('.resume');
   }
 
-  it('is absent when resumeAvailable is false', async () => {
-    const el = await mount(view({ resumeAvailable: false }));
+  it('is absent (no reserved slot) when resumeReserved is false, regardless of resumeAvailable', async () => {
+    const el = await mount(view({ resumeReserved: false, resumeAvailable: false }));
     expect(resumeButton(el)).toBeNull();
   });
 
-  it('renders beneath the setpoint ovals when resumeAvailable is true, without hiding them', async () => {
-    const el = await mount(view({ resumeAvailable: true }));
+  it('renders visually hidden — not absent — when reserved but not currently available', async () => {
+    const el = await mount(view({ resumeReserved: true, resumeAvailable: false }));
+    const resume = resumeButton(el);
+    expect(resume).not.toBeNull();
+    expect(resume!.classList.contains('resume-hidden')).toBe(true);
+  });
+
+  it('renders visible, beneath the setpoint ovals, when reserved and available, without hiding them', async () => {
+    const el = await mount(view({ resumeReserved: true, resumeAvailable: true }));
     expect(ovals(el)).toHaveLength(2); // the ovals still show — no combined pill (ADR-0004)
     const resume = resumeButton(el);
     expect(resume).not.toBeNull();
+    expect(resume!.classList.contains('resume-hidden')).toBe(false);
     expect(resume!.textContent).toContain('Resume Schedule');
   });
 
   it('emits a resume-schedule action on tap', async () => {
-    const el = await mount(view({ resumeAvailable: true }));
+    const el = await mount(view({ resumeReserved: true, resumeAvailable: true }));
     const fired: HomeActionDetail[] = [];
     el.addEventListener('ecosee-action', (e) =>
       fired.push((e as CustomEvent<HomeActionDetail>).detail),

@@ -50,6 +50,7 @@ const HOME_VIEW: HomeView = {
   mode: 'heat_cool',
   setpoints: { heat: 70, cool: 75 },
   resumeAvailable: false,
+  resumeReserved: false,
   weatherAvailable: false,
   fanAvailable: false,
   weatherCondition: null,

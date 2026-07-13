@@ -2,7 +2,7 @@ import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
 import { num } from './parse';
 import { toFanModel, showFanAffordance } from './fan';
-import { resumeAvailable } from './resume-schedule';
+import { resumeAvailable, resumeReserved } from './resume-schedule';
 
 // The graceful-degradation seam (ADR-0001). `toHomeView` is a pure function from
 // raw `hass` + config to a normalized, already-degraded view model: every field
@@ -76,6 +76,12 @@ export interface HomeView {
    *  setpoints are active, and the entity can't be shown to already be on-schedule.
    *  See `climate/resume-schedule.ts`. */
   resumeAvailable: boolean;
+  /** Whether the Resume Schedule pill's layout slot is reserved at all — true
+   *  whenever `resume_program` is on and setpoints are active, regardless of
+   *  whether `resumeAvailable` currently says to show it. The Home Screen keeps
+   *  this slot present (just visually hidden) whenever it's reserved, so the rest
+   *  of the cluster never shifts as the hold check flips the pill on and off. */
+  resumeReserved: boolean;
   /** Whether a usable `weather` entity is configured (gates the weather icon). */
   weatherAvailable: boolean;
   /** Whether the Home Screen shows its top-row fan glyph — the quick shortcut into
@@ -302,6 +308,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
       mode: 'unknown',
       setpoints: null,
       resumeAvailable: false,
+      resumeReserved: false,
       weatherAvailable: weather !== null,
       weatherCondition: weather,
       fanAvailable: false,
@@ -328,6 +335,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
     mode,
     setpoints,
     resumeAvailable: resumeAvailable(config, setpoints, attrs),
+    resumeReserved: resumeReserved(config, setpoints),
     weatherAvailable: weather !== null,
     weatherCondition: weather,
     fanAvailable: showFanAffordance(toFanModel(hass, config), config.show_fan),

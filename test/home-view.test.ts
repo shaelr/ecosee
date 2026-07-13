@@ -258,6 +258,18 @@ describe('toHomeView — resumeAvailable (ADR-0012)', () => {
     expect(view.resumeAvailable).toBe(false);
   });
 
+  it('reserves the slot (resumeReserved true) even while on-schedule, so the pill stays present-but-hidden', () => {
+    // The whole point of the split (issue: the pill popping in/out shifted the
+    // rest of the cluster): resumeReserved must stay true here even though
+    // resumeAvailable is false, so the Home Screen keeps the slot's layout space.
+    const view = toHomeView(
+      heatCool({ climate_mode: 'Home', preset_mode: 'Home' }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+    expect(view.resumeReserved).toBe(true);
+  });
+
   it('is false on-schedule with the real ecobee integration\'s casing (climate_mode "Home", preset_mode "home")', () => {
     // Regression: the ecobee integration maps preset_mode's built-in presets through
     // HA's lowercase PRESET_HOME/AWAY/SLEEP constants but leaves climate_mode as
@@ -290,6 +302,41 @@ describe('toHomeView — resumeAvailable (ADR-0012)', () => {
       config({ resume_program: true }),
     );
     expect(view.resumeAvailable).toBe(false);
+  });
+});
+
+describe('toHomeView — resumeReserved (ADR-0012)', () => {
+  const heatCool = (attrs: Record<string, unknown> = {}) =>
+    hass({
+      climate: {
+        entity_id: 'climate.t',
+        state: 'heat_cool',
+        attributes: { target_temp_low: 68, target_temp_high: 75, ...attrs },
+      },
+    });
+
+  it('is false when resume_program is unset', () => {
+    expect(toHomeView(heatCool(), config()).resumeReserved).toBe(false);
+  });
+
+  it('is true when resume_program is on and setpoints are active, regardless of hold state', () => {
+    expect(toHomeView(heatCool(), config({ resume_program: true })).resumeReserved).toBe(true);
+  });
+
+  it('is false when resume_program is on but the system is Off (no setpoints)', () => {
+    const view = toHomeView(
+      hass({ climate: { entity_id: 'climate.t', state: 'off', attributes: {} } }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeReserved).toBe(false);
+  });
+
+  it('is always false on the unavailable-entity branch, even with resume_program on', () => {
+    const view = toHomeView(
+      hass({ climate: { entity_id: 'climate.t', state: 'unavailable', attributes: {} } }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeReserved).toBe(false);
   });
 });
 

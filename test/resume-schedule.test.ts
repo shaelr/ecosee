@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { resumeAvailable, resumeProgramCall } from '../src/climate/resume-schedule';
+import { resumeAvailable, resumeReserved, resumeProgramCall } from '../src/climate/resume-schedule';
 import type { EcoseeCardConfig } from '../src/config';
 import type { Setpoints } from '../src/climate/home-view';
 
-// Unit tests for the Resume Schedule seam (ADR-0012): `resumeAvailable`'s gating
-// logic (the opt-in config toggle, active setpoints, and the best-effort
-// climate_mode/preset_mode hold heuristic) and `resumeProgramCall`'s payload — both
-// pure, so exercised directly against fabricated config/attrs rather than a full
-// `hass` fixture.
+// Unit tests for the Resume Schedule seam (ADR-0012): `resumeReserved`'s layout
+// gating (the opt-in config toggle plus active setpoints, independent of the hold
+// check — issue: the pill's appear/disappear was shifting the rest of the Home
+// Screen cluster), `resumeAvailable`'s further gating (the best-effort
+// climate_mode/preset_mode hold heuristic), and `resumeProgramCall`'s payload —
+// all pure, so exercised directly against fabricated config/attrs rather than a
+// full `hass` fixture.
 
 const config = (overrides: Partial<EcoseeCardConfig> = {}): EcoseeCardConfig => ({
   type: 'custom:ecosee-card',
@@ -16,6 +18,34 @@ const config = (overrides: Partial<EcoseeCardConfig> = {}): EcoseeCardConfig => 
 });
 
 const SETPOINTS: Setpoints = { heat: 68, cool: 75 };
+
+describe('resumeReserved — layout-slot gating', () => {
+  it('is false when resume_program is unset, even with active setpoints', () => {
+    expect(resumeReserved(config(), SETPOINTS)).toBe(false);
+  });
+
+  it('is false when resume_program is explicitly false', () => {
+    expect(resumeReserved(config({ resume_program: false }), SETPOINTS)).toBe(false);
+  });
+
+  it('is false when there are no active setpoints, even with resume_program on', () => {
+    expect(resumeReserved(config({ resume_program: true }), null)).toBe(false);
+  });
+
+  it('is true whenever resume_program is on and setpoints are active — independent of any hold state', () => {
+    expect(resumeReserved(config({ resume_program: true }), SETPOINTS)).toBe(true);
+  });
+});
+
+describe('resumeAvailable — implies resumeReserved', () => {
+  it('is never true when resumeReserved would be false for the same inputs', () => {
+    // A hold-looking attrs set, but resumeReserved's own gates (config off, or no
+    // setpoints) still win — resumeAvailable must not short-circuit past them.
+    const holdAttrs = { climate_mode: 'Home', preset_mode: 'temp' };
+    expect(resumeAvailable(config(), SETPOINTS, holdAttrs)).toBe(false);
+    expect(resumeAvailable(config({ resume_program: true }), null, holdAttrs)).toBe(false);
+  });
+});
 
 describe('resumeAvailable — opt-in gating', () => {
   it('is false when resume_program is unset, even with setpoints and a clear hold signal', () => {

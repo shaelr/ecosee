@@ -409,6 +409,14 @@ export class EcoseeHomeScreen extends LitElement {
         font-weight: 400;
         cursor: pointer;
       }
+      /* Visually hidden, not omitted, whenever the best-effort hold check says the
+       thermostat is currently on-schedule — the slot itself stays reserved (see
+       _renderResume) so the cluster above never shifts as this flips on and off.
+       visibility: hidden (not display: none) keeps the box's layout footprint
+       while dropping it from hit-testing, the tab order, and the a11y tree. */
+      .resume.resume-hidden {
+        visibility: hidden;
+      }
       .resume-close {
         display: inline-flex;
         align-items: center;
@@ -728,13 +736,18 @@ export class EcoseeHomeScreen extends LitElement {
   /** The opt-in Resume Schedule pill (config `resume_program`, ADR-0012), beneath
    *  the setpoint ovals — never replacing them (the ovals keep showing the live
    *  heat/cool setpoints exactly as before; ADR-0004's "no combined range pill"
-   *  stands). Rendered only when the seam's best-effort hold check says so
-   *  (`view.resumeAvailable`); tapping it fires `ecosee.resume_program` via the
-   *  `resume-schedule` action. */
+   *  stands). Rendered (`visibility: hidden`, not omitted) whenever its slot is
+   *  reserved at all (`view.resumeReserved`) — the config toggle is on and
+   *  setpoints are active — so the cluster above it never shifts as the seam's
+   *  best-effort hold check (`view.resumeAvailable`) flips the pill on and off;
+   *  only entities with the feature off, or with no setpoints, skip the slot
+   *  entirely. Tapping it fires `ecosee.resume_program` via the `resume-schedule`
+   *  action; hidden, it is inert (`visibility: hidden` drops it from the tab
+   *  order and the accessibility tree, same as it being absent). */
   private _renderResume(view: HomeView): TemplateResult | typeof nothing {
-    if (!view.resumeAvailable) return nothing;
+    if (!view.resumeReserved) return nothing;
     return html`<button
-      class="resume"
+      class="resume ${view.resumeAvailable ? '' : 'resume-hidden'}"
       aria-label="Resume Schedule"
       @click=${() => this._emit('resume-schedule')}
     >

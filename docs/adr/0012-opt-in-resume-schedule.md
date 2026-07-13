@@ -103,15 +103,38 @@ this side: it's a no-op for a custom (unmapped) Comfort Setting name, and a genu
 different held preset ("Home" vs "away") still differs after lowercasing, so no false
 negatives are introduced.
 
+## Correction (post-ship): reserve the pill's layout slot
+
+Once the case-insensitivity fix let the pill correctly clear on-schedule, a second
+problem surfaced: the Home Screen's cluster (humidity, current temperature, setpoint
+ovals) sat inside one `justify-content: center` flex column together with the pill,
+so the pill appearing/disappearing changed the column's total content height and
+re-centered everything above it — the whole cluster visibly shifted up and down as
+`resumeAvailable` flipped.
+
+`resumeAvailable` alone can't drive the pill's presence in the DOM without this
+shift, because presence/absence is exactly what changes the flex column's height.
+The fix splits the gating into two functions: `resumeReserved` (the opt-in config
+toggle plus active setpoints — independent of the hold check) decides whether the
+pill's slot exists in the layout at all; `resumeAvailable` (unchanged) decides
+whether it's actually shown. The Home Screen renders the pill whenever
+`resumeReserved` is true — via `visibility: hidden` (not omitted, not
+`display: none`) when `resumeAvailable` is false — so the slot's layout footprint
+never changes, only whether it's painted. `HomeView` carries both fields;
+`resumeAvailable` still implies `resumeReserved` (it early-returns through the same
+gate) so the two can never disagree.
+
 ## Consequences
 
-- `climate/resume-schedule.ts` is the seam: `resumeAvailable` (the gating logic
-  above, pure and unit-tested against fabricated `climate_mode`/`preset_mode`
-  combinations) and `resumeProgramCall` (the `ServiceCall` builder). Mirrors the
-  existing per-concern seam shape (`temperature-adjust.ts`, `comfort-setting.ts`).
-- `HomeView` gains `resumeAvailable: boolean`, derived in `toHomeView` alongside the
-  setpoints it depends on — every hand-built `HomeView` test fixture across the
-  suite now sets it explicitly (no default it can silently inherit).
+- `climate/resume-schedule.ts` is the seam: `resumeReserved` (layout-slot gating),
+  `resumeAvailable` (the hold-check gating above, layered on top of `resumeReserved`)
+  and `resumeProgramCall` (the `ServiceCall` builder) — all pure, unit-tested against
+  fabricated `config`/`setpoints`/`climate_mode`/`preset_mode` combinations. Mirrors
+  the existing per-concern seam shape (`temperature-adjust.ts`, `comfort-setting.ts`).
+- `HomeView` gains `resumeAvailable: boolean` and `resumeReserved: boolean`, both
+  derived in `toHomeView` alongside the setpoints they depend on — every hand-built
+  `HomeView` test fixture across the suite now sets both explicitly (no default
+  either can silently inherit).
 - "Resume Schedule" re-enters the Card's vocabulary, but scoped: it is documented in
   CONTEXT.md as an ecobee-integration-specific, opt-in affordance, not a generic
   Setpoint concept. "Hold" itself stays out of the UI copy — the pill reads "Resume
