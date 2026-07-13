@@ -40,11 +40,36 @@ describe('overlay shell — dismissal', () => {
   });
 });
 
+// Regression guard: the shell's canvas MUST stay opaque even when the Home
+// Screen's own background is transparent (config background_color), or every
+// menu/picker shows the Home Screen bleeding through behind it. The shell reads
+// its own --ecosee-overlay-bg token for the canvas fill — a deliberate override of
+// the shared shapeStyles' .shape .fill rule, which the Home/Standby screens still
+// use unmodified (they key off --ecosee-bg directly, since nothing sits behind
+// them to bleed through).
+describe('overlay shell — canvas fill uses its own token (background_color transparency guard)', () => {
+  it('overrides .shape .fill to read --ecosee-overlay-bg, not the shared --ecosee-bg', () => {
+    const css = [EcoseeOverlay.styles]
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    // The LAST `.shape .fill` rule in the concatenated stylesheet is the one that
+    // actually wins (equal specificity, source-order tiebreak) — assert that one.
+    const fillRules = [...css.matchAll(/\.shape \.fill\s*\{[^}]*\}/g)];
+    expect(fillRules.length).toBeGreaterThan(0);
+    const lastFillRule = fillRules[fillRules.length - 1][0];
+    expect(lastFillRule).toMatch(/fill:\s*var\(\s*--ecosee-overlay-bg/);
+  });
+});
+
 describe('overlay shell — outside-tap contract (issue #40)', () => {
   it('keeps the .content wrapper pointer-transparent so empty taps reach the backdrop', () => {
     // `styles` is now an array (the shared shape module + the shell's own block),
     // so join every CSSResult's text before matching (issue #76).
-    const css = [EcoseeOverlay.styles].flat().map((s) => s.cssText).join('\n');
+    const css = [EcoseeOverlay.styles]
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
     // The .content rule must set pointer-events: none; otherwise the wrapper (which
     // sits above the backdrop) swallows empty-area taps and outside-tap never fires.
     const contentRule = css.match(/\.content\s*\{[^}]*\}/)?.[0] ?? '';

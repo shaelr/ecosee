@@ -256,10 +256,19 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
 
   setConfig(config: unknown): void {
     this._config = parseConfig(config);
-    // Applied as an inline custom property (like --ecosee-scale below) so it beats
+    // Applied as inline custom properties (like --ecosee-scale below) so they beat
     // the shadow DOM's own `:host { --ecosee-bg: #0a0d10 }` default without needing
-    // a second token or a reactive style block.
-    this._setOrClear('--ecosee-bg', this._config.background_color ?? '');
+    // a reactive style block.
+    const bg = this._config.background_color ?? '';
+    this._setOrClear('--ecosee-bg', bg);
+    // The Overlay shell reads a separate --ecosee-overlay-bg (tokens.ts) so it can
+    // stay opaque regardless: it exists to cover the Home Screen while an Overlay
+    // is open, and a transparent shell would let the Home Screen bleed through
+    // every menu/picker behind it. A non-transparent custom color still carries
+    // over — only the literal "transparent" value is withheld here — so Home,
+    // Standby, and the Overlay shell stay visually consistent otherwise.
+    const isTransparent = bg.trim().toLowerCase() === 'transparent';
+    this._setOrClear('--ecosee-overlay-bg', isTransparent ? '' : bg);
   }
 
   getCardSize(): number {

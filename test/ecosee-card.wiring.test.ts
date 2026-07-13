@@ -282,6 +282,66 @@ describe('ecosee-card wiring — background_color', () => {
     await card.updateComplete;
     expect(card.style.getPropertyValue('--ecosee-bg')).toBe('');
   });
+
+  // Regression guard: the Overlay shell must stay opaque even when the Home
+  // Screen's own background is transparent, or every menu/picker shows the Home
+  // Screen bleeding through behind it (issue: background_color: transparent broke
+  // the Main Menu). --ecosee-overlay-bg is the shell's own token; it tracks a real
+  // custom color (visual consistency) but withholds the literal "transparent".
+  it('carries a non-transparent background_color over to --ecosee-overlay-bg too', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: '#1a1a2e',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    expect(card.style.getPropertyValue('--ecosee-overlay-bg')).toBe('#1a1a2e');
+  });
+
+  it('withholds "transparent" from --ecosee-overlay-bg so the Overlay shell stays opaque', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: 'transparent',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    // The Home Screen goes transparent as configured...
+    expect(card.style.getPropertyValue('--ecosee-bg')).toBe('transparent');
+    // ...but the Overlay shell is left at its own (near-black) default.
+    expect(card.style.getPropertyValue('--ecosee-overlay-bg')).toBe('');
+  });
+
+  it('withholds "transparent" case- and whitespace-insensitively', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      background_color: '  Transparent  ',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    expect(card.style.getPropertyValue('--ecosee-overlay-bg')).toBe('');
+  });
+
+  it('leaves --ecosee-overlay-bg unset (Skin default) when background_color is absent', async () => {
+    const { hass } = fakeHass({ entities: [climateEntity('heat', { temperature: 70 })] });
+    const card = await mountCard(hass);
+
+    expect(card.style.getPropertyValue('--ecosee-overlay-bg')).toBe('');
+  });
 });
 
 describe('ecosee-card wiring — navigation (tab bar)', () => {

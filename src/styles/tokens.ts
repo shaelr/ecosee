@@ -17,6 +17,15 @@ export const tokens = css`
        overriding the canvas color can never make chip text illegible; defaults to
        the same near-black so the punch-through look is unchanged out of the box. */
     --ecosee-chip-ink: #0a0d10;
+    /* The Overlay shell's own canvas fill — deliberately a SEPARATE token from
+       --ecosee-bg. The shell exists specifically to opaquely cover the Home Screen
+       while an Overlay is open (ADR-0011); background_color: transparent (or any
+       other value) still reaches this token UNLESS it is literally "transparent",
+       in which case <ecosee-card> leaves this at its near-black default instead —
+       otherwise the Home Screen bleeds through every menu/picker behind the
+       "transparent" Overlay canvas. A non-transparent custom color still carries
+       over here, so Home/Standby/Overlay stay visually consistent in that case. */
+    --ecosee-overlay-bg: #0a0d10;
     --ecosee-fg: #d4eff9;
     --ecosee-accent: #62cfe9;
     --ecosee-muted: #6f96a3;

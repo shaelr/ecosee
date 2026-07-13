@@ -215,8 +215,13 @@ export class EcoseeTemperatureOverlay extends LitElement {
       background: var(--ecosee-heat-grad, #f3a13c);
     }
 
-    /* Setpoint chips (left): small circular pucks, glyph over value, stacked
-       Cool over Heat. Selected = filled; unselected = outlined. */
+    /* Setpoint chips (left): small squircle pucks (same 28% radius treatment as
+       the scrubber bubble — issue: a true circle constricts its usable width well
+       above/below its own vertical center, exactly where the stacked glyph and
+       numeral rows sit, clipping a Celsius decimal reading like "22.5" even after
+       shrinking its font; a rounded square keeps the full box width at any row),
+       glyph over value, stacked Cool over Heat. Selected = filled; unselected =
+       outlined. */
     .chips {
       grid-column: 1;
       display: flex;
@@ -232,22 +237,20 @@ export class EcoseeTemperatureOverlay extends LitElement {
          sits where the font's baseline puts it, and a broken-metric webfont
          can baseline at the middle of the line box (issue #85), floating the
          ink ~0.2em above the box — a hair's gap lets it crash into the glyph.
-         1.2cqw (~0.2em of the 6cqw numeral) absorbs that drift while the
-         glyph + gap + numeral column still fits the 17cqw circle — smaller than
-         the numeral's own size (7cqw → 6cqw) so a Celsius half-degree value
-         ("22.5") sits comfortably inside the puck instead of crowding it. */
+         1.2cqw (~0.18em of the 6.5cqw numeral) absorbs that drift while the
+         glyph + gap + numeral column still fits the 18.5cqw puck. */
       gap: 1.2cqw;
-      width: 17cqw;
-      height: 17cqw;
-      border-radius: 50%;
-      font-size: 6cqw;
+      width: 18.5cqw;
+      height: 18.5cqw;
+      border-radius: 28%;
+      font-size: 6.5cqw;
       font-weight: 500;
       line-height: 1;
       border: 0.7cqw solid transparent;
     }
     .chip .glyph {
-      width: 6cqw;
-      height: 6cqw;
+      width: 6.5cqw;
+      height: 6.5cqw;
       /* Keep the glyph its full size in the flex column — never let it shrink out
          of its box under the numeral (the other half of the cramped Firefox chip,
          issue #74). */
@@ -257,7 +260,7 @@ export class EcoseeTemperatureOverlay extends LitElement {
        strut (phantom descender leading) is reserved by Firefox but swallowed by
        Blink, so the glyph rendered taller than its box in Firefox/Zen and
        overlapped the setpoint number. Block layout removes the strut in every
-       engine while the SVG still fills its 6cqw box (width/height 100%). See
+       engine while the SVG still fills its 6.5cqw box (width/height 100%). See
        docs/adr/0005-cross-browser-typography.md. */
     .glyph svg {
       display: block;

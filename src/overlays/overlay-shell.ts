@@ -17,11 +17,16 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
 
 /**
  * `<ecosee-overlay>` — the overlay shell. A content-agnostic squircle that mounts
- * over the Home Screen (same tokens, so it covers the Home Screen exactly),
+ * over the Home Screen (the same silhouette, so it covers the Home Screen exactly),
  * carries the ✕ close affordance, and dismisses on ✕ or an outside (backdrop)
  * tap. Active Overlay content is slotted in. This is the infrastructure every
  * later Overlay (System Mode, Fan, Sensors, Weather) reuses — the Temperature
  * Adjust overlay is just its first occupant.
+ *
+ * The canvas fill is its own token (`--ecosee-overlay-bg`), not the Home Screen's
+ * `--ecosee-bg` — the shell must stay opaque to do its one job (hide the Home
+ * Screen underneath), so it can't simply inherit a config `background_color:
+ * transparent` the way the Home Screen does. See the `.shape .fill` override below.
  *
  * Because the shell's opaque canvas covers the Home Screen while an Overlay is open,
  * it also carries the equipment edge glow (blue cooling / amber heating, keyed to the
@@ -81,6 +86,18 @@ export class EcoseeOverlay extends LitElement {
       }
       .shell.tabbed {
         --ecosee-tabbar-inset: calc(17 * var(--ecosee-u, 4.6px));
+      }
+
+      /* Overrides shapeStyles' shared .shape .fill rule (fill: var(--ecosee-bg))
+       — this declaration lands later in the stylesheet, so it wins on equal
+       specificity — with the shell's own --ecosee-overlay-bg token. The shell's
+       canvas MUST stay opaque — it exists to cover the Home Screen while an
+       Overlay is open — so it cannot simply share --ecosee-bg with the Home
+       Screen: config background_color: transparent would then make the shell
+       transparent too, and every menu/picker would show the Home Screen bleeding
+       through behind it. See tokens.ts and ecosee-card.ts's setConfig. */
+      .shape .fill {
+        fill: var(--ecosee-overlay-bg, #0a0d10);
       }
 
       /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp squircle-edge
