@@ -9,7 +9,7 @@ import { resumeAvailable, resumeReserved } from './resume-schedule';
 // whose backing data is absent is `null`/`false`, so the Home Screen renders
 // "present → show, absent → hide" without ever faking a control it can't back.
 
-export type EquipmentStatus = 'heating' | 'cooling' | 'idle';
+export type EquipmentStatus = 'heating' | 'cooling' | 'fan' | 'idle';
 /** The bound entity's operating mode. The ecobee device exposes only Heat / Cool
  *  / Heat / Cool (Auto) / Off, but a generic `climate` entity (ADR-0001) may also
  *  run in `dry` or `fan_only`, so the Card recognizes those too. */
@@ -138,17 +138,18 @@ function fromHvacAction(action: string | undefined): EquipmentStatus | null {
       return 'heating';
     case 'cooling':
       return 'cooling';
+    case 'fan':
+      return 'fan';
     case 'idle':
     case 'off':
-    case 'fan':
     case 'drying':
       // The entity has explicitly told us equipment is not heating or cooling —
       // trust that over guessing. Distinct from the `undefined` (attribute absent)
       // case below, where there's no signal at all and inferEquipment's temp/setpoint
       // heuristic is the only option. Conflating the two previously sent a fan-only
-      // reading (hvac_action: 'fan') through that heuristic, which could report
-      // 'heating' whenever the room happened to read below the heat setpoint even
-      // though the entity had already said the equipment wasn't heating.
+      // reading through that heuristic, which could report 'heating' whenever the
+      // room happened to read below the heat setpoint even though the entity had
+      // already said the equipment wasn't heating.
       return 'idle';
     default:
       // undefined — no hvac_action attribute at all, genuinely no signal.

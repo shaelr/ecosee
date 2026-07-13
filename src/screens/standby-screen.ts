@@ -30,11 +30,12 @@ export interface StandbyView {
   /** The weather entity's current condition (`sunny` / `clear-night` / …), or
    *  `null` — supplies the glyph beside the outdoor temp; absent ⇒ number only. */
   weatherCondition: string | null;
-  /** Equipment Status (`'cooling'` / `'heating'` / `'idle'`), or `null` when not
-   *  expressible. Mirrored straight from the Home Screen's `hvac_action` derivation
-   *  (climate/home-view.ts) so Standby and Home agree; it drives the edge glow —
-   *  blue while cooling, amber while heating, nothing when idle/absent — dimmed to
-   *  the standby palette (ADR-0009, superseding ADR-0006's Home-Screen-only glow). */
+  /** Equipment Status (`'cooling'` / `'heating'` / `'fan'` / `'idle'`), or `null`
+   *  when not expressible. Mirrored straight from the Home Screen's `hvac_action`
+   *  derivation (climate/home-view.ts) so Standby and Home agree; it drives the edge
+   *  glow — blue while cooling, amber while heating, nothing while fan-running/
+   *  idle/absent — dimmed to the standby palette (ADR-0009, superseding ADR-0006's
+   *  Home-Screen-only glow). */
   equipment: EquipmentStatus | null;
 }
 
@@ -117,8 +118,9 @@ export class EcoseeStandbyScreen extends LitElement {
 
       /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp
        squircle-edge line the Home Screen draws (ADR-0009 supersedes ADR-0006's
-       Home-Screen-only glow): blue cooling / amber heating, nothing idle. The glow
-       markup and the reveal/color chain mirror the Home Screen (home-screen.ts) so
+       Home-Screen-only glow): blue cooling / amber heating, nothing idle or
+       fan-running. The glow markup and the reveal/color chain mirror the Home Screen
+       (home-screen.ts) so
        the two never drift; the only Standby difference is a lower opacity on the
        reveal rule, dimming the glow into the standby display's low-brightness idle
        palette (the device dims the whole screen in standby). Expressed as opacity —
@@ -273,6 +275,7 @@ export class EcoseeStandbyScreen extends LitElement {
   private _equipLabel(equipment: EquipmentStatus): string {
     if (equipment === 'cooling') return 'Cooling';
     if (equipment === 'heating') return 'Heating';
+    if (equipment === 'fan') return 'Fan Running';
     return 'Idle';
   }
 }

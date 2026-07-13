@@ -91,7 +91,8 @@ export class EcoseeOverlay extends LitElement {
 
       /* Equipment-status edge glow, keyed to hvac_action — the SAME crisp squircle-edge
        line the Home Screen draws (ADR-0011 supersedes ADR-0009's "Overlay shell has
-       none" clause): blue cooling / amber heating, nothing idle. The glow markup and
+       none" clause): blue cooling / amber heating, nothing idle or fan-running. The
+       glow markup and
        the reveal/color chain mirror the Home Screen (home-screen.ts) so the surfaces
        never drift; unlike the Standby Screen the overlay is a bright active surface, so
        it uses the Home Screen's full-strength glow (no standby dimming). Without this
@@ -234,11 +235,11 @@ export class EcoseeOverlay extends LitElement {
    *  screens and absent (⇒ no bar) elsewhere (Temperature, the pickers, Weather). */
   @property({ attribute: false }) tabs?: TabBarModel;
 
-  /** Equipment Status (`'cooling'` / `'heating'` / `'idle'`), or `null` when not
-   *  expressible. Supplied by the card straight from the Home Screen's `hvac_action`
-   *  derivation so the overlay agrees with Home; it reveals the edge glow (blue
-   *  cooling / amber heating, nothing idle) so the "system is running" cue persists
-   *  while any overlay is open (ADR-0011). */
+  /** Equipment Status (`'cooling'` / `'heating'` / `'fan'` / `'idle'`), or `null`
+   *  when not expressible. Supplied by the card straight from the Home Screen's
+   *  `hvac_action` derivation so the overlay agrees with Home; it reveals the edge
+   *  glow (blue cooling / amber heating, nothing idle or fan-running) so the "system
+   *  is running" cue persists while any overlay is open (ADR-0011). */
   @property({ attribute: false }) equipment?: EquipmentStatus | null;
 
   /** The card's outer corner treatment (config `corner_style`). Absent ⇒
@@ -286,6 +287,7 @@ export class EcoseeOverlay extends LitElement {
   private _equipLabel(equipment: EquipmentStatus): string {
     if (equipment === 'cooling') return 'Cooling';
     if (equipment === 'heating') return 'Heating';
+    if (equipment === 'fan') return 'Fan Running';
     return 'Idle';
   }
 

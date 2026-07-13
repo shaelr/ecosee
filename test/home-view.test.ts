@@ -97,26 +97,38 @@ describe('toHomeView — graceful degradation', () => {
 // active) was previously falling through the same null result as a genuinely absent
 // hvac_action, which sent it into the temp-vs-setpoint guess (inferEquipment) — and
 // that guess reported 'heating' whenever the room read below the heat setpoint, even
-// though the entity had explicitly said the equipment was not heating. 'fan' and
-// 'drying' both carry an explicit "not heating, not cooling" signal and must resolve
-// to idle without ever reaching the guess.
+// though the entity had explicitly said the equipment was not heating. 'fan' now
+// reports its own distinct status (matching CONTEXT.md's Equipment Status vocabulary:
+// heating / cooling / fan / idle) rather than being folded into idle; 'drying' has no
+// dedicated status of its own and resolves to idle. Neither ever reaches the guess.
 describe('toHomeView — hvac_action explicitly not heating/cooling', () => {
-  it.each(['fan', 'drying'] as const)(
-    'reports idle for hvac_action %s, even when current temp is well below the heat setpoint',
-    (action) => {
-      const view = toHomeView(
-        hass({
-          climate: {
-            entity_id: 'climate.t',
-            state: 'heat',
-            attributes: { current_temperature: 60, temperature: 72, hvac_action: action },
-          },
-        }),
-        config(),
-      );
-      expect(view.equipment).toBe('idle');
-    },
-  );
+  it('reports fan for hvac_action fan, even when current temp is well below the heat setpoint', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'heat',
+          attributes: { current_temperature: 60, temperature: 72, hvac_action: 'fan' },
+        },
+      }),
+      config(),
+    );
+    expect(view.equipment).toBe('fan');
+  });
+
+  it('reports idle for hvac_action drying, even when current temp is well below the heat setpoint', () => {
+    const view = toHomeView(
+      hass({
+        climate: {
+          entity_id: 'climate.t',
+          state: 'heat',
+          attributes: { current_temperature: 60, temperature: 72, hvac_action: 'drying' },
+        },
+      }),
+      config(),
+    );
+    expect(view.equipment).toBe('idle');
+  });
 });
 
 describe('toHomeView — edge cases', () => {

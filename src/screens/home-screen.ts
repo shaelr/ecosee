@@ -97,7 +97,7 @@ export class EcoseeHomeScreen extends LitElement {
 
       /* Equipment-status edge glow, keyed to hvac_action: a crisp bright line tracing
        the squircle edge with a gentle inward falloff (blue cooling / amber heating,
-       nothing idle). Three concentric strokes of the same curve — wide+faint,
+       nothing idle or fan-running). Three concentric strokes of the same curve — wide+faint,
        medium, then crisp — clipped to the squircle so the bloom falls only inward,
        matching the device's clean outline. The color derives from the accent
        tokens, so a token override recolors the glow. */
@@ -889,6 +889,7 @@ export class EcoseeHomeScreen extends LitElement {
   private _equipLabel(equipment: EquipmentStatus): string {
     if (equipment === 'cooling') return 'Cooling';
     if (equipment === 'heating') return 'Heating';
+    if (equipment === 'fan') return 'Fan Running';
     return 'Idle';
   }
 }
