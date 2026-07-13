@@ -75,9 +75,7 @@ touched.
   fallback would have recolored roughly half the Skin (everything that used to be
   cyan) even for a dashboard that never sets a theme variable at all, or whose
   theme color fails the contrast check — a visible regression unrelated to
-  theming. `--ecosee-text-muted` (fallback: the old `--ecosee-muted` gray) is the
-  analogous single token for secondary/muted copy, since every prior muted-text
-  call site already shared the same fallback.
+  theming.
 
 ## Consequences
 
@@ -114,3 +112,35 @@ touched.
   before. Only the copy that never carried device meaning in its color now also
   respects the one dashboard-level signal (light vs. dark, or a custom theme's
   text color) that was previously invisible to the Card.
+
+## Correction: WCAG AAA, not AA
+
+The initial implementation gated adoption on WCAG AA (4.5:1). A mid-gray
+`--secondary-text-color` cleared that comfortably but still read as genuinely hard
+to read in practice (owner report with a screenshot: the Weather Overlay's
+"Overnight / Morning / Afternoon" period labels and its "as of" subtitle). This
+Skin's type is thin (weight 300-400 throughout, sometimes lighter), which needs
+more contrast than AA's normal-weight assumption to stay comfortable at the same
+ratio. `MIN_TEXT_CONTRAST` (`styles/theme-contrast.ts`) is now 7 (WCAG AAA).
+
+## Correction: muted/secondary text mirrors primary text, not `--secondary-text-color`
+
+Raising the bar to AAA still didn't fully resolve the report: once the owner could
+compare the two side by side, the request sharpened to "the text is clearly white,
+but the subtext I would call it gray" — a real Home Assistant theme's own
+`--secondary-text-color` reliably reads as visibly dimmer next to its
+`--primary-text-color`, by design (that's the whole point of the pairing on a
+normal dashboard). This Skin's readable copy — hints, captions, "as of"
+subtitles — never had that hierarchy in mind: `--ecosee-muted` and
+`--ecosee-accent` were simply two different fixed literals with no more meaning
+than "what the original design happened to use where," not a deliberate
+primary/secondary reading order.
+
+`--ecosee-text-muted` (tokens.ts) now reads `var(--ecosee-text)` instead of its
+own fixed literal, and `<ecosee-card>._syncThemeText()` no longer probes
+`--secondary-text-color` at all — there is exactly one adopted theme color
+(`--primary-text-color`), and every text role that isn't one of the fixed/device
+exceptions renders it identically. `--ecosee-muted` itself (the non-text token —
+borders, dividers, standalone icon glyphs) is untouched; the "subtext" complaint
+was specifically about *readable copy* looking dimmer than its neighbor, not about
+chrome wanting more visual weight.

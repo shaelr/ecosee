@@ -33,21 +33,27 @@ export const tokens = css`
        the big current-temperature number, the Heat/Cool amber/blue badges, the
        top-row device icons, and the Standby Screen's white-on-black idle display,
        which stay the Skin's own fixed colors regardless of theme (device-accurate
-       or contrast-critical, not just "text"). <ecosee-card> overrides all three
-       inline with the dashboard's own --primary-text-color (--ecosee-text /
-       --ecosee-text-accent alike) or --secondary-text-color (--ecosee-text-muted)
-       whenever that theme color clears WCAG AA against the canvas actually in play
-       (styles/theme-contrast.ts) — a light HA theme's near-black text would
-       otherwise land on this Skin's near-black canvas and vanish. Two separate
-       "primary text" tokens, not one, exist purely so each call site's fallback (no
-       theme color qualifies, or outside Home Assistant) reproduces its OWN previous
-       fixed color exactly — --ecosee-text for former --ecosee-fg spots (off-white),
-       --ecosee-text-accent for former --ecosee-accent-as-text spots (cyan) — rather
-       than collapsing every fallback to one shared color and visibly recoloring half
-       the Skin even for dashboards that never override either. */
+       or contrast-critical, not just "text"). <ecosee-card> overrides --ecosee-text
+       (and --ecosee-text-accent alike) inline with the dashboard's own
+       --primary-text-color whenever that theme color clears WCAG AAA against the
+       canvas actually in play (styles/theme-contrast.ts) — a light HA theme's
+       near-black text would otherwise land on this Skin's near-black canvas and
+       vanish. Two "primary text" tokens, not one, exist purely so each call site's
+       fallback (no theme color qualifies, or outside Home Assistant) reproduces its
+       OWN previous fixed color exactly — --ecosee-text for former --ecosee-fg spots
+       (off-white), --ecosee-text-accent for former --ecosee-accent-as-text spots
+       (cyan) — rather than collapsing every fallback to one shared color and
+       visibly recoloring half the Skin even for dashboards that never override
+       either. --ecosee-text-muted deliberately mirrors --ecosee-text (not a
+       separately-adopted --secondary-text-color) — an owner report found HA's own
+       secondary/muted theme color, even past the AAA bar, still read as visibly
+       dimmer "subtext" next to the crisp primary text beside it; muted/secondary
+       readable copy (hints, captions, "as of" subtitles) is not a place this Skin
+       wants a dimmer tier at all, only borders/dividers/icons keep that role
+       (--ecosee-muted below, untouched). */
     --ecosee-text: #d4eff9;
     --ecosee-text-accent: #62cfe9;
-    --ecosee-text-muted: #6f96a3;
+    --ecosee-text-muted: var(--ecosee-text);
     /* The three top-row Home Screen affordances (weather / System Mode / menu)
        render white, not the cyan accent — the device colors this control row white
        (issue #37). Overridable per dashboard like every other Skin color. */

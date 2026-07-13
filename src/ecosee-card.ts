@@ -390,38 +390,34 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     this._setOrClear('--ecosee-rendered-size', nextSize);
   }
 
-  /** Adopts the dashboard's own `--primary-text-color` / `--secondary-text-color`
-   *  for the Skin's general text (`--ecosee-text` and `--ecosee-text-accent` alike,
-   *  `--ecosee-text-muted`) whenever each clears WCAG AA against the canvas actually
-   *  in play — never blindly, since those theme variables are calibrated for the
-   *  dashboard's OWN background, and a light theme's near-black text would otherwise
-   *  land on this Skin's near-black canvas and vanish (styles/theme-contrast.ts).
-   *  `--ecosee-text` and `--ecosee-text-accent` both take the SAME primary-text
-   *  value when it qualifies — they exist as two tokens only so their FALLBACKS
-   *  (declared in tokens.ts) can differ per call site when no theme color qualifies.
-   *  Re-run whenever `_config` changes (`background_color` is the canvas the check
-   *  runs against) and once more after first layout, since `setConfig` can land
-   *  before the host is connected — before that, `getComputedStyle` can't see the
-   *  dashboard's inherited theme variables yet. A `background_color: 'transparent'`
-   *  canvas has nothing of the Skin's own left to contrast against — what's actually
-   *  behind the card is the dashboard's own surface, which the theme text color is
-   *  by definition calibrated for — so the check is skipped and the theme color is
-   *  trusted outright. */
+  /** Adopts the dashboard's own `--primary-text-color` for the Skin's general text
+   *  (`--ecosee-text` and `--ecosee-text-accent` alike — see tokens.ts for why two)
+   *  whenever it clears WCAG AAA against the canvas actually in play — never
+   *  blindly, since that theme variable is calibrated for the dashboard's OWN
+   *  background, and a light theme's near-black text would otherwise land on this
+   *  Skin's near-black canvas and vanish (styles/theme-contrast.ts). Deliberately
+   *  does NOT separately probe `--secondary-text-color` for `--ecosee-text-muted`
+   *  (tokens.ts mirrors it from `--ecosee-text` instead) — an owner report found
+   *  HA's own muted/secondary theme color, even past the AAA bar, still read as
+   *  visibly dimmer "subtext" next to this same text, which isn't a distinction
+   *  this Skin's readable copy wants. Re-run whenever `_config` changes
+   *  (`background_color` is the canvas the check runs against) and once more after
+   *  first layout, since `setConfig` can land before the host is connected — before
+   *  that, `getComputedStyle` can't see the dashboard's inherited theme variables
+   *  yet. A `background_color: 'transparent'` canvas has nothing of the Skin's own
+   *  left to contrast against — what's actually behind the card is the dashboard's
+   *  own surface, which the theme text color is by definition calibrated for — so
+   *  the check is skipped and the theme color is trusted outright. */
   private _syncThemeText(): void {
     const styles = getComputedStyle(this);
     const themeText = styles.getPropertyValue('--primary-text-color').trim();
-    const themeMuted = styles.getPropertyValue('--secondary-text-color').trim();
     const canvas = this._config?.background_color?.trim() || '#0a0d10';
     const transparent = canvas.toLowerCase() === 'transparent';
     const text = transparent
       ? themeText
       : (pickThemeTextColor(themeText, canvas, resolveCssColor) ?? '');
-    const muted = transparent
-      ? themeMuted
-      : (pickThemeTextColor(themeMuted, canvas, resolveCssColor) ?? '');
     this._setOrClear('--ecosee-text', text);
     this._setOrClear('--ecosee-text-accent', text);
-    this._setOrClear('--ecosee-text-muted', muted);
   }
 
   private _setOrClear(prop: string, value: string): void {
