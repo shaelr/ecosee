@@ -276,12 +276,30 @@ export class EcoseeHomeScreen extends LitElement {
         color: var(--ecosee-top-row, #ffffff);
       }
 
-      /* Centered cluster: humidity above the dominant number, setpoint ovals below.
-       The bottom inset shifts the centering axis up so the whole cluster sits in the
-       upper-middle of the screen, matching the Home Screen reference photos (the
-       humidity line, big number, and oval(s) all sit noticeably above true center in
-       the Heat/Cool hold and System Off shots — issue #55) rather than floating at
-       dead center. */
+      /* .body spans the full height below the top row, spreading its two zones —
+       the main cluster and the optional AQI/UV foot row — across it (matching how
+       Menu screens spread header/list/tab-bar over the full square, issue: the
+       Home Screen was clustering everything in the upper-middle and leaving the
+       whole lower portion of the card empty whenever no foot row was configured).
+       .cluster (flex: 1) is what actually centers the humidity/number/setpoints —
+       within whatever space remains once .foot claims its own room, or the full
+       body height when there's no foot — so it fills the space actually available
+       rather than a size hard-coded to leave room for a foot row whether or not
+       one exists. This supersedes issue #55's padding-bottom upward bias with a
+       structural one instead: the cluster now centers in its own real remaining
+       space, and a configured foot row (or the Resume Schedule pill, itself part
+       of .cluster) still reads as sitting above true center simply because it
+       shares .cluster's box with the temp/setpoints above it. gap is small
+       (not 3cqw, matching .cluster's own) because it only ever separates
+       .cluster from .foot, and the tallest realistic stack — Resume Schedule
+       reserved AND both AQI/UV foot gauges on at once — needs the room:
+       .cluster can't shrink below its own content's height (fixed font sizes,
+       not flexible), so unlike padding this gap is the one lever that actually
+       comes out of space .foot would otherwise claim, not space nothing
+       needs. Caught via Playwright screenshotting that exact combination
+       (not just the common bare-thermostat case this whole change was about)
+       overflowing the fixed-height .screen and clipping against its own
+       overflow: hidden. */
       .body {
         position: relative;
         z-index: 1;
@@ -289,9 +307,16 @@ export class EcoseeHomeScreen extends LitElement {
         display: flex;
         flex-direction: column;
         align-items: center;
+        gap: 1cqw;
+      }
+      .cluster {
+        width: 100%;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         justify-content: center;
-        gap: 3cqw;
-        padding-bottom: 18cqw;
+        gap: 1.6cqw;
       }
 
       /* Thin (weight 300) numeral readout — fixed white, neither theme-following
@@ -599,33 +624,39 @@ export class EcoseeHomeScreen extends LitElement {
         }
         ${this._renderTop(view)}
         <div class="body">
-          ${
-            view.available
-              ? html`
-                  ${
-                    view.humidity !== null
-                      ? html`<div class="hum">
-                          <span class="glyph">${icons.humidity}</span>${Math.round(view.humidity)}%
-                        </div>`
-                      : nothing
-                  }
-                  <button
-                    class="temp"
-                    aria-label="Adjust temperature"
-                    @click=${() => this._emit('temperature')}
-                  >
-                    ${formatTemp(view.currentTemp, view.unit)}
-                  </button>
-                  ${this._renderSetpoints(view)} ${this._renderResume(view)}
-                `
-              : html`<div class="unavailable">${view.name} unavailable</div>`
-          }
+          <div class="cluster">
+            ${
+              view.available
+                ? html`
+                    ${
+                      view.humidity !== null
+                        ? html`<div class="hum">
+                            <span class="glyph">${icons.humidity}</span>${Math.round(
+                              view.humidity,
+                            )}%
+                          </div>`
+                        : nothing
+                    }
+                    <button
+                      class="temp"
+                      aria-label="Adjust temperature"
+                      @click=${() => this._emit('temperature')}
+                    >
+                      ${formatTemp(view.currentTemp, view.unit)}
+                    </button>
+                    ${this._renderSetpoints(view)} ${this._renderResume(view)}
+                  `
+                : html`<div class="unavailable">${view.name} unavailable</div>`
+            }
+          </div>
           ${
             // The optional air-quality element and UV-index gauge share one
             // count-aware foot row: side by side when both are present, a single
             // centered indicator when only one is (issue #75). Both are backed by
             // their own entities, independent of the bound climate entity, so the
-            // row sits below either the live readout or the unavailable shell.
+            // row sits below either the live readout or the unavailable shell —
+            // outside .cluster so it anchors near the bottom of the screen rather
+            // than crowding into the same centered group.
             this._renderFoot(view)
           }
         </div>
