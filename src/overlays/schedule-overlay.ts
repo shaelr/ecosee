@@ -50,7 +50,10 @@ export class EcoseeScheduleOverlay extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: calc(5 * var(--ecosee-u, 4.6px));
-      padding: calc(11 * var(--ecosee-u, 4.6px)) calc(7 * var(--ecosee-u, 4.6px))
+      /* Top padding lines the title's own vertical center up with the shell's ✕
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top) —
+         the same offset .add (below) already mirrors on the opposite corner. */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(7 * var(--ecosee-u, 4.6px))
         var(--ecosee-tabbar-inset, calc(7 * var(--ecosee-u, 4.6px)));
     }
 

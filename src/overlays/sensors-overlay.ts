@@ -47,10 +47,12 @@ export class EcoseeSensorsOverlay extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: calc(5 * var(--ecosee-u, 4.6px));
-      /* Reserve the tab bar's zone at the bottom so the scrolling list can't hide its
+      /* Top padding lines the title's own vertical center up with the shell's ✕
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
+         Reserve the tab bar's zone at the bottom so the scrolling list can't hide its
          last card behind it. The size is the shell's --ecosee-tabbar-inset (it owns
          the bar's geometry); this falls back to the normal 8u when no bar is present. */
-      padding: calc(13 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
         var(--ecosee-tabbar-inset, calc(8 * var(--ecosee-u, 4.6px)));
     }
 

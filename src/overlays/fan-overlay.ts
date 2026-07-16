@@ -64,14 +64,16 @@ export class EcoseeFanOverlay extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: calc(4.5 * var(--ecosee-u, 4.6px));
-      /* Reserve the tab bar's zone at the bottom so the runtime dropdown can't hide
+      /* Top padding lines the title's own vertical center up with the shell's ✕
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
+         Reserve the tab bar's zone at the bottom so the runtime dropdown can't hide
          behind it — matches sensors-overlay.ts's --ecosee-tabbar-inset pattern. This
          screen stacks more content (title + toggle + a 3-line runtime block) than
          Sensors does, so on top of the shared inset it adds its own 3u cushion —
          the shared inset alone left only ~2u of headroom against this screen's
          actual content height, which real font metrics (vs. this file's own dev-time
          measurements) ate into. */
-      padding: calc(13 * var(--ecosee-u, 4.6px)) calc(9 * var(--ecosee-u, 4.6px))
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(9 * var(--ecosee-u, 4.6px))
         calc(
           var(--ecosee-tabbar-inset, calc(9 * var(--ecosee-u, 4.6px))) + 3 * var(--ecosee-u, 4.6px)
         );

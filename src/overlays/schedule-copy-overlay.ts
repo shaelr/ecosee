@@ -46,7 +46,9 @@ export class EcoseeScheduleCopyOverlay extends LitElement {
       align-items: center;
       justify-content: flex-start;
       gap: calc(5 * var(--ecosee-u, 4.6px));
-      padding: calc(13 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+      /* Top padding lines the title's own vertical center up with the shell's ✕
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top). */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
         calc(9 * var(--ecosee-u, 4.6px));
       text-align: center;
     }

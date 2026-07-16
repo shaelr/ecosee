@@ -58,7 +58,11 @@ export class EcoseeSystemOverlay extends LitElement {
          still matters when the two selectors wrap to stacked rows (a long custom
          Comfort Setting value), which runs the cluster tall. */
       gap: calc(6 * var(--ecosee-u, 4.6px));
-      padding: calc(12 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+      /* Top padding lines the title's own vertical center up with the shell's ✕
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top),
+         so the two read as one inline row instead of the title sitting visibly
+         lower than the close affordance beside it. */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
         calc(10 * var(--ecosee-u, 4.6px));
       text-align: center;
     }
