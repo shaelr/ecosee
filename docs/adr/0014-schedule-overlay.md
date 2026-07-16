@@ -196,7 +196,10 @@ actually Monday, fixed upstream in `ha-ecobee`, not in this Card).
   unchanged, which is why a synthetic Playwright rect check (short labels, no
   overflow in that specific run) didn't reproduce it. Fixed by tightening the
   screen's vertical rhythm (less padding, smaller gaps, smaller title/subtitle
-  type) for headroom, and — the more load-bearing part — giving `.fields` the
-  same `max-height` + `overflow-y: auto` safety net as `.days` above, so a
-  longer comfort-setting label or different font metrics scroll the field list
-  internally instead of ever pushing `.confirm` past the box again.
+  type) for headroom. A first pass also gave `.fields` the same `max-height` +
+  `overflow-y: auto` scroll treatment as `.days` above, matching the
+  day-checklist fix — but a follow-up screenshot showed real spare room below
+  the fields with the tightened spacing alone, and the `max-height` was
+  clipping the last field row's own pill border for no reason, so it was
+  removed; three rows is small enough that the tightened fixed spacing is
+  margin enough on its own, unlike the six-row day checklist.
