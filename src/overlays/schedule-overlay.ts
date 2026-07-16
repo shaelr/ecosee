@@ -14,13 +14,14 @@ import { icons } from '../icons';
  * "Until next day" label after the last block.
  *
  * Purely presentational: it renders the already-degraded ScheduleModel and emits
- * `ecosee-schedule-day-select` (day strip tap) and `ecosee-schedule-block-select`
- * (tapping an editable block) for the host to route — day selection re-fetches
- * that day's events; a block selection pushes the Start Time picker
- * (hub-and-picker, matching how the System sub-screen routes to its pickers).
- * A block that continues from the previous day has no in-day predecessor to
- * shrink/merge into (schedule.ts's module doc) and so isn't independently
- * editable here — rendered without a chevron or tap handler.
+ * `ecosee-schedule-day-select` (day strip tap), `ecosee-schedule-block-select`
+ * (tapping an editable block), `ecosee-schedule-add-block-open` (the "+"), and
+ * `ecosee-schedule-copy-open` ("Copy schedule to another day") for the host to
+ * route — day selection re-fetches that day's events; the rest push their own
+ * picker (hub-and-picker, matching how the System sub-screen routes to its
+ * pickers). A block that continues from the previous day has no in-day
+ * predecessor to shrink/merge into (schedule.ts's module doc) and so isn't
+ * independently editable here — rendered without a chevron or tap handler.
  */
 @customElement('ecosee-schedule-overlay')
 export class EcoseeScheduleOverlay extends LitElement {
@@ -39,6 +40,7 @@ export class EcoseeScheduleOverlay extends LitElement {
        breadcrumb-then-list shape). Inline-size container so everything scales with
        cqw off the definite width, with the root's own padding/gap in the fixed unit (calc · --ecosee-u) so they can't couple to the viewport, the real bug — a container-type element resolves its OWN cqw against the viewport (issue #35). */
     .schedule {
+      position: relative;
       container-type: inline-size;
       box-sizing: border-box;
       width: var(--ecosee-base-size, 460px);
@@ -58,6 +60,25 @@ export class EcoseeScheduleOverlay extends LitElement {
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
+    }
+
+    /* "+" — add a new block. Mirrors the shell's own ✕ (top-left) at the
+       opposite corner: same fixed unit, same size, so the two read as a
+       matched pair of header affordances (reference screen: "< Schedule +"). */
+    .add {
+      appearance: none;
+      background: none;
+      border: none;
+      position: absolute;
+      top: calc(9 * var(--ecosee-u, 4.6px));
+      right: calc(9 * var(--ecosee-u, 4.6px));
+      width: calc(9 * var(--ecosee-u, 4.6px));
+      height: calc(9 * var(--ecosee-u, 4.6px));
+      padding: calc(1.4 * var(--ecosee-u, 4.6px));
+      color: var(--ecosee-accent, #62cfe9);
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 2;
     }
 
     /* The Sunday-first day strip. Opts back into pointer events (the shell makes
@@ -172,6 +193,20 @@ export class EcoseeScheduleOverlay extends LitElement {
       border-radius: 50%;
       color: var(--ecosee-accent, #62cfe9);
     }
+
+    .copy {
+      appearance: none;
+      background: none;
+      border: none;
+      margin-top: auto;
+      padding: 2cqw;
+      font: inherit;
+      font-size: 4.6cqw;
+      font-weight: 600;
+      color: var(--ecosee-accent, #62cfe9);
+      cursor: pointer;
+      pointer-events: auto;
+    }
   `;
 
   private _selectDay(day: ScheduleDayOption): void {
@@ -192,6 +227,18 @@ export class EcoseeScheduleOverlay extends LitElement {
         bubbles: true,
         composed: true,
       }),
+    );
+  }
+
+  private _openAddBlock(): void {
+    this.dispatchEvent(
+      new CustomEvent('ecosee-schedule-add-block-open', { bubbles: true, composed: true }),
+    );
+  }
+
+  private _openCopy(): void {
+    this.dispatchEvent(
+      new CustomEvent('ecosee-schedule-copy-open', { bubbles: true, composed: true }),
     );
   }
 
@@ -225,6 +272,9 @@ export class EcoseeScheduleOverlay extends LitElement {
     if (!model || !model.available) return nothing;
     return html`
       <div class="schedule">
+        <button class="add" aria-label="Add to schedule" @click=${this._openAddBlock}>
+          ${icons.plus}
+        </button>
         <h2 class="title">Schedule</h2>
         <nav class="days" aria-label="Day of week">
           ${model.days.map(
@@ -251,6 +301,7 @@ export class EcoseeScheduleOverlay extends LitElement {
                 )
           }
         </div>
+        <button class="copy" @click=${this._openCopy}>Copy schedule to another day</button>
       </div>
     `;
   }

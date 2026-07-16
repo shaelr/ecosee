@@ -1,4 +1,4 @@
-# Schedule Overlay (Stage 1: view, move start time, remove)
+# Schedule Overlay
 
 **Status: Accepted.** Origin: owner request, following up on `min_gap_entity`
 (sourcing the Auto deadband from an ecobee integration's own sensor): "the
@@ -146,3 +146,43 @@ enough that `parseScheduleResponse` is structurally the same function as
   previously-viewed day is more useful than always snapping back to today, and
   showing the last-fetched blocks immediately on reopen (rather than a blank
   "Loading…" flash) matches how little this data actually changes day to day.
+
+## Stage 2: add a block, copy a day
+
+The two pieces Stage 1 deliberately deferred, added once Stage 1 was verified
+working end-to-end (including catching and fixing an unrelated, pre-existing
+`ha-ecobee` bug along the way: `SCHEDULE_WEEKDAY_TO_ECOBEE_DAY_INDEX_OFFSET`
+assumed `program.schedule[0]` was Sunday, per that code's own "unverified"
+comment; a Thursday edit landing on Friday on the real device confirmed it's
+actually Monday, fixed upstream in `ha-ecobee`, not in this Card).
+
+- **Add a block** (`schedule-add-block-overlay.ts`, the "+"): a Comfort
+  Setting selector plus start/end time fields, confirming into
+  `schedule.ts`'s `addBlockCall` — a single `calendar.create_event` call
+  painting `[start, end)` with the chosen comfort setting. Unlike
+  `moveBlockStart`/`removeBlock`, `create_event` **is** an ordinary service
+  (see the module doc's `update_event`-has-no-service-equivalent finding), so
+  this reuses `hass.callService` directly rather than the websocket path.
+  Deliberately same-day only (`endMinutes` must exceed `startMinutes`) —
+  matching the two plain time fields, and keeping this a single screen rather
+  than needing its own day picker on top of Schedule's.
+- **Copy schedule to another day** (`schedule-copy-overlay.ts`): a multi-select
+  checklist of the other six days (the source day is excluded — copying onto
+  itself is a no-op with nothing to confirm), confirming into `copyDayCalls` —
+  one `create_event` per source block, per checked target day. Blocks are
+  contiguous and gap-free by construction (every minute of a day belongs to
+  some block), so painting all of a day's blocks onto another day fully
+  overwrites it with no separate "clear the day" step, the same paint-only
+  model every Schedule write in this ADR uses. Each block's minute offsets are
+  re-anchored to the *target* day's own midnight — copying never needs to
+  reason about the source day's actual calendar date, only its shape.
+- The six-row day checklist doesn't fit the remaining canvas height alongside
+  the title/subtitle/confirm button — caught visually (a Playwright screenshot
+  showed Friday/Saturday cut off below the frame) after the interaction itself
+  tested fine, because a scripted test can click a hidden element that a real
+  finger can't reach. `.days` scrolls internally now (`max-height` +
+  `overflow-y: auto`, matching `.agenda`'s own pattern in
+  `schedule-overlay.ts`), with `flex: none` on each row so the scrolling flex
+  column can't compress them instead of scrolling — the same lesson ADR-0013's
+  and prior sessions' sizing fixes keep re-teaching: a script driving the DOM
+  directly proves the *event wiring* works, not that the *layout* does.

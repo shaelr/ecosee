@@ -326,3 +326,62 @@ export function removeBlock(
     },
   };
 }
+
+/** Build the `calendar.create_event` call that adds a new block to the selected
+ *  day, painting `[startMinutes, endMinutes)` with `comfortSetting` — an
+ *  ordinary service call, unlike `moveBlockStart`/`removeBlock`'s websocket
+ *  write (`create_event`, unlike `update_event`, IS a plain service — see
+ *  module doc). Whatever block(s) currently occupy that range are implicitly
+ *  trimmed to make room, the same paint-repaints-only-its-own-footprint model
+ *  every write in this module uses — no separate "make space" step. `null` for
+ *  an empty or inverted range (`endMinutes <= startMinutes`): a new block is
+ *  same-day here, matching the Add Block screen's own two same-day time
+ *  fields — it can't wrap past midnight the way an existing block can. */
+export function addBlockCall(
+  entityId: string,
+  comfortSetting: string,
+  start: Date,
+  startMinutes: number,
+  endMinutes: number,
+): ServiceCall | null {
+  if (endMinutes <= startMinutes) return null;
+  return {
+    domain: 'calendar',
+    service: 'create_event',
+    data: {
+      entity_id: entityId,
+      summary: comfortSetting,
+      start_date_time: fromDayMinutes(start, startMinutes),
+      end_date_time: fromDayMinutes(start, endMinutes),
+    },
+  };
+}
+
+/** Build the `calendar.create_event` calls that copy the selected day's whole
+ *  arrangement onto `targetStart` — one call per source block, each painting
+ *  its own `[start, end)` on the target day with its own comfort setting.
+ *  Blocks are contiguous and gap-free by construction (every minute of a day
+ *  belongs to some block), so painting all of them fully overwrites whatever
+ *  the target day previously held — no separate "clear the day" step, the same
+ *  paint-only model every write in this module uses. Each block's minute
+ *  offsets are reapplied relative to `targetStart`'s own midnight, not the
+ *  source day's actual date — copying never needs to know or preserve
+ *  cross-day continuity (`continuesFromPreviousDay` / `continuesIntoNextDay`),
+ *  since a block's `[startMinutes, endMinutes)` is already expressed purely in
+ *  terms of its own day. */
+export function copyDayCalls(
+  entityId: string,
+  sourceBlocks: ScheduleBlock[],
+  targetStart: Date,
+): ServiceCall[] {
+  return sourceBlocks.map((block) => ({
+    domain: 'calendar',
+    service: 'create_event',
+    data: {
+      entity_id: entityId,
+      summary: block.comfortSetting,
+      start_date_time: fromDayMinutes(targetStart, block.startMinutes),
+      end_date_time: fromDayMinutes(targetStart, block.endMinutes),
+    },
+  }));
+}

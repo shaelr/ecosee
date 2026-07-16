@@ -8,6 +8,8 @@ import {
   snapToSlot,
   moveBlockStart,
   removeBlock,
+  addBlockCall,
+  copyDayCalls,
   dayStart,
   type RawScheduleEvent,
   type ScheduleBlock,
@@ -383,5 +385,86 @@ describe('removeBlock', () => {
       { ...blocks[1], continuesFromPreviousDay: true },
     ];
     expect(removeBlock('calendar.t_schedule', withLeadIn, 1, THU)).toBeNull();
+  });
+});
+
+describe('addBlockCall', () => {
+  it('builds a calendar.create_event call painting the chosen range', () => {
+    const call = addBlockCall('calendar.t_schedule', 'Away', THU, 540, 1020); // 09:00-17:00
+    expect(call).toEqual({
+      domain: 'calendar',
+      service: 'create_event',
+      data: {
+        entity_id: 'calendar.t_schedule',
+        summary: 'Away',
+        start_date_time: expect.stringContaining('T09:00:00'),
+        end_date_time: expect.stringContaining('T17:00:00'),
+      },
+    });
+  });
+
+  it('is null when the end does not come after the start', () => {
+    expect(addBlockCall('calendar.t_schedule', 'Away', THU, 540, 540)).toBeNull();
+    expect(addBlockCall('calendar.t_schedule', 'Away', THU, 540, 480)).toBeNull();
+  });
+});
+
+describe('copyDayCalls', () => {
+  const sourceBlocks: ScheduleBlock[] = [
+    {
+      uid: 'sleep-1',
+      comfortSetting: 'Sleep',
+      icon: 'sleep',
+      startMinutes: 0,
+      endMinutes: 390,
+      continuesFromPreviousDay: true,
+      continuesIntoNextDay: false,
+    },
+    {
+      uid: 'home-1',
+      comfortSetting: 'Home',
+      icon: 'home',
+      startMinutes: 390,
+      endMinutes: 1380,
+      continuesFromPreviousDay: false,
+      continuesIntoNextDay: false,
+    },
+    {
+      uid: 'sleep-2',
+      comfortSetting: 'Sleep',
+      icon: 'sleep',
+      startMinutes: 1380,
+      endMinutes: 1440,
+      continuesFromPreviousDay: false,
+      continuesIntoNextDay: true,
+    },
+  ];
+  // A different day, e.g. Friday — the calendar day one after THU.
+  const FRI = new Date(THU.getTime() + 86400000);
+
+  it('builds one create_event call per source block, dated on the target day', () => {
+    const calls = copyDayCalls('calendar.t_schedule', sourceBlocks, FRI);
+    expect(calls).toHaveLength(3);
+    expect(calls.map((c) => c.data.summary)).toEqual(['Sleep', 'Home', 'Sleep']);
+    expect(calls[1]).toEqual({
+      domain: 'calendar',
+      service: 'create_event',
+      data: {
+        entity_id: 'calendar.t_schedule',
+        summary: 'Home',
+        start_date_time: expect.stringContaining('T06:30:00'),
+        end_date_time: expect.stringContaining('T23:00:00'),
+      },
+    });
+  });
+
+  it('re-derives each block’s date from the target day, not the source day', () => {
+    const calls = copyDayCalls('calendar.t_schedule', sourceBlocks, FRI);
+    const friDateStr = `${FRI.getFullYear()}-${String(FRI.getMonth() + 1).padStart(2, '0')}-${String(FRI.getDate()).padStart(2, '0')}`;
+    expect(calls[1].data.start_date_time).toContain(friDateStr);
+  });
+
+  it('returns an empty array for an empty source day', () => {
+    expect(copyDayCalls('calendar.t_schedule', [], FRI)).toEqual([]);
   });
 });

@@ -32,6 +32,9 @@ import {
   parseScheduleResponse,
   moveBlockStart,
   removeBlock,
+  addBlockCall,
+  copyDayCalls,
+  scheduleDays,
   dayStart,
   dayName,
   type RawScheduleEvent,
@@ -58,6 +61,8 @@ import './overlays/sensors-overlay';
 import './overlays/weather-overlay';
 import './overlays/schedule-overlay';
 import './overlays/schedule-start-time-overlay';
+import './overlays/schedule-add-block-overlay';
+import './overlays/schedule-copy-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
@@ -65,9 +70,10 @@ import './editor/ecosee-card-editor';
  *  System sub-screen (the hub holding the System Mode + Comfort Setting selectors);
  *  `system-mode` / `comfort-setting` are the focused pickers it routes to; `fan`,
  *  `sensors`, and `schedule` are the rest of the Main Menu sections, reached via
- *  the gear and switched between with the bottom tab bar. `schedule-start-time` is
- *  Schedule's own picker, reached the same way `system-mode`/`comfort-setting` are
- *  reached from `system` (ADR-0014). */
+ *  the gear and switched between with the bottom tab bar. `schedule-start-time`,
+ *  `schedule-add-block`, and `schedule-copy` are Schedule's own pickers, reached
+ *  the same way `system-mode`/`comfort-setting` are reached from `system`
+ *  (ADR-0014). */
 type OverlayKind =
   | 'temperature'
   | 'system-mode'
@@ -77,7 +83,9 @@ type OverlayKind =
   | 'sensors'
   | 'weather'
   | 'schedule'
-  | 'schedule-start-time';
+  | 'schedule-start-time'
+  | 'schedule-add-block'
+  | 'schedule-copy';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -305,6 +313,26 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           ></ecosee-schedule-start-time-overlay>
         `;
       },
+    },
+    'schedule-add-block': {
+      available: (hass, config) => this._overlays.schedule.available(hass, config),
+      render: (hass, config) => html`
+        <ecosee-schedule-add-block-overlay
+          .comfortSettings=${toComfortSettingModel(hass, config).options}
+          .dayLabel=${dayName(this._scheduleDayIndex)}
+        ></ecosee-schedule-add-block-overlay>
+      `,
+    },
+    'schedule-copy': {
+      available: (hass, config) => this._overlays.schedule.available(hass, config),
+      render: () => html`
+        <ecosee-schedule-copy-overlay
+          .sourceDayLabel=${dayName(this._scheduleDayIndex)}
+          .days=${scheduleDays(this._scheduleDayIndex)
+            .filter((day) => !day.selected)
+            .map((day) => ({ index: day.index, label: dayName(day.index) }))}
+        ></ecosee-schedule-copy-overlay>
+      `,
     },
   };
 
@@ -667,6 +695,10 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         @ecosee-schedule-block-select=${this._onScheduleBlockSelect}
         @ecosee-schedule-time-confirm=${this._onScheduleTimeConfirm}
         @ecosee-schedule-block-remove=${this._onScheduleBlockRemove}
+        @ecosee-schedule-add-block-open=${this._onScheduleAddBlockOpen}
+        @ecosee-schedule-copy-open=${this._onScheduleCopyOpen}
+        @ecosee-schedule-add-block-confirm=${this._onScheduleAddBlockConfirm}
+        @ecosee-schedule-copy-confirm=${this._onScheduleCopyConfirm}
         @pointerdown=${this._onOverlayActivity}
         @pointermove=${this._onOverlayActivity}
         @keydown=${this._onOverlayActivity}
@@ -845,6 +877,70 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     const blocks = toScheduleBlocks(this._scheduleEvents, day, this._config);
     const message = build(entityId, blocks, index, day);
     if (message) await this._sendScheduleUpdate(message);
+    await this._loadSchedule();
+    this._closeOverlay();
+  }
+
+  /** Open the "+" Add to Schedule picker (hub-and-picker, mirroring
+   *  `_onScheduleBlockSelect`). */
+  private _onScheduleAddBlockOpen = (): void => {
+    this._open('schedule-add-block', 'push');
+  };
+
+  /** Open the "Copy schedule to another day" picker. */
+  private _onScheduleCopyOpen = (): void => {
+    this._open('schedule-copy', 'push');
+  };
+
+  /** Apply the Add to Schedule picker's confirmation: build the
+   *  `calendar.create_event` call (schedule.ts's `addBlockCall` — an ordinary
+   *  service, unlike the move/remove writes), send it, re-fetch the day, and
+   *  pop back to the Schedule sub-screen. */
+  private _onScheduleAddBlockConfirm = (
+    event: CustomEvent<{ comfortSetting: string; startMinutes: number; endMinutes: number }>,
+  ): void => {
+    void this._runScheduleTask(async (entityId) => {
+      const day = this._scheduleSelectedDate();
+      const { comfortSetting, startMinutes, endMinutes } = event.detail;
+      const call = addBlockCall(entityId, comfortSetting, day, startMinutes, endMinutes);
+      if (call) await this.hass?.callService(call.domain, call.service, call.data);
+    });
+  };
+
+  /** Apply the Copy picker's confirmation: paint the selected day's whole
+   *  arrangement onto every checked target day (schedule.ts's `copyDayCalls`,
+   *  one `calendar.create_event` per source block per target day — an
+   *  ordinary service, like `addBlockCall`), then re-fetch and pop back to the
+   *  Schedule sub-screen. */
+  private _onScheduleCopyConfirm = (event: CustomEvent<{ targetDayIndices: number[] }>): void => {
+    void this._runScheduleTask(async (entityId, blocks) => {
+      const weekStart = dayStart(
+        new Date(this._scheduleSelectedDate().getTime() - this._scheduleDayIndex * 86400000),
+      );
+      for (const targetIndex of event.detail.targetDayIndices) {
+        const targetDay = new Date(weekStart.getTime() + targetIndex * 86400000);
+        for (const call of copyDayCalls(entityId, blocks, targetDay)) {
+          await this.hass?.callService(call.domain, call.service, call.data);
+        }
+      }
+    });
+  };
+
+  /** Shared shape for the Add Block / Copy confirmations: resolve the schedule
+   *  entity and the selected day's current blocks, run the write(s), re-fetch
+   *  the selected day (a copy/add may have touched it), and pop back to the
+   *  Schedule sub-screen. */
+  private async _runScheduleTask(
+    run: (entityId: string, blocks: ReturnType<typeof toScheduleBlocks>) => Promise<void>,
+  ): Promise<void> {
+    const entityId = this._config?.schedule_entity;
+    if (!this.hass || !this._config || !entityId) return;
+    const blocks = toScheduleBlocks(
+      this._scheduleEvents,
+      this._scheduleSelectedDate(),
+      this._config,
+    );
+    await run(entityId, blocks);
     await this._loadSchedule();
     this._closeOverlay();
   }

@@ -288,9 +288,12 @@ whichever comfort setting precedes it). A block that was already active at
 midnight has no earlier block on that day to adjust against, so it's shown but
 not editable.
 
-Adding a brand-new block and copying a day's schedule to another day aren't in
-yet — this first pass covers viewing the schedule and adjusting the transitions
-already on it.
+The **+** in the top-right adds a new block: pick a Comfort Setting and a
+start/end time, and it's painted onto the selected day, trimming whatever
+block(s) currently occupy that range to make room. **Copy schedule to another
+day** at the bottom opens a day picker — check any of the other six days and
+the selected day's whole arrangement is copied onto each one, replacing
+whatever was there.
 
 ##### Standby screen elements
 
