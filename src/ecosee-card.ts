@@ -309,6 +309,20 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       this._resizeObserver.observe(this);
     }
     this._syncDeviceScale();
+    // Home Assistant's masonry dashboard view assigns column widths with its own
+    // JS layout pass (balancing column heights across cards), which can still be
+    // mid-settle the instant this element connects — the observer's first
+    // callback and the synchronous read above can both land before that pass
+    // finishes, latching a too-narrow reading in as the "final" size (issue:
+    // "sometimes renders smaller than it should"). A double rAF — one to let the
+    // browser finish painting whatever layout is already scheduled, a second to
+    // catch a further layout HA's own script queues off the first — re-measures
+    // once that settling is actually done, without guessing at a fixed delay.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (this.isConnected) this._syncDeviceScale();
+      });
+    });
     // Register the bundled Montserrat faces (ADR-0007) before the first
     // probe pass, so the stack's guaranteed fallback exists document-wide.
     ensureBundledFont();
@@ -359,17 +373,17 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     }
     // background_color changes what --ecosee-text's contrast check runs against.
     if (changed.has('_config')) this._syncThemeText();
-    // Re-measure on every `hass` push, not just when the host's own box actually
-    // resizes. A dashboard's layout can still be mid-settle (masonry/grid columns
-    // not yet at their final width) the moment the ResizeObserver's first callback
-    // fires, latching in a too-small --ecosee-scale that nothing ever revisits if
-    // the host's box happens not to change size again afterward — a stuck small
-    // render that a browser resize or reload doesn't fix, since neither guarantees
-    // the box itself changes size (issue: reported "sometimes renders smaller than
-    // it should"). `hass` pushes are frequent and `_syncDeviceScale` is a cheap
-    // no-op once the measurement is already correct (see its own unchanged-value
-    // guard), so this is a reliable, low-cost self-heal rather than a one-shot bet
-    // on the ResizeObserver's first reading being final.
+    // Secondary backstop for the same race connectedCallback's double-rAF
+    // measurement targets (issue: reported "sometimes renders smaller than it
+    // should", not fixed by a browser resize or reload — neither guarantees the
+    // host's own box changes size, which is the only thing the ResizeObserver
+    // reacts to). The rAF pair is timed for a normal connect; it doesn't cover a
+    // host framework re-parenting an already-connected card into a differently-
+    // sized slot without a disconnect/reconnect cycle (e.g. a dashboard editor's
+    // preview pane), which fires neither connectedCallback nor the ResizeObserver.
+    // `hass` pushes are frequent and `_syncDeviceScale` is a cheap no-op once the
+    // measurement is already correct (its own unchanged-value guard), so this
+    // costs little and catches that remaining gap.
     if (changed.has('hass')) this._syncDeviceScale();
   }
 
