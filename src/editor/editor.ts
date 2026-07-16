@@ -137,6 +137,15 @@ export function editorSchema(): EditorField[] {
       selector: { entity: { domain: 'sensor' } },
     },
     {
+      name: 'schedule_entity',
+      label: 'Schedule entity',
+      helper:
+        'Optional. A calendar entity representing the weekly comfort-setting schedule (e.g. an ' +
+        'ecobee integration’s Schedule calendar). Adds the Schedule Main Menu section; hidden ' +
+        'until an entity is set.',
+      selector: { entity: { domain: 'calendar' } },
+    },
+    {
       // Anchor for the Sensors block. `composeEditorSchema` replaces this single
       // field with one entity picker per sensor (each followed by its display-name
       // field) plus a trailing empty picker to add another; the base field only

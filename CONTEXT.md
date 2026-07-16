@@ -59,6 +59,21 @@ entities (not limited to ecobee remote sensors). Each card may carry an
 the same device (ADR-0010).
 _Avoid_: rooms view.
 
+**Schedule Screen**:
+The Main Menu section showing the bound entity's weekly comfort-setting schedule
+(ADR-0014), one day at a time: a day strip (S M T W T F S) above that day's ordered
+**blocks** — contiguous runs of a single Comfort Setting, each preceded by a
+boundary label (a clock time, or "From previous day" for a block already active at
+midnight). Tapping an editable block opens its **Start Time** Picker, which can
+move that block's start (shrinking or growing the block before it to fill the gap)
+or remove it (merging it into the block before it — there is no delete; every
+slot always belongs to some Comfort Setting). Backed by a Home Assistant `calendar`
+entity (`schedule_entity`, e.g. an ecobee integration's own Schedule calendar); a
+Card addition — the physical device has no separate Main Menu tab for this, its
+schedule lives in its own dedicated screen outside the Main Menu entirely.
+_Avoid_: calendar view, weekly grid, agenda (the device/reference-app term is
+Schedule).
+
 **Standby Screen**:
 The dimmed idle display the Card shows when left untouched: a minimal white-on-black
 layout with outdoor temperature, current temperature and the time, mirroring the
@@ -82,24 +97,28 @@ _Avoid_: HVAC mode (in UI copy), operation mode, "Auto" alone as the mode name
 
 **Main Menu**:
 The section screens reached from the Home Screen's gear — **System**, **Sensors**,
-**Fan** — navigated by a persistent **Tab Bar** at the bottom. The gear lands
-directly on the first reachable section (no intermediate list); the Tab Bar switches
-between the sibling sections and its left temperature badge returns to the thermostat
-(Home). The System section holds both the System Mode and Comfort Setting selectors;
-tapping a selector opens a focused **Picker** pushed on top (dismissing it returns to
-the section). Weather is reached from the Home Screen's own affordance, not the Tab
-Bar — as on the device, whose bottom bar carries thermostat/sensors/fan/settings but
+**Fan**, **Schedule** — navigated by a persistent **Tab Bar** at the bottom. The
+gear lands directly on the first reachable section (no intermediate list); the Tab
+Bar switches between the sibling sections and its left temperature badge returns to
+the thermostat (Home). The System section holds both the System Mode and Comfort
+Setting selectors; tapping a selector opens a focused **Picker** pushed on top
+(dismissing it returns to the section) — Schedule's own Start Time Picker works the
+same way. Weather is reached from the Home Screen's own affordance, not the Tab Bar
+— as on the device, whose bottom bar carries thermostat/sensors/fan/settings but
 not weather (the voice/mic tab has no Home Assistant meaning and is dropped).
+Schedule is a Card addition with no equivalent physical-device tab (ADR-0014), but
+follows the same reachable-when-configured rule as the device's own sections.
 _Avoid_: settings, drawer, drill-down list (the earlier hub list is gone — only the
 selector→Picker step remains a drill-in).
 
 **Tab Bar**:
 The device's persistent bottom navigation across the Main Menu sections. Rendered as
-shell chrome (like the ✕) on the System / Sensors / Fan screens only, never on the
-pickers, Temperature, or Weather. Left to right: a temperature **badge** (returns
-Home), then one icon tab per reachable section — sensors, fan, and the gear (which is
-the System/settings tab, kept rightmost). A tab shows only when its section is
-reachable for the bound entity (graceful degradation, ADR-0001).
+shell chrome (like the ✕) on the System / Sensors / Fan / Schedule screens only,
+never on the pickers, Temperature, or Weather. Left to right: a temperature
+**badge** (returns Home), then one icon tab per reachable section — sensors, fan,
+schedule, and the gear (which is the System/settings tab, kept rightmost). A tab
+shows only when its section is reachable for the bound entity (graceful
+degradation, ADR-0001).
 _Avoid_: navbar, footer, toolbar.
 
 **Comfort Setting**:

@@ -167,6 +167,7 @@ temperature_entity: sensor.living_room_temperature # optional, overrides the the
 humidity_entity: sensor.hallway_humidity # optional, overrides the thermostat's own humidity
 air_quality_entity: sensor.air_quality_index # optional, adds the AQI gauge
 uv_index_entity: sensor.uv_index # optional, adds the UV gauge
+schedule_entity: calendar.living_room_schedule # optional, adds the Schedule Main Menu section
 show_fan: auto # optional, auto | always | never — the Home Screen fan shortcut
 standby_screen: true # optional, dims to a clock when left idle
 corner_style: squircle # optional, squircle | rounded | square — the card's corner treatment
@@ -193,6 +194,7 @@ sensors: # optional, the Sensors screen (see below)
 | `air_quality_entity`     | no       | An entity carrying a US EPA air-quality index. Adds the AQI gauge.                                                                                                                        |
 | `uv_index_entity`        | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                                                         |
 | `fan_min_on_time_entity` | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                                                             |
+| `schedule_entity`        | no       | A `calendar` entity representing the weekly comfort-setting schedule. Adds the Schedule Main Menu section — see below.                                                                    |
 | `sensors`                | no       | Temperature entities for the Sensors screen (see below).                                                                                                                                  |
 | `inactivity_timeout`     | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                                                                     |
 | `standby_screen`         | no       | Dim to a minimal clock display when left idle. Default off.                                                                                                                               |
@@ -263,6 +265,32 @@ whenever the entity is unset or briefly unavailable.
 ```yaml
 min_gap_entity: sensor.living_room_heat_cool_min_delta
 ```
+
+##### Schedule
+
+Point `schedule_entity` at a `calendar` entity representing your thermostat's
+weekly comfort-setting schedule — for example
+[ha-ecobee](https://github.com/shaelr/ha-ecobee)'s own Schedule calendar, which
+represents the ecobee's schedule as one calendar event per contiguous run of a
+comfort setting — and the card adds a **Schedule** section to the Main Menu.
+
+```yaml
+schedule_entity: calendar.living_room_schedule
+```
+
+It shows one day at a time (the day strip along the top switches days) as an
+ordered list of blocks, each labeled with when it starts. Tapping a block opens
+a Start Time picker where you can move that block's start for that day (the
+block before it shrinks or grows to fill the gap) or remove it entirely
+(merging it into the block before it — there's no "empty" schedule slot to
+remove into, so removing a block always means handing its time back to
+whichever comfort setting precedes it). A block that was already active at
+midnight has no earlier block on that day to adjust against, so it's shown but
+not editable.
+
+Adding a brand-new block and copying a day's schedule to another day aren't in
+yet — this first pass covers viewing the schedule and adjusting the transitions
+already on it.
 
 ##### Standby screen elements
 

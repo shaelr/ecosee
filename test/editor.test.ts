@@ -25,6 +25,7 @@ describe('editorSchema — coverage', () => {
       'humidity_entity',
       'air_quality_entity',
       'uv_index_entity',
+      'schedule_entity',
       'sensors',
       'show_fan',
       'fan_min_on_time_entity',

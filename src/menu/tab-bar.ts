@@ -1,15 +1,17 @@
 /**
  * The persistent bottom tab bar shown across the Main Menu's section screens
- * (System, Sensors, Fan), mirroring the device's bottom navigation. It replaces
- * the drill-down Main Menu list: opening the menu lands directly on a section and
- * the bar switches between the sibling sections, with a temperature badge on the
- * left that returns to the thermostat (the Home Screen).
+ * (System, Sensors, Fan, Schedule), mirroring the device's bottom navigation. It
+ * replaces the drill-down Main Menu list: opening the menu lands directly on a
+ * section and the bar switches between the sibling sections, with a temperature
+ * badge on the left that returns to the thermostat (the Home Screen).
  *
  * Weather is reached from the Home Screen's own affordance, not the bar — as on
  * the device, whose bottom bar carries the thermostat, sensors, fan, voice, and
  * settings, but not weather. The voice/mic tab has no Home Assistant meaning and
  * is dropped; settings maps to the System section (the gear glyph, kept rightmost
- * as on the device).
+ * as on the device). Schedule is a Card addition (ADR-0014) — the physical device
+ * has no equivalent bottom-bar tab for it, but it's a Main Menu section the same
+ * way Sensors and Fan are, so it follows the same reachable-when-configured rule.
  *
  * This module is the pure seam: it takes the active screen, the badge temperature,
  * and which sections are reachable, and returns the ordered, marked-up tab model.
@@ -20,7 +22,7 @@
 /** The Main Menu sections that carry (and are reachable from) the tab bar, in no
  *  particular order — the single source of "what is a section" so the card guard,
  *  the availability shape, and the render order below can't drift apart. */
-export const TAB_SECTIONS = ['system', 'sensors', 'fan'] as const;
+export const TAB_SECTIONS = ['system', 'sensors', 'fan', 'schedule'] as const;
 
 /** A Main Menu section that carries (and is reachable from) the tab bar. */
 export type TabSection = (typeof TAB_SECTIONS)[number];
@@ -29,7 +31,7 @@ export type TabSection = (typeof TAB_SECTIONS)[number];
 export type TabTarget = 'thermostat' | TabSection;
 
 /** Which glyph a section tab shows. `gear` is the System (settings) tab. */
-export type TabIcon = 'gear' | 'sensor' | 'fan';
+export type TabIcon = 'gear' | 'sensor' | 'fan' | 'calendar';
 
 export interface TabItem {
   target: TabSection;
@@ -56,6 +58,7 @@ export interface TabBarModel {
 const ORDER: readonly { target: TabSection; icon: TabIcon; label: string }[] = [
   { target: 'sensors', icon: 'sensor', label: 'Sensors' },
   { target: 'fan', icon: 'fan', label: 'Fan' },
+  { target: 'schedule', icon: 'calendar', label: 'Schedule' },
   { target: 'system', icon: 'gear', label: 'System' },
 ];
 

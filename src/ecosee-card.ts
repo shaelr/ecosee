@@ -25,6 +25,18 @@ import {
   type WeatherForecasts,
 } from './weather/weather';
 import type { ServiceCall } from './climate/service-call';
+import {
+  toScheduleModel,
+  toScheduleBlocks,
+  getScheduleEventsCall,
+  parseScheduleResponse,
+  moveBlockStart,
+  removeBlock,
+  dayStart,
+  dayName,
+  type RawScheduleEvent,
+  type ScheduleUpdateMessage,
+} from './schedule/schedule';
 import { tokens } from './styles/tokens';
 import { createCanvasMeasure, filterDegenerateFamilies } from './styles/font-probe';
 import { ensureBundledFont } from './styles/bundled-font';
@@ -44,16 +56,28 @@ import './overlays/system-overlay';
 import './overlays/fan-overlay';
 import './overlays/sensors-overlay';
 import './overlays/weather-overlay';
+import './overlays/schedule-overlay';
+import './overlays/schedule-start-time-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
 /** An Overlay that can mount over the Home Screen. `system` is the Main Menu's
  *  System sub-screen (the hub holding the System Mode + Comfort Setting selectors);
- *  `system-mode` / `comfort-setting` are the focused pickers it routes to; the rest
- *  are the Main Menu sections, reached via the gear and switched between with the
- *  bottom tab bar. */
+ *  `system-mode` / `comfort-setting` are the focused pickers it routes to; `fan`,
+ *  `sensors`, and `schedule` are the rest of the Main Menu sections, reached via
+ *  the gear and switched between with the bottom tab bar. `schedule-start-time` is
+ *  Schedule's own picker, reached the same way `system-mode`/`comfort-setting` are
+ *  reached from `system` (ADR-0014). */
 type OverlayKind =
-  'temperature' | 'system-mode' | 'comfort-setting' | 'system' | 'fan' | 'sensors' | 'weather';
+  | 'temperature'
+  | 'system-mode'
+  | 'comfort-setting'
+  | 'system'
+  | 'fan'
+  | 'sensors'
+  | 'weather'
+  | 'schedule'
+  | 'schedule-start-time';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -102,6 +126,24 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  degrades page 2 / the intra-day periods while it is absent. Cleared on close
    *  so a re-open refetches. */
   @state() private _weatherForecasts?: WeatherForecasts;
+
+  /** Which day of the current week the Schedule sub-screen shows (`Date#getDay()`
+   *  index, Sunday-first — matches the day strip and `dayStart`/`dayName`).
+   *  Deliberately NOT reset on close/reopen (unlike the other overlays' per-open
+   *  seeds) — returning to a previously-viewed day is more useful than always
+   *  snapping back to today. Initialized to today's index. */
+  @state() private _scheduleDayIndex = new Date().getDay();
+  /** The selected day's raw calendar events, fetched via `calendar.get_events`
+   *  when Schedule opens or the day changes (ADR-0014, mirroring
+   *  `_weatherForecasts`'s fetch-on-open shape). Empty until the fetch resolves —
+   *  the seam degrades to "no blocks yet" rather than "unavailable". */
+  @state() private _scheduleEvents: RawScheduleEvent[] = [];
+  /** Which of the selected day's blocks the Schedule Start Time picker is editing
+   *  (an index into `toScheduleBlocks`'s result, stable across a write since a
+   *  move never reorders blocks — only grows/shrinks adjacent ones). `undefined`
+   *  ⇒ the picker has nothing to show, matching `_tempSetpoint`'s per-open-seed
+   *  shape. Cleared on close (`_clearOverlaySeeds`). */
+  @state() private _scheduleEditingBlockIndex?: number;
 
   /** Auto-revert countdown (issue #13): collapses any open Overlay back to the
    *  Home Screen after a configurable idle interval, mirroring the device. Armed
@@ -223,6 +265,46 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           .model=${toWeatherModel(hass, config, this._weatherForecasts)}
         ></ecosee-weather-overlay>
       `,
+    },
+    schedule: {
+      available: (hass, config) =>
+        toScheduleModel(hass, config, [], this._scheduleSelectedDate(), this._scheduleDayIndex)
+          .available,
+      // The selected day's blocks are fetched async via `calendar.get_events` and
+      // threaded in, mirroring Weather's forecast fetch (ADR-0014); the model
+      // degrades to "no blocks yet" while it is still absent.
+      onOpen: () => {
+        void this._loadSchedule();
+      },
+      render: (hass, config) => html`
+        <ecosee-schedule-overlay
+          .model=${toScheduleModel(
+            hass,
+            config,
+            this._scheduleEvents,
+            this._scheduleSelectedDate(),
+            this._scheduleDayIndex,
+          )}
+        ></ecosee-schedule-overlay>
+      `,
+    },
+    'schedule-start-time': {
+      available: () => this._scheduleEditingBlockIndex !== undefined,
+      render: (_hass, config) => {
+        const index = this._scheduleEditingBlockIndex;
+        if (index === undefined) return nothing;
+        const blocks = toScheduleBlocks(this._scheduleEvents, this._scheduleSelectedDate(), config);
+        const block = blocks[index];
+        if (!block) return nothing;
+        return html`
+          <ecosee-schedule-start-time-overlay
+            .comfortSetting=${block.comfortSetting}
+            .dayLabel=${dayName(this._scheduleDayIndex)}
+            .startMinutes=${block.startMinutes}
+            .canRemove=${index > 0}
+          ></ecosee-schedule-start-time-overlay>
+        `;
+      },
     },
   };
 
@@ -581,6 +663,10 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         @ecosee-service-call=${this._onServiceCall}
         @ecosee-system-select=${this._onSystemSelect}
         @ecosee-tab-select=${this._onTabSelect}
+        @ecosee-schedule-day-select=${this._onScheduleDaySelect}
+        @ecosee-schedule-block-select=${this._onScheduleBlockSelect}
+        @ecosee-schedule-time-confirm=${this._onScheduleTimeConfirm}
+        @ecosee-schedule-block-remove=${this._onScheduleBlockRemove}
         @pointerdown=${this._onOverlayActivity}
         @pointermove=${this._onOverlayActivity}
         @keydown=${this._onOverlayActivity}
@@ -672,6 +758,113 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     }
   }
 
+  /** The Date for `_scheduleDayIndex` within the *current* week (Sunday-first),
+   *  computed fresh each render rather than stored — "today" and hence "this
+   *  week" shift while the Card stays mounted, and this keeps that automatic
+   *  rather than needing its own resync (ADR-0014: Stage 1 shows the current
+   *  week only, no forward/back paging between weeks). */
+  private _scheduleSelectedDate(): Date {
+    const today = new Date();
+    const weekStart = dayStart(new Date(today.getTime() - today.getDay() * 86400000));
+    return new Date(weekStart.getTime() + this._scheduleDayIndex * 86400000);
+  }
+
+  /** Fetch the Schedule sub-screen's selected day via `calendar.get_events` and
+   *  stash it for the seam (ADR-0014, mirroring `_loadForecasts`'s shape). */
+  private async _loadSchedule(): Promise<void> {
+    const entityId = this._config?.schedule_entity;
+    if (!this.hass || !entityId) return;
+    const day = this._scheduleSelectedDate();
+    let events: RawScheduleEvent[] = [];
+    try {
+      const { domain, service, data } = getScheduleEventsCall(entityId, day);
+      const response = await this.hass.callService(domain, service, data, undefined, false, true);
+      events = parseScheduleResponse(response, entityId);
+    } catch {
+      // The entity doesn't support get_events (or the call failed) — degrade to
+      // no blocks rather than throwing.
+    }
+    // Guard a slow fetch resolving after the overlay was dismissed, or the day
+    // selection moved on again before this one landed.
+    if (
+      this._nav.includes('schedule') &&
+      this._scheduleSelectedDate().getTime() === day.getTime()
+    ) {
+      this._scheduleEvents = events;
+    }
+  }
+
+  /** Switch the Schedule sub-screen's selected day and re-fetch it. */
+  private _onScheduleDaySelect = (event: CustomEvent<{ dayIndex: number }>): void => {
+    this._scheduleDayIndex = event.detail.dayIndex;
+    this._scheduleEvents = [];
+    void this._loadSchedule();
+  };
+
+  /** Route a tap on an editable Schedule block to its Start Time picker
+   *  (hub-and-picker, mirroring `_onSystemSelect`). */
+  private _onScheduleBlockSelect = (event: CustomEvent<{ blockIndex: number }>): void => {
+    this._scheduleEditingBlockIndex = event.detail.blockIndex;
+    this._open('schedule-start-time', 'push');
+  };
+
+  /** Apply a Start Time picker confirmation: build the `calendar/event/update`
+   *  websocket write (schedule.ts's `moveBlockStart` — growing the edited block's
+   *  own footprint, or extending its predecessor's when shrinking; see
+   *  schedule.ts's module doc), send it, re-fetch the day, and pop back to the
+   *  Schedule sub-screen. A `null` write (a no-op move, or no in-day predecessor
+   *  to shrink into) still returns to Schedule — there is nothing to apply, but
+   *  the picker has served its purpose. */
+  private _onScheduleTimeConfirm = (event: CustomEvent<{ minutes: number }>): void => {
+    void this._applyScheduleWrite((entityId, blocks, index, day) =>
+      moveBlockStart(entityId, blocks, index, day, event.detail.minutes),
+    );
+  };
+
+  /** Apply a Start Time picker's "Remove from schedule": build the merge-into-
+   *  predecessor write (schedule.ts's `removeBlock`), send it, re-fetch, and pop
+   *  back to the Schedule sub-screen. */
+  private _onScheduleBlockRemove = (): void => {
+    void this._applyScheduleWrite((entityId, blocks, index, day) =>
+      removeBlock(entityId, blocks, index, day),
+    );
+  };
+
+  private async _applyScheduleWrite(
+    build: (
+      entityId: string,
+      blocks: ReturnType<typeof toScheduleBlocks>,
+      index: number,
+      day: Date,
+    ) => ScheduleUpdateMessage | null,
+  ): Promise<void> {
+    const entityId = this._config?.schedule_entity;
+    const index = this._scheduleEditingBlockIndex;
+    if (!this.hass || !this._config || !entityId || index === undefined) return;
+    const day = this._scheduleSelectedDate();
+    const blocks = toScheduleBlocks(this._scheduleEvents, day, this._config);
+    const message = build(entityId, blocks, index, day);
+    if (message) await this._sendScheduleUpdate(message);
+    await this._loadSchedule();
+    this._closeOverlay();
+  }
+
+  /** Send a `calendar/event/update` write — the only path Home Assistant exposes
+   *  for it (schedule.ts's module doc: unlike `create_event`/`get_events`,
+   *  `update_event` has no service equivalent, only this websocket command). */
+  private async _sendScheduleUpdate(message: ScheduleUpdateMessage): Promise<void> {
+    if (!this.hass?.connection) return;
+    try {
+      // ScheduleUpdateMessage is a plain JSON-shaped object; the cast is only for
+      // the lack of an index signature, not a real shape mismatch.
+      await this.hass.connection.sendMessagePromise(message as unknown as Record<string, unknown>);
+    } catch {
+      // Best-effort — a failed write leaves the schedule exactly as the
+      // calendar entity last reported it; the next fetch reflects reality
+      // either way, so there is nothing further to degrade to here.
+    }
+  }
+
   /** Route a System sub-screen selector to its focused picker, pushed onto the stack
    *  so the picker's dismissal returns to the System sub-screen (hub-and-picker). The
    *  selector targets double as overlay kinds. */
@@ -680,24 +873,25 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   };
 
   /** Open the Main Menu: land directly on the first reachable section (System, then
-   *  Sensors, then Fan), where the bottom tab bar takes over navigation between the
-   *  siblings — this replaces the old drill-down list. Weather is the last resort so
-   *  a weather-only entity's gear still opens something (Weather carries no tab bar
-   *  of its own, matching the device). `_open` re-checks availability, so an
-   *  unreachable pick is a safe no-op. */
+   *  Sensors, then Fan, then Schedule), where the bottom tab bar takes over
+   *  navigation between the siblings — this replaces the old drill-down list.
+   *  Weather is the last resort so a weather-only entity's gear still opens
+   *  something (Weather carries no tab bar of its own, matching the device).
+   *  `_open` re-checks availability, so an unreachable pick is a safe no-op. */
   private _openMenu(): void {
     if (!this.hass || !this._config) return;
     const hass = this.hass;
     const config = this._config;
-    const order: OverlayKind[] = ['system', 'sensors', 'fan', 'weather'];
+    const order: OverlayKind[] = ['system', 'sensors', 'fan', 'schedule', 'weather'];
     const first = order.find((kind) => this._overlays[kind].available(hass, config));
     if (first) this._open(first, 'home');
   }
 
   /** The bottom tab bar for the current screen, or `undefined` (⇒ no bar) unless a
-   *  Main Menu section (System / Sensors / Fan) is showing. Availability comes from
-   *  the single overlay-descriptor table so the section predicates aren't duplicated;
-   *  the temp badge reads the same current temperature as the Home Screen. */
+   *  Main Menu section (System / Sensors / Fan / Schedule) is showing. Availability
+   *  comes from the single overlay-descriptor table so the section predicates
+   *  aren't duplicated; the temp badge reads the same current temperature as the
+   *  Home Screen. */
   private _tabBar(view: HomeView): TabBarModel | undefined {
     const kind = this._overlay;
     if (!this.hass || !this._config || !kind) return undefined;
@@ -712,6 +906,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       system: this._overlays.system.available(hass, config),
       sensors: this._overlays.sensors.available(hass, config),
       fan: this._overlays.fan.available(hass, config),
+      schedule: this._overlays.schedule.available(hass, config),
     });
     return model.available ? model : undefined;
   }
@@ -749,11 +944,16 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   }
 
   /** Clear per-open Overlay state so a later open starts fresh: the Temperature
-   *  Adjust seed and the Weather forecast. */
+   *  Adjust seed, the Weather forecast, and which Schedule block the Start Time
+   *  picker was editing. Deliberately does NOT clear `_scheduleDayIndex` /
+   *  `_scheduleEvents` — the selected day and its last-fetched blocks are kept
+   *  across a close so reopening Schedule shows them immediately rather than a
+   *  blank "Loading…" flash while a fresh fetch lands. */
   private _clearOverlaySeeds(): void {
     this._tempSeed = undefined;
     this._tempSetpoint = undefined;
     this._weatherForecasts = undefined;
+    this._scheduleEditingBlockIndex = undefined;
   }
 
   /** Any interaction within an open Overlay (tap, drag start, key) postpones

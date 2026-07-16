@@ -62,6 +62,16 @@ export interface HomeAssistant {
      *  resolved value then carries a `{ response: … }` payload. */
     returnResponse?: boolean,
   ): Promise<unknown>;
+  /** The frontend's live websocket connection (`home-assistant-js-websocket`).
+   *  Only used for the handful of calendar-event writes that have no service
+   *  equivalent — `calendar.update_event` is websocket-only in Home Assistant
+   *  core (unlike `create_event`/`get_events`, which are ordinary services).
+   *  Typed optional because the seam tests build `hass` by hand and don't need
+   *  it (ADR-0001 degrade-gracefully spirit — every consumer must handle it
+   *  being absent). */
+  connection?: {
+    sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
+  };
 }
 
 /** The LovelaceCard contract Home Assistant calls into. */

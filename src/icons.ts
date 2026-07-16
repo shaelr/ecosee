@@ -230,6 +230,16 @@ export const icons = {
     </g>
   `),
 
+  /** Schedule Main Menu tab — a page-a-day calendar: a rounded square with two
+   *  hanging rings and a header rule separating the "date" band from the body. */
+  calendar: wrap(svg`
+    <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+      stroke-linejoin="round">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.6" />
+      <path d="M3.5 9.8 H20.5 M8 3.4 V6.6 M16 3.4 V6.6" />
+    </g>
+  `),
+
   // Weather-condition glyphs. Mapped from a Home Assistant `weather` condition by
   // `weatherIcon` below; `sun` (above) covers a clear day. Tinted a natural
   // per-condition color inside the Weather Overlay (`conditionColor`, issue #31),

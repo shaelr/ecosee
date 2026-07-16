@@ -62,6 +62,15 @@ function defaultIcon(config: EcoseeCardConfig): ComfortIcon {
   return override && COMFORT_ICONS.has(override) ? (override as ComfortIcon) : 'comfort';
 }
 
+/** The Skin glyph for a Comfort Setting name — Home/Away/Sleep's own icon
+ *  (case-insensitive), or the card's default-comfort-icon fallback for anything
+ *  else. The single source both the Comfort Setting picker and the Schedule
+ *  screen's blocks (schedule.ts) key their icon off, so the two surfaces can
+ *  never show a different glyph for the same comfort setting name. */
+export function comfortIconFor(name: string, config: EcoseeCardConfig): ComfortIcon {
+  return KNOWN[name.toLowerCase()]?.icon ?? defaultIcon(config);
+}
+
 export function toComfortSettingModel(
   hass: HomeAssistant,
   config: EcoseeCardConfig,

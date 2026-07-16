@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { toTabBarModel } from '../src/menu/tab-bar';
 
-const ALL = { system: true, sensors: true, fan: true };
+const ALL = { system: true, sensors: true, fan: true, schedule: true };
 
 describe('toTabBarModel', () => {
-  it('lists reachable sections in device order (sensors, fan, System-gear) after the badge', () => {
+  it('lists reachable sections in device order (sensors, fan, Schedule, System-gear) after the badge', () => {
     const model = toTabBarModel('system', '72', ALL);
     expect(model.available).toBe(true);
     expect(model.items.map((i) => [i.target, i.icon])).toEqual([
       ['sensors', 'sensor'],
       ['fan', 'fan'],
+      ['schedule', 'calendar'],
       ['system', 'gear'],
     ]);
   });
@@ -20,7 +21,12 @@ describe('toTabBarModel', () => {
   });
 
   it('drops sections whose data is absent (graceful degradation)', () => {
-    const model = toTabBarModel('system', '68', { system: true, sensors: false, fan: false });
+    const model = toTabBarModel('system', '68', {
+      system: true,
+      sensors: false,
+      fan: false,
+      schedule: false,
+    });
     expect(model.items.map((i) => i.target)).toEqual(['system']);
     expect(model.available).toBe(true);
   });
@@ -32,7 +38,12 @@ describe('toTabBarModel', () => {
   });
 
   it('is unavailable when no section is reachable, even on a section screen', () => {
-    const model = toTabBarModel('system', '72', { system: false, sensors: false, fan: false });
+    const model = toTabBarModel('system', '72', {
+      system: false,
+      sensors: false,
+      fan: false,
+      schedule: false,
+    });
     expect(model.available).toBe(false);
     expect(model.items).toEqual([]);
   });

@@ -87,6 +87,11 @@ export interface EcoseeCardConfig {
    *  Surfaces the optional UV-index gauge on the Home Screen; the gauge is hidden
    *  when this is unset/unavailable (ADR-0001 graceful degradation). */
   uv_index_entity?: string;
+  /** A `calendar` entity representing the thermostat's weekly comfort-setting
+   *  schedule as calendar events (one event per contiguous block of a comfort
+   *  setting), e.g. an ecobee integration's own Schedule calendar. Adds the
+   *  Schedule Main Menu section (ADR-0014); hidden when this is unset. */
+  schedule_entity?: string;
   /** Curated temperature sensors for the Sensors sub-screen (issue #9). Each item
    *  may be a bare entity-id string (shorthand) or a `SensorConfig` object. The
    *  thermostat's own temperature is auto-included first, so this lists *extra*
@@ -182,7 +187,8 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
       | 'fan_min_on_time_entity'
       | 'air_quality_entity'
       | 'uv_index_entity'
-      | 'min_gap_entity',
+      | 'min_gap_entity'
+      | 'schedule_entity',
   ): string | undefined => {
     const value = raw[key];
     if (value === undefined) return undefined;
@@ -203,6 +209,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     fan_min_on_time_entity: optionalString('fan_min_on_time_entity'),
     air_quality_entity: optionalString('air_quality_entity'),
     uv_index_entity: optionalString('uv_index_entity'),
+    schedule_entity: optionalString('schedule_entity'),
     sensors: parseSensors(raw.sensors),
     inactivity_timeout: parseInactivityTimeout(raw.inactivity_timeout),
     standby_screen: parseStandbyScreen(raw.standby_screen),
