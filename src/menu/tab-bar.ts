@@ -9,9 +9,10 @@
  * the device, whose bottom bar carries the thermostat, sensors, fan, voice, and
  * settings, but not weather. The voice/mic tab has no Home Assistant meaning and
  * is dropped; settings maps to the System section (the gear glyph, kept rightmost
- * as on the device). Schedule is a Card addition (ADR-0014) — the physical device
- * has no equivalent bottom-bar tab for it, but it's a Main Menu section the same
- * way Sensors and Fan are, so it follows the same reachable-when-configured rule.
+ * as on the device). Schedule (ADR-0014) and Comfort Setpoints (ADR-0015) are
+ * Card additions — the physical device has no equivalent bottom-bar tab for
+ * either, but each is a Main Menu section the same way Sensors and Fan are, so
+ * both follow the same reachable-when-configured rule.
  *
  * This module is the pure seam: it takes the active screen, the badge temperature,
  * and which sections are reachable, and returns the ordered, marked-up tab model.
@@ -22,7 +23,7 @@
 /** The Main Menu sections that carry (and are reachable from) the tab bar, in no
  *  particular order — the single source of "what is a section" so the card guard,
  *  the availability shape, and the render order below can't drift apart. */
-export const TAB_SECTIONS = ['system', 'sensors', 'fan', 'schedule'] as const;
+export const TAB_SECTIONS = ['system', 'sensors', 'fan', 'schedule', 'setpoints'] as const;
 
 /** A Main Menu section that carries (and is reachable from) the tab bar. */
 export type TabSection = (typeof TAB_SECTIONS)[number];
@@ -31,7 +32,7 @@ export type TabSection = (typeof TAB_SECTIONS)[number];
 export type TabTarget = 'thermostat' | TabSection;
 
 /** Which glyph a section tab shows. `gear` is the System (settings) tab. */
-export type TabIcon = 'gear' | 'sensor' | 'fan' | 'calendar';
+export type TabIcon = 'gear' | 'sensor' | 'fan' | 'calendar' | 'setpoints';
 
 export interface TabItem {
   target: TabSection;
@@ -59,6 +60,7 @@ const ORDER: readonly { target: TabSection; icon: TabIcon; label: string }[] = [
   { target: 'sensors', icon: 'sensor', label: 'Sensors' },
   { target: 'fan', icon: 'fan', label: 'Fan' },
   { target: 'schedule', icon: 'calendar', label: 'Schedule' },
+  { target: 'setpoints', icon: 'setpoints', label: 'Setpoints' },
   { target: 'system', icon: 'gear', label: 'System' },
 ];
 

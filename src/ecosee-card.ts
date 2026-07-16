@@ -10,6 +10,7 @@ import {
 } from './climate/temperature-adjust';
 import { toSystemModeModel } from './climate/system-mode';
 import { toComfortSettingModel } from './climate/comfort-setting';
+import { toComfortSetpointsModel } from './climate/comfort-setpoint';
 import { toFanModel } from './climate/fan';
 import { resumeProgramCall } from './climate/resume-schedule';
 import { toTabBarModel, TAB_SECTIONS, type TabBarModel, type TabTarget } from './menu/tab-bar';
@@ -63,17 +64,20 @@ import './overlays/schedule-overlay';
 import './overlays/schedule-start-time-overlay';
 import './overlays/schedule-add-block-overlay';
 import './overlays/schedule-copy-overlay';
+import './overlays/comfort-setpoints-overlay';
+import './overlays/comfort-setpoint-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
 /** An Overlay that can mount over the Home Screen. `system` is the Main Menu's
  *  System sub-screen (the hub holding the System Mode + Comfort Setting selectors);
  *  `system-mode` / `comfort-setting` are the focused pickers it routes to; `fan`,
- *  `sensors`, and `schedule` are the rest of the Main Menu sections, reached via
- *  the gear and switched between with the bottom tab bar. `schedule-start-time`,
- *  `schedule-add-block`, and `schedule-copy` are Schedule's own pickers, reached
- *  the same way `system-mode`/`comfort-setting` are reached from `system`
- *  (ADR-0014). */
+ *  `sensors`, `schedule`, and `setpoints` are the rest of the Main Menu sections,
+ *  reached via the gear and switched between with the bottom tab bar.
+ *  `schedule-start-time`, `schedule-add-block`, and `schedule-copy` are
+ *  Schedule's own pickers (ADR-0014); `setpoint-adjust` is Comfort Setpoints'
+ *  own picker (ADR-0015) — all reached the same way `system-mode`/
+ *  `comfort-setting` are reached from `system`. */
 type OverlayKind =
   | 'temperature'
   | 'system-mode'
@@ -85,7 +89,9 @@ type OverlayKind =
   | 'schedule'
   | 'schedule-start-time'
   | 'schedule-add-block'
-  | 'schedule-copy';
+  | 'schedule-copy'
+  | 'setpoints'
+  | 'setpoint-adjust';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -152,6 +158,13 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  ⇒ the picker has nothing to show, matching `_tempSetpoint`'s per-open-seed
    *  shape. Cleared on close (`_clearOverlaySeeds`). */
   @state() private _scheduleEditingBlockIndex?: number;
+
+  /** Which Comfort Setpoints field the Setpoint Adjust picker is editing (a
+   *  preset name + `'heat'`/`'cool'`), set when a Comfort Setpoints card's pill
+   *  is tapped (ADR-0015). `undefined` ⇒ the picker has nothing to show,
+   *  matching `_scheduleEditingBlockIndex`'s per-open-seed shape. Cleared on
+   *  close (`_clearOverlaySeeds`). */
+  @state() private _setpointSelection?: { preset: string; field: Setpoint };
 
   /** Auto-revert countdown (issue #13): collapses any open Overlay back to the
    *  Home Screen after a configurable idle interval, mirroring the device. Armed
@@ -333,6 +346,32 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
             .map((day) => ({ index: day.index, label: dayName(day.index) }))}
         ></ecosee-schedule-copy-overlay>
       `,
+    },
+    setpoints: {
+      available: (hass, config) => toComfortSetpointsModel(hass, config).available,
+      render: (hass, config) => html`
+        <ecosee-comfort-setpoints-overlay
+          .model=${toComfortSetpointsModel(hass, config)}
+        ></ecosee-comfort-setpoints-overlay>
+      `,
+    },
+    'setpoint-adjust': {
+      available: () => this._setpointSelection !== undefined,
+      render: (hass, config) => {
+        const selection = this._setpointSelection;
+        if (!selection) return nothing;
+        const preset = toComfortSetpointsModel(hass, config).presets.find(
+          (p) => p.preset === selection.preset,
+        );
+        const value = preset?.[selection.field];
+        if (!preset || !value) return nothing;
+        return html`
+          <ecosee-comfort-setpoint-overlay
+            .value=${value}
+            .presetLabel=${preset.label}
+          ></ecosee-comfort-setpoint-overlay>
+        `;
+      },
     },
   };
 
@@ -699,6 +738,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         @ecosee-schedule-copy-open=${this._onScheduleCopyOpen}
         @ecosee-schedule-add-block-confirm=${this._onScheduleAddBlockConfirm}
         @ecosee-schedule-copy-confirm=${this._onScheduleCopyConfirm}
+        @ecosee-comfort-setpoint-select=${this._onComfortSetpointSelect}
         @pointerdown=${this._onOverlayActivity}
         @pointermove=${this._onOverlayActivity}
         @keydown=${this._onOverlayActivity}
@@ -961,6 +1001,15 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     }
   }
 
+  /** Route a Comfort Setpoints card pill to its Setpoint Adjust picker
+   *  (hub-and-picker, mirroring `_onScheduleBlockSelect`). */
+  private _onComfortSetpointSelect = (
+    event: CustomEvent<{ preset: string; field: Setpoint }>,
+  ): void => {
+    this._setpointSelection = event.detail;
+    this._open('setpoint-adjust', 'push');
+  };
+
   /** Route a System sub-screen selector to its focused picker, pushed onto the stack
    *  so the picker's dismissal returns to the System sub-screen (hub-and-picker). The
    *  selector targets double as overlay kinds. */
@@ -969,25 +1018,26 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   };
 
   /** Open the Main Menu: land directly on the first reachable section (System, then
-   *  Sensors, then Fan, then Schedule), where the bottom tab bar takes over
-   *  navigation between the siblings — this replaces the old drill-down list.
-   *  Weather is the last resort so a weather-only entity's gear still opens
-   *  something (Weather carries no tab bar of its own, matching the device).
-   *  `_open` re-checks availability, so an unreachable pick is a safe no-op. */
+   *  Sensors, then Fan, then Schedule, then Setpoints), where the bottom tab bar
+   *  takes over navigation between the siblings — this replaces the old
+   *  drill-down list. Weather is the last resort so a weather-only entity's gear
+   *  still opens something (Weather carries no tab bar of its own, matching the
+   *  device). `_open` re-checks availability, so an unreachable pick is a safe
+   *  no-op. */
   private _openMenu(): void {
     if (!this.hass || !this._config) return;
     const hass = this.hass;
     const config = this._config;
-    const order: OverlayKind[] = ['system', 'sensors', 'fan', 'schedule', 'weather'];
+    const order: OverlayKind[] = ['system', 'sensors', 'fan', 'schedule', 'setpoints', 'weather'];
     const first = order.find((kind) => this._overlays[kind].available(hass, config));
     if (first) this._open(first, 'home');
   }
 
   /** The bottom tab bar for the current screen, or `undefined` (⇒ no bar) unless a
-   *  Main Menu section (System / Sensors / Fan / Schedule) is showing. Availability
-   *  comes from the single overlay-descriptor table so the section predicates
-   *  aren't duplicated; the temp badge reads the same current temperature as the
-   *  Home Screen. */
+   *  Main Menu section (System / Sensors / Fan / Schedule / Setpoints) is showing.
+   *  Availability comes from the single overlay-descriptor table so the section
+   *  predicates aren't duplicated; the temp badge reads the same current
+   *  temperature as the Home Screen. */
   private _tabBar(view: HomeView): TabBarModel | undefined {
     const kind = this._overlay;
     if (!this.hass || !this._config || !kind) return undefined;
@@ -1003,6 +1053,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       sensors: this._overlays.sensors.available(hass, config),
       fan: this._overlays.fan.available(hass, config),
       schedule: this._overlays.schedule.available(hass, config),
+      setpoints: this._overlays.setpoints.available(hass, config),
     });
     return model.available ? model : undefined;
   }
@@ -1040,7 +1091,8 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   }
 
   /** Clear per-open Overlay state so a later open starts fresh: the Temperature
-   *  Adjust seed, the Weather forecast, and which Schedule block the Start Time
+   *  Adjust seed, the Weather forecast, which Schedule block the Start Time
+   *  picker was editing, and which Comfort Setpoints field the Setpoint Adjust
    *  picker was editing. Deliberately does NOT clear `_scheduleDayIndex` /
    *  `_scheduleEvents` — the selected day and its last-fetched blocks are kept
    *  across a close so reopening Schedule shows them immediately rather than a
@@ -1050,6 +1102,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     this._tempSetpoint = undefined;
     this._weatherForecasts = undefined;
     this._scheduleEditingBlockIndex = undefined;
+    this._setpointSelection = undefined;
   }
 
   /** Any interaction within an open Overlay (tap, drag start, key) postpones

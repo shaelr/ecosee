@@ -98,7 +98,12 @@ function tidy(value: number): number {
  *  [min, max]. Snapping first keeps the displayed value on-grid; clamping last
  *  guarantees the result never leaves the entity's range, even at an off-grid
  *  bound. A non-positive step degrades to "no snapping". */
-function snapClamp(value: number, min: number | null, max: number | null, step: number): number {
+export function snapClamp(
+  value: number,
+  min: number | null,
+  max: number | null,
+  step: number,
+): number {
   let v = step > 0 ? tidy(Math.round(value / step) * step) : value;
   if (min !== null && v < min) v = min;
   if (max !== null && v > max) v = max;

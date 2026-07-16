@@ -74,6 +74,21 @@ schedule lives in its own dedicated screen outside the Main Menu entirely.
 _Avoid_: calendar view, weekly grid, agenda (the device/reference-app term is
 Schedule).
 
+**Comfort Setpoints Screen**:
+The Main Menu section listing each configured Comfort Setting's Heat/Cool
+target temperatures (ADR-0015) — distinct from the live **Setpoint** the
+Temperature Adjust Overlay edits, which is the thermostat's current hold, not
+a Comfort Setting's own stored targets. Each row shows a Comfort Setting's
+icon/name and up to two value pills (Heat, Cool); tapping a pill opens a
+picker to change that one value, visually modeled on the Temperature Adjust
+Overlay's own scrubber. Backed by `comfort_setpoints` config, a list naming
+each Comfort Setting and the `number` entity/entities behind its targets
+(e.g. an ecobee integration's own per-comfort-setting Heat/Cool Temp
+entities); a Card addition — the physical device edits these targets inline
+on the Comfort Setting itself, not as a separate Main Menu section.
+_Avoid_: presets screen, temperature settings (too easily confused with the
+live Setpoint).
+
 **Standby Screen**:
 The dimmed idle display the Card shows when left untouched: a minimal white-on-black
 layout with outdoor temperature, current temperature and the time, mirroring the
@@ -97,28 +112,30 @@ _Avoid_: HVAC mode (in UI copy), operation mode, "Auto" alone as the mode name
 
 **Main Menu**:
 The section screens reached from the Home Screen's gear — **System**, **Sensors**,
-**Fan**, **Schedule** — navigated by a persistent **Tab Bar** at the bottom. The
-gear lands directly on the first reachable section (no intermediate list); the Tab
-Bar switches between the sibling sections and its left temperature badge returns to
-the thermostat (Home). The System section holds both the System Mode and Comfort
-Setting selectors; tapping a selector opens a focused **Picker** pushed on top
-(dismissing it returns to the section) — Schedule's own Start Time Picker works the
-same way. Weather is reached from the Home Screen's own affordance, not the Tab Bar
-— as on the device, whose bottom bar carries thermostat/sensors/fan/settings but
-not weather (the voice/mic tab has no Home Assistant meaning and is dropped).
-Schedule is a Card addition with no equivalent physical-device tab (ADR-0014), but
-follows the same reachable-when-configured rule as the device's own sections.
+**Fan**, **Schedule**, **Comfort Setpoints** — navigated by a persistent **Tab Bar**
+at the bottom. The gear lands directly on the first reachable section (no
+intermediate list); the Tab Bar switches between the sibling sections and its left
+temperature badge returns to the thermostat (Home). The System section holds both
+the System Mode and Comfort Setting selectors; tapping a selector opens a focused
+**Picker** pushed on top (dismissing it returns to the section) — Schedule's Start
+Time Picker and Comfort Setpoints' own value picker work the same way. Weather is
+reached from the Home Screen's own affordance, not the Tab Bar — as on the device,
+whose bottom bar carries thermostat/sensors/fan/settings but not weather (the
+voice/mic tab has no Home Assistant meaning and is dropped). Schedule (ADR-0014)
+and Comfort Setpoints (ADR-0015) are Card additions with no equivalent
+physical-device tab, but each follows the same reachable-when-configured rule as
+the device's own sections.
 _Avoid_: settings, drawer, drill-down list (the earlier hub list is gone — only the
 selector→Picker step remains a drill-in).
 
 **Tab Bar**:
 The device's persistent bottom navigation across the Main Menu sections. Rendered as
-shell chrome (like the ✕) on the System / Sensors / Fan / Schedule screens only,
-never on the pickers, Temperature, or Weather. Left to right: a temperature
-**badge** (returns Home), then one icon tab per reachable section — sensors, fan,
-schedule, and the gear (which is the System/settings tab, kept rightmost). A tab
-shows only when its section is reachable for the bound entity (graceful
-degradation, ADR-0001).
+shell chrome (like the ✕) on the System / Sensors / Fan / Schedule / Comfort
+Setpoints screens only, never on the pickers, Temperature, or Weather. Left to
+right: a temperature **badge** (returns Home), then one icon tab per reachable
+section — sensors, fan, schedule, setpoints, and the gear (which is the
+System/settings tab, kept rightmost). A tab shows only when its section is
+reachable for the bound entity (graceful degradation, ADR-0001).
 _Avoid_: navbar, footer, toolbar.
 
 **Comfort Setting**:

@@ -168,6 +168,13 @@ humidity_entity: sensor.hallway_humidity # optional, overrides the thermostat's 
 air_quality_entity: sensor.air_quality_index # optional, adds the AQI gauge
 uv_index_entity: sensor.uv_index # optional, adds the UV gauge
 schedule_entity: calendar.living_room_schedule # optional, adds the Schedule Main Menu section
+comfort_setpoints: # optional, the Comfort Setpoints screen (see below)
+  - preset: Home
+    heat_entity: number.living_room_home_heat_temp
+    cool_entity: number.living_room_home_cool_temp
+  - preset: Away
+    heat_entity: number.living_room_away_heat_temp
+    cool_entity: number.living_room_away_cool_temp
 show_fan: auto # optional, auto | always | never — the Home Screen fan shortcut
 standby_screen: true # optional, dims to a clock when left idle
 corner_style: squircle # optional, squircle | rounded | square — the card's corner treatment
@@ -195,6 +202,7 @@ sensors: # optional, the Sensors screen (see below)
 | `uv_index_entity`        | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                                                         |
 | `fan_min_on_time_entity` | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                                                             |
 | `schedule_entity`        | no       | A `calendar` entity representing the weekly comfort-setting schedule. Adds the Schedule Main Menu section — see below.                                                                    |
+| `comfort_setpoints`      | no       | Per-Comfort-Setting Heat/Cool `number` entities. Adds the Comfort Setpoints Main Menu section — see below.                                                                                 |
 | `sensors`                | no       | Temperature entities for the Sensors screen (see below).                                                                                                                                  |
 | `inactivity_timeout`     | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                                                                     |
 | `standby_screen`         | no       | Dim to a minimal clock display when left idle. Default off.                                                                                                                               |
@@ -294,6 +302,35 @@ block(s) currently occupy that range to make room. **Copy schedule to another
 day** at the bottom opens a day picker — check any of the other six days and
 the selected day's whole arrangement is copied onto each one, replacing
 whatever was there.
+
+##### Comfort Setpoints
+
+Distinct from Schedule above (which changes *when* the thermostat switches
+Comfort Settings): `comfort_setpoints` lets you change what temperature each
+Comfort Setting actually targets, without leaving the card. Each entry names a
+Comfort Setting — exactly as it appears on the thermostat, e.g. "Home",
+"Away", "Sleep", or a custom name — and the `number` entity backing its Heat
+and/or Cool target, for example
+[ha-ecobee](https://github.com/shaelr/ha-ecobee)'s own per-comfort-setting
+Heat/Cool Temp entities. Either entity alone is fine (a cooling-only system's
+presets never need a Heat entity).
+
+```yaml
+comfort_setpoints:
+  - preset: Home
+    heat_entity: number.living_room_home_heat_temp
+    cool_entity: number.living_room_home_cool_temp
+  - preset: Away
+    heat_entity: number.living_room_away_heat_temp
+```
+
+This adds a **Setpoints** section to the Main Menu: a card per configured
+Comfort Setting with a pill for each of its Heat/Cool targets. Tapping a pill
+opens a picker — a vertical drag scrubber plus ± buttons, the same feel as the
+Home Screen's own temperature adjuster — to change that one value; it writes
+straight to the `number` entity, so the change takes effect the next time that
+Comfort Setting becomes active (a schedule block, a manual pick, or Resume
+Schedule), not the thermostat's current hold.
 
 ##### Standby screen elements
 

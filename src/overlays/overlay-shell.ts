@@ -14,6 +14,7 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
   sensor: icons.sensor,
   fan: icons.fan,
   calendar: icons.calendar,
+  setpoints: icons.setpoints,
 };
 
 /**

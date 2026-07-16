@@ -63,6 +63,64 @@ describe('parseConfig — sensors', () => {
   });
 });
 
+describe('parseConfig — comfort_setpoints', () => {
+  it('leaves comfort_setpoints undefined when the key is absent', () => {
+    expect(parseConfig(base).comfort_setpoints).toBeUndefined();
+  });
+
+  it('accepts a row with both heat_entity and cool_entity', () => {
+    const config = parseConfig({
+      ...base,
+      comfort_setpoints: [
+        { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+      ],
+    });
+    expect(config.comfort_setpoints).toEqual([
+      { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+    ]);
+  });
+
+  it('accepts a row with only one of heat_entity/cool_entity', () => {
+    const config = parseConfig({
+      ...base,
+      comfort_setpoints: [{ preset: 'Away', heat_entity: 'number.away_heat' }],
+    });
+    expect(config.comfort_setpoints).toEqual([
+      { preset: 'Away', heat_entity: 'number.away_heat', cool_entity: undefined },
+    ]);
+  });
+
+  it('throws when comfort_setpoints is not a list', () => {
+    expect(() => parseConfig({ ...base, comfort_setpoints: 'number.home_heat' })).toThrow(
+      /`comfort_setpoints` must be a list/,
+    );
+  });
+
+  it('throws when an entry is not an object', () => {
+    expect(() => parseConfig({ ...base, comfort_setpoints: ['Home'] })).toThrow(
+      /`comfort_setpoints\[0\]` must be an object/,
+    );
+  });
+
+  it('throws when an entry has no preset name', () => {
+    expect(() =>
+      parseConfig({ ...base, comfort_setpoints: [{ heat_entity: 'number.home_heat' }] }),
+    ).toThrow(/`comfort_setpoints\[0\].preset` is required/);
+  });
+
+  it('throws when an entry sets neither heat_entity nor cool_entity', () => {
+    expect(() => parseConfig({ ...base, comfort_setpoints: [{ preset: 'Home' }] })).toThrow(
+      /must set at least one of `heat_entity`\/`cool_entity`/,
+    );
+  });
+
+  it('throws when heat_entity is not a string', () => {
+    expect(() =>
+      parseConfig({ ...base, comfort_setpoints: [{ preset: 'Home', heat_entity: 42 }] }),
+    ).toThrow(/`comfort_setpoints\[0\].heat_entity` must be a string/);
+  });
+});
+
 describe('parseConfig — air_quality_entity', () => {
   it('leaves air_quality_entity undefined when the key is absent', () => {
     expect(parseConfig(base).air_quality_entity).toBeUndefined();

@@ -71,6 +71,14 @@ export function comfortIconFor(name: string, config: EcoseeCardConfig): ComfortI
   return KNOWN[name.toLowerCase()]?.icon ?? defaultIcon(config);
 }
 
+/** The display label for a Comfort Setting name — Home/Away/Sleep's own
+ *  capitalization (case-insensitive match), or the name passed through verbatim
+ *  for anything else (e.g. a custom preset). Mirrors `comfortIconFor`'s lookup so
+ *  a surface deriving both never disagrees with the Comfort Setting picker. */
+export function comfortLabelFor(name: string): string {
+  return KNOWN[name.toLowerCase()]?.label ?? name;
+}
+
 export function toComfortSettingModel(
   hass: HomeAssistant,
   config: EcoseeCardConfig,

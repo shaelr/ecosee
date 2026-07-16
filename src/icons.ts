@@ -240,6 +240,18 @@ export const icons = {
     </g>
   `),
 
+  /** Comfort Setpoints Main Menu tab — two slider tracks with handles at
+   *  different positions, representing the adjustable Heat/Cool targets each
+   *  Comfort Setting carries. */
+  setpoints: wrap(svg`
+    <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <line x1="4" y1="8" x2="20" y2="8" />
+      <line x1="4" y1="16" x2="20" y2="16" />
+    </g>
+    <circle cx="14.5" cy="8" r="2.4" fill="currentColor" />
+    <circle cx="9.5" cy="16" r="2.4" fill="currentColor" />
+  `),
+
   // Weather-condition glyphs. Mapped from a Home Assistant `weather` condition by
   // `weatherIcon` below; `sun` (above) covers a clear day. Tinted a natural
   // per-condition color inside the Weather Overlay (`conditionColor`, issue #31),

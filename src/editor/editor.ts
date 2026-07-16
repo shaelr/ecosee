@@ -82,6 +82,17 @@ const SENSORS_HELPER =
   'Optional. Extra temperature entities for the Sensors sub-screen, hidden until you add one. ' +
   'A display-name field and an optional occupancy-entity override sit beneath each sensor.';
 
+/** Helper copy for the Comfort Setpoints block — on the base anchor field and,
+ *  in the rendered schema, on the trailing "add a Comfort Setting" field. */
+const COMFORT_SETPOINTS_HELPER =
+  'Optional. Per-Comfort-Setting Heat/Cool number entities (e.g. an ecobee integration\'s ' +
+  'per-comfort-setting Heat/Cool Temp entities). Adds the Comfort Setpoints Main Menu section, ' +
+  'hidden until you add one. Name a Comfort Setting exactly as it appears on the thermostat ' +
+  '(e.g. "Home", "Away", "Sleep", or a custom name), then set its Heat and/or Cool entity below it.';
+
+/** The entity filter for a Comfort Setpoints field: any `number` entity. */
+const COMFORT_SETPOINT_ENTITY_FILTER: EntityFilter[] = [{ domain: 'number' }];
+
 /** The form, in display order, tracking the config schema (issue #14). Most keys in
  *  `EcoseeCardConfig` (bar `type`, which HA owns) have exactly one field here,
  *  mirroring `parseConfig`; a new config key must be added alongside its overlay. One
@@ -144,6 +155,17 @@ export function editorSchema(): EditorField[] {
         'ecobee integration’s Schedule calendar). Adds the Schedule Main Menu section; hidden ' +
         'until an entity is set.',
       selector: { entity: { domain: 'calendar' } },
+    },
+    {
+      // Anchor for the Comfort Setpoints block. `composeEditorSchema` replaces
+      // this single field with one preset-name field per configured row (each
+      // followed by its Heat/Cool entity pickers) plus a trailing empty
+      // preset-name field to add another; the base field only fixes the
+      // block's position and tracks the `comfort_setpoints` config key.
+      name: 'comfort_setpoints',
+      label: 'Comfort Setpoints',
+      helper: COMFORT_SETPOINTS_HELPER,
+      selector: { text: {} },
     },
     {
       // Anchor for the Sensors block. `composeEditorSchema` replaces this single
@@ -349,16 +371,85 @@ function sensorEntityField(index: number, isAdd: boolean): EditorField {
   };
 }
 
-/** The full form schema for a given config: the base fields, with the single
- *  `sensors` anchor expanded into one entity picker per sensor (each followed by
- *  its display-name field) plus a trailing "add" picker. The editor element
- *  recomputes this each render so the rows track the currently-selected sensors.
+/** Prefix for the synthetic per-row Comfort Setpoints preset-name fields. Not a
+ *  config key — it only lives in the form value; `normalizeEditorConfig` folds
+ *  these back into `comfort_setpoints[].preset`. Keyed by position (like the
+ *  sensor entity pickers), since the preset name is free text a user is still
+ *  typing, not a stable identity to key rows by. */
+export const COMFORT_SETPOINT_PRESET_PREFIX = 'comfort_setpoint_preset::';
+
+/** The form-data key for the Nth Comfort Setpoints row's preset-name field. */
+export function comfortSetpointPresetKey(index: number): string {
+  return `${COMFORT_SETPOINT_PRESET_PREFIX}${index}`;
+}
+
+/** Prefix for the synthetic per-row Heat/Cool entity pickers, mirroring
+ *  COMFORT_SETPOINT_PRESET_PREFIX. */
+export const COMFORT_SETPOINT_HEAT_PREFIX = 'comfort_setpoint_heat::';
+export const COMFORT_SETPOINT_COOL_PREFIX = 'comfort_setpoint_cool::';
+
+export function comfortSetpointHeatKey(index: number): string {
+  return `${COMFORT_SETPOINT_HEAT_PREFIX}${index}`;
+}
+export function comfortSetpointCoolKey(index: number): string {
+  return `${COMFORT_SETPOINT_COOL_PREFIX}${index}`;
+}
+
+/** The Comfort Setpoints editing block: for each configured row, its preset-name
+ *  field with the Heat/Cool entity pickers directly beneath it, then a trailing
+ *  empty preset-name field that adds another row. Mirrors `sensorFields`'s shape,
+ *  but keyed purely by position — a preset name has no stable identity of its
+ *  own the way a sensor's entity id does, so a row's pickers stay tied to its
+ *  index rather than to whatever name is currently typed into it. */
+export function comfortSetpointFields(config: Record<string, unknown>): EditorField[] {
+  const rows = readComfortSetpointObjects(config.comfort_setpoints);
+  const fields: EditorField[] = [];
+  rows.forEach((row, index) => {
+    fields.push(comfortSetpointPresetField(index, row.preset));
+    fields.push({
+      name: comfortSetpointHeatKey(index),
+      label: `Heat entity — ${row.preset}`,
+      helper: "Optional. A number entity for this Comfort Setting's Heat target.",
+      selector: { entity: { filter: COMFORT_SETPOINT_ENTITY_FILTER } },
+    });
+    fields.push({
+      name: comfortSetpointCoolKey(index),
+      label: `Cool entity — ${row.preset}`,
+      helper: "Optional. A number entity for this Comfort Setting's Cool target.",
+      selector: { entity: { filter: COMFORT_SETPOINT_ENTITY_FILTER } },
+    });
+  });
+  // Trailing empty preset-name field: typing a name here appends a new row.
+  fields.push(comfortSetpointPresetField(rows.length, ''));
+  return fields;
+}
+
+/** One Comfort Setting preset-name field. Existing rows carry their own name in
+ *  the label; the trailing add slot gets an inviting label and the block's
+ *  helper text. */
+function comfortSetpointPresetField(index: number, current: string): EditorField {
+  return {
+    name: comfortSetpointPresetKey(index),
+    label: current ? `Comfort Setting — ${current}` : 'Add a Comfort Setting',
+    helper: current ? undefined : COMFORT_SETPOINTS_HELPER,
+    selector: { text: {} },
+  };
+}
+
+/** The full form schema for a given config: the base fields, with the `sensors`
+ *  and `comfort_setpoints` anchors each expanded into their own repeating block
+ *  (see `sensorFields`/`comfortSetpointFields`). The editor element recomputes
+ *  this each render so the rows track the currently-entered values.
  *  `editorSchema()` itself stays the pure base (one field per config key). */
 export function composeEditorSchema(config: Record<string, unknown>): EditorField[] {
   const composed: EditorField[] = [];
   for (const field of editorSchema()) {
     if (field.name === 'sensors') {
       composed.push(...sensorFields(config));
+      continue;
+    }
+    if (field.name === 'comfort_setpoints') {
+      composed.push(...comfortSetpointFields(config));
       continue;
     }
     composed.push(field);
@@ -409,6 +500,28 @@ function sensorEntityIds(value: unknown): string[] {
   });
 }
 
+/** A stored Comfort Setpoints row, normalized from the config's object form. */
+interface StoredComfortSetpoint {
+  preset: string;
+  heat_entity?: string;
+  cool_entity?: string;
+}
+
+/** Normalize a stored `comfort_setpoints` value into `StoredComfortSetpoint[]`,
+ *  dropping anything without a non-empty `preset`. */
+function readComfortSetpointObjects(value: unknown): StoredComfortSetpoint[] {
+  if (!Array.isArray(value)) return [];
+  const out: StoredComfortSetpoint[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.preset !== 'string' || item.preset === '') continue;
+    const row: StoredComfortSetpoint = { preset: item.preset };
+    if (typeof item.heat_entity === 'string') row.heat_entity = item.heat_entity;
+    if (typeof item.cool_entity === 'string') row.cool_entity = item.cool_entity;
+    out.push(row);
+  }
+  return out;
+}
+
 /** Adapt a stored config into the value `<ha-form>` renders: the `sensors` array is
  *  spread across the per-sensor form fields — each entry's entity id under its
  *  indexed picker key, and its stored display name under its per-sensor name field
@@ -432,6 +545,14 @@ export function toEditorData(config: Record<string, unknown>): Record<string, un
       if (sensor.occupancy_entity !== undefined) {
         data[sensorOccupancyKey(sensor.entity)] = sensor.occupancy_entity;
       }
+    });
+  }
+  if (config.comfort_setpoints !== undefined) {
+    delete data.comfort_setpoints;
+    readComfortSetpointObjects(config.comfort_setpoints).forEach((row, index) => {
+      data[comfortSetpointPresetKey(index)] = row.preset;
+      if (row.heat_entity !== undefined) data[comfortSetpointHeatKey(index)] = row.heat_entity;
+      if (row.cool_entity !== undefined) data[comfortSetpointCoolKey(index)] = row.cool_entity;
     });
   }
   return data;
@@ -501,6 +622,58 @@ function applySensors(
   });
 }
 
+/** The Comfort Setpoints rows, read from the per-index preset-name fields in
+ *  index order. A blank name (a cleared row, or the trailing add slot) is
+ *  skipped — unlike sensors' entity-keyed dedup, rows aren't deduped by name
+ *  here, since a duplicate preset name is the user's call, not this editor's. */
+function readComfortSetpointRows(
+  formValue: Record<string, unknown>,
+): Array<{ index: number; preset: string }> {
+  const rows: Array<{ index: number; preset: string }> = [];
+  for (const key of Object.keys(formValue)) {
+    if (!key.startsWith(COMFORT_SETPOINT_PRESET_PREFIX)) continue;
+    const raw = formValue[key];
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    rows.push({ index: Number(key.slice(COMFORT_SETPOINT_PRESET_PREFIX.length)), preset: raw.trim() });
+  }
+  rows.sort((a, b) => a.index - b.index);
+  return rows;
+}
+
+/** Fold the per-row preset-name fields plus their Heat/Cool entity pickers back
+ *  into the config. An empty set drops the key (Comfort Setpoints section
+ *  hidden). Each row's entities come straight from its own indexed pickers
+ *  (rows are identified by position, not by the still-editable preset name),
+ *  falling back to the previously-stored row at that position when a field is
+ *  absent from the form value so nothing is silently lost. */
+function applyComfortSetpoints(
+  next: Record<string, unknown>,
+  prev: unknown,
+  formValue: Record<string, unknown>,
+): void {
+  const rows = readComfortSetpointRows(formValue);
+  if (rows.length === 0) {
+    delete next.comfort_setpoints;
+    return;
+  }
+  const prevRows = readComfortSetpointObjects(prev);
+
+  next.comfort_setpoints = rows.map(({ index, preset }) => {
+    const heatKey = comfortSetpointHeatKey(index);
+    const typedHeat = heatKey in formValue ? formValue[heatKey] : prevRows[index]?.heat_entity;
+    const heat = typeof typedHeat === 'string' && typedHeat.trim() !== '' ? typedHeat : undefined;
+
+    const coolKey = comfortSetpointCoolKey(index);
+    const typedCool = coolKey in formValue ? formValue[coolKey] : prevRows[index]?.cool_entity;
+    const cool = typeof typedCool === 'string' && typedCool.trim() !== '' ? typedCool : undefined;
+
+    const row: StoredComfortSetpoint = { preset };
+    if (heat !== undefined) row.heat_entity = heat;
+    if (cool !== undefined) row.cool_entity = cool;
+    return row;
+  });
+}
+
 /** Turn an `<ha-form>` value into a config `parseConfig` accepts. Starts from the
  *  previously-stored config so keys the editor does not surface survive (e.g.
  *  per-sensor `occupancy_entity`), then for each schema field either sets the new
@@ -518,6 +691,10 @@ export function normalizeEditorConfig(
   for (const field of editorSchema()) {
     if (field.name === 'sensors') {
       applySensors(next, prev.sensors, value);
+      continue;
+    }
+    if (field.name === 'comfort_setpoints') {
+      applyComfortSetpoints(next, prev.comfort_setpoints, value);
       continue;
     }
     const raw = value[field.name];

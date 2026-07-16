@@ -20,6 +20,25 @@ export interface SensorConfig {
   occupancy_entity?: string;
 }
 
+/** One Comfort Setting's Heat/Cool temperature targets (distinct from the live
+ *  hold the Temperature Adjust overlay edits): the Comfort Setting name plus the
+ *  `number` entity/entities backing its Heat and/or Cool target (e.g. an ecobee
+ *  integration's per-comfort-setting Heat/Cool Temp entities, one `number` per
+ *  field). Not cross-validated against the bound climate entity's own
+ *  `preset_modes` — the two are read independently (ADR-0001 graceful
+ *  degradation): a typo'd `preset` here just never matches a Comfort Setting
+ *  Home Assistant actually knows, so its icon falls back to the default glyph. */
+export interface ComfortSetpointConfig {
+  /** The Comfort Setting name this row edits, e.g. "Home", "Away", "Sleep", or a
+   *  custom name — matches the value the entity's own `preset_mode` would carry. */
+  preset: string;
+  /** A `number` entity for this Comfort Setting's Heat target. Optional — a
+   *  cooling-only system might configure only `cool_entity`. */
+  heat_entity?: string;
+  /** A `number` entity for this Comfort Setting's Cool target. Optional. */
+  cool_entity?: string;
+}
+
 /** The card's outer corner treatment. `squircle` (the default) is the ecobee
  *  Premium's superellipse motif; `rounded` is a smaller, conventional
  *  border-radius; `square` is sharp/unrounded corners. Purely cosmetic — it
@@ -92,6 +111,10 @@ export interface EcoseeCardConfig {
    *  setting), e.g. an ecobee integration's own Schedule calendar. Adds the
    *  Schedule Main Menu section (ADR-0014); hidden when this is unset. */
   schedule_entity?: string;
+  /** Per-Comfort-Setting Heat/Cool temperature setpoints. Each row names a
+   *  Comfort Setting and the `number` entity/entities backing its targets. Adds
+   *  the Comfort Setpoints Main Menu section; hidden when unset/empty. */
+  comfort_setpoints?: ComfortSetpointConfig[];
   /** Curated temperature sensors for the Sensors sub-screen (issue #9). Each item
    *  may be a bare entity-id string (shorthand) or a `SensorConfig` object. The
    *  thermostat's own temperature is auto-included first, so this lists *extra*
@@ -210,6 +233,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     air_quality_entity: optionalString('air_quality_entity'),
     uv_index_entity: optionalString('uv_index_entity'),
     schedule_entity: optionalString('schedule_entity'),
+    comfort_setpoints: parseComfortSetpoints(raw.comfort_setpoints),
     sensors: parseSensors(raw.sensors),
     inactivity_timeout: parseInactivityTimeout(raw.inactivity_timeout),
     standby_screen: parseStandbyScreen(raw.standby_screen),
@@ -359,6 +383,46 @@ function parseInactivityTimeout(raw: unknown): number | undefined {
     throw new Error('ecosee: `inactivity_timeout` must be a non-negative number of seconds.');
   }
   return raw;
+}
+
+/** Parse the optional `comfort_setpoints:` list. Each item is an object naming a
+ *  Comfort Setting and at least one of `heat_entity`/`cool_entity`. Returns
+ *  `undefined` when the key is absent so the rest of the Card can treat "no
+ *  setpoints configured" uniformly. Throws user-facing errors for malformed input. */
+function parseComfortSetpoints(raw: unknown): ComfortSetpointConfig[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error('ecosee: `comfort_setpoints` must be a list of comfort-setting setpoint entries.');
+  }
+  return raw.map((item, index) => parseComfortSetpoint(item, index));
+}
+
+function parseComfortSetpoint(item: unknown, index: number): ComfortSetpointConfig {
+  if (!isRecord(item)) {
+    throw new Error(`ecosee: \`comfort_setpoints[${index}]\` must be an object.`);
+  }
+  const preset = item.preset;
+  if (typeof preset !== 'string' || preset.length === 0) {
+    throw new Error(
+      `ecosee: \`comfort_setpoints[${index}].preset\` is required (the Comfort Setting name).`,
+    );
+  }
+  const optional = (key: 'heat_entity' | 'cool_entity'): string | undefined => {
+    const value = item[key];
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string') {
+      throw new Error(`ecosee: \`comfort_setpoints[${index}].${key}\` must be a string entity id.`);
+    }
+    return value;
+  };
+  const heat_entity = optional('heat_entity');
+  const cool_entity = optional('cool_entity');
+  if (!heat_entity && !cool_entity) {
+    throw new Error(
+      `ecosee: \`comfort_setpoints[${index}]\` must set at least one of \`heat_entity\`/\`cool_entity\`.`,
+    );
+  }
+  return { preset, heat_entity, cool_entity };
 }
 
 /** Parse the optional `sensors:` list. Each item is either a bare entity-id

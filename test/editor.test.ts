@@ -6,6 +6,9 @@ import {
   sensorNameKey,
   sensorOccupancyKey,
   sensorEntityKey,
+  comfortSetpointPresetKey,
+  comfortSetpointHeatKey,
+  comfortSetpointCoolKey,
   toEditorData,
   normalizeEditorConfig,
 } from '../src/editor/editor';
@@ -26,6 +29,7 @@ describe('editorSchema — coverage', () => {
       'air_quality_entity',
       'uv_index_entity',
       'schedule_entity',
+      'comfort_setpoints',
       'sensors',
       'show_fan',
       'fan_min_on_time_entity',
@@ -213,6 +217,48 @@ describe('composeEditorSchema — per-sensor rows', () => {
   });
 });
 
+describe('composeEditorSchema — per-Comfort-Setpoints rows', () => {
+  it('replaces the comfort_setpoints anchor with just an add field when none are configured', () => {
+    const names = composeEditorSchema({ ...base }).map((field) => field.name);
+    expect(names).toContain(comfortSetpointPresetKey(0));
+    expect(names).not.toContain(comfortSetpointHeatKey(0));
+  });
+
+  it('puts the Heat/Cool entity pickers directly beneath each row, then a trailing add field', () => {
+    const config = {
+      ...base,
+      comfort_setpoints: [
+        { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+        { preset: 'Away', heat_entity: 'number.away_heat' },
+      ],
+    };
+    const names = composeEditorSchema(config).map((field) => field.name);
+    const start = names.indexOf(comfortSetpointPresetKey(0));
+    expect(names.slice(start, start + 7)).toEqual([
+      comfortSetpointPresetKey(0),
+      comfortSetpointHeatKey(0),
+      comfortSetpointCoolKey(0),
+      comfortSetpointPresetKey(1),
+      comfortSetpointHeatKey(1),
+      comfortSetpointCoolKey(1),
+      comfortSetpointPresetKey(2), // trailing add field
+    ]);
+    const heatField = composeEditorSchema(config).find(
+      (field) => field.name === comfortSetpointHeatKey(0),
+    );
+    expect(heatField?.selector).toEqual({ entity: { filter: [{ domain: 'number' }] } });
+    expect(names).not.toContain('comfort_setpoints');
+  });
+
+  it('leaves the base schema (one field per config key) untouched', () => {
+    const names = editorSchema().map((field) => field.name);
+    expect(names).toContain('comfort_setpoints');
+    expect(names.some((name) => name.startsWith(comfortSetpointHeatKey(0).slice(0, -1)))).toBe(
+      false,
+    );
+  });
+});
+
 describe('toEditorData', () => {
   it('spreads sensor entity ids across the per-index picker fields', () => {
     const data = toEditorData({
@@ -268,6 +314,27 @@ describe('toEditorData', () => {
       sensors: [{ entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' }],
     });
     expect(data[sensorOccupancyKey('sensor.hallway')]).toBe('binary_sensor.hall');
+  });
+
+  it('spreads comfort_setpoints rows across the per-index preset/heat/cool fields', () => {
+    const data = toEditorData({
+      ...base,
+      comfort_setpoints: [
+        { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+        { preset: 'Away', heat_entity: 'number.away_heat' },
+      ],
+    });
+    expect(data[comfortSetpointPresetKey(0)]).toBe('Home');
+    expect(data[comfortSetpointHeatKey(0)]).toBe('number.home_heat');
+    expect(data[comfortSetpointCoolKey(0)]).toBe('number.home_cool');
+    expect(data[comfortSetpointPresetKey(1)]).toBe('Away');
+    expect(data[comfortSetpointHeatKey(1)]).toBe('number.away_heat');
+    expect(comfortSetpointCoolKey(1) in data).toBe(false);
+    expect('comfort_setpoints' in data).toBe(false);
+  });
+
+  it('omits comfort_setpoints when none are configured', () => {
+    expect('comfort_setpoints' in toEditorData({ ...base })).toBe(false);
   });
 });
 
@@ -536,5 +603,79 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
     expect(config.uv_index_entity).toBe('sensor.uv');
     expect(config.sensors).toEqual([{ entity: 'sensor.kitchen' }]);
     expect(config.inactivity_timeout).toBe(0);
+  });
+
+  it('drops an empty comfort_setpoints list and builds a row from its typed preset/heat/cool fields', () => {
+    expect('comfort_setpoints' in normalizeEditorConfig({ ...base }, base)).toBe(false);
+    const next = normalizeEditorConfig(
+      {
+        ...base,
+        [comfortSetpointPresetKey(0)]: 'Home',
+        [comfortSetpointHeatKey(0)]: 'number.home_heat',
+        [comfortSetpointCoolKey(0)]: 'number.home_cool',
+      },
+      base,
+    );
+    expect(next.comfort_setpoints).toEqual([
+      { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+    ]);
+  });
+
+  it('preserves a row’s stored entities when its fields are untouched by an unrelated GUI edit', () => {
+    const prev = {
+      ...base,
+      comfort_setpoints: [{ preset: 'Home', heat_entity: 'number.home_heat' }],
+    };
+    const next = normalizeEditorConfig(
+      { ...base, [comfortSetpointPresetKey(0)]: 'Home' },
+      prev,
+    );
+    expect(next.comfort_setpoints).toEqual([
+      { preset: 'Home', heat_entity: 'number.home_heat' },
+    ]);
+  });
+
+  it('clears a row’s heat entity when its field is emptied in the GUI', () => {
+    const prev = {
+      ...base,
+      comfort_setpoints: [{ preset: 'Home', heat_entity: 'number.home_heat' }],
+    };
+    const next = normalizeEditorConfig(
+      {
+        ...base,
+        [comfortSetpointPresetKey(0)]: 'Home',
+        [comfortSetpointHeatKey(0)]: '',
+      },
+      prev,
+    );
+    expect(next.comfort_setpoints).toEqual([{ preset: 'Home' }]);
+  });
+
+  it('skips a blank preset-name row (a cleared row, or the trailing add slot)', () => {
+    const next = normalizeEditorConfig(
+      {
+        ...base,
+        [comfortSetpointPresetKey(0)]: 'Home',
+        [comfortSetpointHeatKey(0)]: 'number.home_heat',
+        [comfortSetpointPresetKey(1)]: '   ',
+      },
+      base,
+    );
+    expect(next.comfort_setpoints).toEqual([
+      { preset: 'Home', heat_entity: 'number.home_heat' },
+    ]);
+  });
+
+  it('produces a comfort_setpoints config parseConfig accepts', () => {
+    const formValue = {
+      ...base,
+      [comfortSetpointPresetKey(0)]: 'Home',
+      [comfortSetpointHeatKey(0)]: 'number.home_heat',
+      [comfortSetpointCoolKey(0)]: 'number.home_cool',
+    };
+    const config = parseConfig(normalizeEditorConfig(formValue, {}));
+    expect(config.comfort_setpoints).toEqual([
+      { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
+    ]);
   });
 });
