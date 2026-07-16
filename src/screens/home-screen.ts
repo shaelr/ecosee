@@ -287,19 +287,22 @@ export class EcoseeHomeScreen extends LitElement {
        rather than a size hard-coded to leave room for a foot row whether or not
        one exists. This supersedes issue #55's padding-bottom upward bias with a
        structural one instead: the cluster now centers in its own real remaining
-       space, and a configured foot row (or the Resume Schedule pill, itself part
-       of .cluster) still reads as sitting above true center simply because it
-       shares .cluster's box with the temp/setpoints above it. gap is small
-       (not 3cqw, matching .cluster's own) because it only ever separates
-       .cluster from .foot, and the tallest realistic stack — Resume Schedule
-       reserved AND both AQI/UV foot gauges on at once — needs the room:
-       .cluster can't shrink below its own content's height (fixed font sizes,
-       not flexible), so unlike padding this gap is the one lever that actually
-       comes out of space .foot would otherwise claim, not space nothing
-       needs. Caught via Playwright screenshotting that exact combination
-       (not just the common bare-thermostat case this whole change was about)
-       overflowing the fixed-height .screen and clipping against its own
-       overflow: hidden. */
+       space, and a configured foot row still reads as sitting above true center
+       simply because it shares .body's box with .cluster above it.
+
+       Both gaps were briefly trimmed tighter than this to fit the tallest
+       possible stack when the opt-in Resume Schedule pill was a THIRD row
+       living beneath the setpoint ovals — .cluster couldn't shrink below its
+       own content's height (fixed font sizes, not flexible), so with three
+       rows (ovals, resume pill, foot) the tight case needed every bit of gap
+       reclaimed to avoid overflowing the fixed-height .screen. ADR-0016
+       replaced that separate pill with a combined range pill that swaps
+       places WITH the ovals instead of adding a row beneath them, so the
+       tallest stack is back down to two rows (setpoint display, foot) and
+       both gaps can stay at the same comfortable 3cqw every other screen's
+       header/section spacing uses — reverified via Playwright (range pill +
+       both foot gauges at once, the current tallest combination) before
+       restoring these. */
       .body {
         position: relative;
         z-index: 1;
@@ -307,7 +310,7 @@ export class EcoseeHomeScreen extends LitElement {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1cqw;
+        gap: 3cqw;
       }
       .cluster {
         width: 100%;
@@ -316,7 +319,7 @@ export class EcoseeHomeScreen extends LitElement {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 1.6cqw;
+        gap: 3cqw;
       }
 
       /* Thin (weight 300) numeral readout — fixed white, neither theme-following
