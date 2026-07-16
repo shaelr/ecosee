@@ -8,8 +8,10 @@ import { icons } from '../icons';
 /**
  * `<ecosee-sensors-overlay>` — the Sensors sub-screen's content (slotted into
  * <ecosee-overlay>). Laid out as the device is (see docs/reference/sensors.jpeg):
- * the "Main Menu" › "Sensors" breadcrumb near the top, then a vertical stack of
- * horizontal **cards** — each a cyan-outlined squircle with a sensor glyph, the
+ * a "Sensors" title near the top (the section's own name — no separate "Main
+ * Menu" breadcrumb, matching Fan/Schedule's single-title header), then a
+ * vertical stack of horizontal **cards** — each a cyan-outlined squircle with a
+ * sensor glyph, the
  * sensor name, a `73° | Occupied` reading line, and a circled expand chevron.
  *
  * Purely presentational and **read-only**: it renders the already-degraded
@@ -52,23 +54,11 @@ export class EcoseeSensorsOverlay extends LitElement {
         var(--ecosee-tabbar-inset, calc(8 * var(--ecosee-u, 4.6px)));
     }
 
-    .header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1cqw;
-    }
     .title {
       margin: 0;
-      font-size: 9cqw;
+      font-size: 8cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-text-accent, #62cfe9);
-    }
-    .subtitle {
-      margin: 0;
-      font-size: 6cqw;
-      font-weight: 600;
       color: var(--ecosee-text-accent, #62cfe9);
     }
 
@@ -180,10 +170,7 @@ export class EcoseeSensorsOverlay extends LitElement {
     if (!model || !model.available) return nothing;
     return html`
       <div class="sensors">
-        <div class="header">
-          <h2 class="title">Main Menu</h2>
-          <p class="subtitle">Sensors</p>
-        </div>
+        <h2 class="title">Sensors</h2>
         <div class="list" role="list" aria-label="Sensors">
           ${repeat(
             model.cards,

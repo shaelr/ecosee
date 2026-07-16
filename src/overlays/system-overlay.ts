@@ -13,7 +13,8 @@ export type SystemSelectTarget = 'system-mode' | 'comfort-setting';
 /**
  * `<ecosee-system-overlay>` — the Main Menu › System sub-screen (slotted into
  * <ecosee-overlay>). Laid out as the device is (see docs/reference/menu-system.jpeg):
- * the "Main Menu" title with a "System" subtitle, then the two selectors — System
+ * a "System" title (the section's own name — no separate "Main Menu" breadcrumb,
+ * matching Fan/Schedule's single-title header), then the two selectors — System
  * Mode and Comfort Setting — each a labeled cyan-outlined pill showing the active
  * value with a ▾ caret, and the equipment-status line beneath ("No Equipment
  * Running" / "Heating" / "Cooling").
@@ -62,23 +63,11 @@ export class EcoseeSystemOverlay extends LitElement {
       text-align: center;
     }
 
-    .head {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.5cqw;
-    }
     .title {
       margin: 0;
-      font-size: 9cqw;
+      font-size: 8cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-text-accent, #62cfe9);
-    }
-    .subtitle {
-      margin: 0;
-      font-size: 6.5cqw;
-      font-weight: 500;
       color: var(--ecosee-text-accent, #62cfe9);
     }
 
@@ -165,10 +154,7 @@ export class EcoseeSystemOverlay extends LitElement {
     if (!this.systemMode?.available && !this.comfort?.available) return nothing;
     return html`
       <div class="system">
-        <div class="head">
-          <h2 class="title">Main Menu</h2>
-          <p class="subtitle">System</p>
-        </div>
+        <h2 class="title">System</h2>
         <div class="selectors">
           ${this._renderSelector('System Mode', this._modeValue(), 'system-mode', this.systemMode)}
           ${this._renderSelector(

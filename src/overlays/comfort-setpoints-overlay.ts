@@ -21,8 +21,10 @@ export interface ComfortSetpointSelectDetail {
 /**
  * `<ecosee-comfort-setpoints-overlay>` — the Comfort Setpoints Main Menu
  * section's content (slotted into <ecosee-overlay>, ADR-0015). Laid out like the
- * Sensors sub-screen (`sensors-overlay.ts`): a "Main Menu" breadcrumb, then a
- * scrollable vertical stack of cyan-outlined cards, one per configured Comfort
+ * Sensors sub-screen (`sensors-overlay.ts`): a "Setpoints" title (the section's
+ * own name — no separate "Main Menu" breadcrumb, matching Fan/Schedule's
+ * single-title header), then a scrollable vertical stack of cyan-outlined
+ * cards, one per configured Comfort
  * Setting. Each card carries the setting's own glyph/name and up to two small
  * value pills (Heat amber, Cool blue, matching the Temperature Adjust overlay's
  * own setpoint tinting) — tapping a pill emits `ecosee-comfort-setpoint-select`
@@ -57,23 +59,11 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
         var(--ecosee-tabbar-inset, calc(8 * var(--ecosee-u, 4.6px)));
     }
 
-    .header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1cqw;
-    }
     .title {
       margin: 0;
-      font-size: 9cqw;
+      font-size: 8cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: var(--ecosee-text-accent, #62cfe9);
-    }
-    .subtitle {
-      margin: 0;
-      font-size: 6cqw;
-      font-weight: 600;
       color: var(--ecosee-text-accent, #62cfe9);
     }
 
@@ -196,10 +186,7 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
     if (!model || !model.available) return nothing;
     return html`
       <div class="setpoints">
-        <div class="header">
-          <h2 class="title">Main Menu</h2>
-          <p class="subtitle">Setpoints</p>
-        </div>
+        <h2 class="title">Setpoints</h2>
         <div class="list" role="list" aria-label="Comfort Setting setpoints">
           ${repeat(
             model.presets,
