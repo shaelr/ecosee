@@ -8,9 +8,9 @@ import type { HomeView } from '../src/climate/home-view';
 // Render tests for the Home Screen's setpoint ovals (issue #42): the device
 // presents active setpoints as amber Heat / blue Cool ovals — two side by side in
 // Heat / Cool (Auto), one centered in a single-setpoint mode — each a tap target
-// that opens Temperature Adjust for its own setpoint. There is no combined range
-// pill (ADR-0004); the opt-in Resume Schedule pill (ADR-0012, tested in its own
-// describe block below) renders beneath these without ever replacing them.
+// that opens Temperature Adjust for its own setpoint. Replaced entirely by the
+// combined Heat–Cool range pill (ADR-0012, extended by ADR-0016, tested in its
+// own describe block below) whenever `view.resumeAvailable` is true.
 
 function view(overrides: Partial<HomeView> = {}): HomeView {
   return {
@@ -23,7 +23,6 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
     mode: 'heat_cool',
     setpoints: { heat: 70, cool: 75 },
     resumeAvailable: false,
-    resumeReserved: false,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,
@@ -86,11 +85,9 @@ describe('Home Screen setpoint ovals', () => {
     expect(ovals(el)).toHaveLength(0);
   });
 
-  it('has dropped the old combined range pill treatment', async () => {
-    const el = await mount(view());
-    // No pill container, no en-dash separator — the ovals fully replace it.
-    expect(el.shadowRoot!.querySelector('.pill')).toBeNull();
-    expect(el.shadowRoot!.querySelector('.dash')).toBeNull();
+  it('does not show the ovals when the combined range pill is showing instead (resumeAvailable)', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
+    expect(ovals(el)).toHaveLength(0);
   });
 
   it('emits a temperature action carrying the tapped setpoint', async () => {
@@ -111,47 +108,84 @@ describe('Home Screen setpoint ovals', () => {
   });
 });
 
-// The opt-in Resume Schedule pill (config `resume_program`, ADR-0012): rendered
-// beneath the setpoint ovals — never replacing them — whenever its slot is
-// reserved at all (`view.resumeReserved`), so the rest of the cluster never
-// shifts as the best-effort hold check (`view.resumeAvailable`) flips the pill
-// on and off; the *unavailable-but-reserved* case renders it `visibility:
-// hidden` rather than omitting it. The Home Screen itself does nothing but
-// reflect those two flags; the gating logic lives in climate/resume-schedule.ts
-// (tested there).
-describe('Home Screen Resume Schedule pill (resume_program, ADR-0012)', () => {
-  function resumeButton(el: EcoseeHomeScreen): HTMLButtonElement | null {
-    return el.shadowRoot!.querySelector('.resume');
+// The opt-in combined Heat–Cool range pill (config `resume_program`, ADR-0012,
+// extended by ADR-0016): replaces the setpoint ovals entirely whenever the
+// best-effort hold check (`view.resumeAvailable`) says a manual override is
+// active, mirroring the ecobee device's own on-hold home screen. No "until
+// HH:MM" text — Home Assistant's ecobee integration exposes no hold-expiry
+// time (ADR-0003/0004). The Home Screen itself does nothing but reflect
+// `resumeAvailable`; the hold-detection logic lives in
+// climate/resume-schedule.ts (tested there).
+describe('Home Screen combined range pill (resume_program, ADR-0012/0016)', () => {
+  function rangePill(el: EcoseeHomeScreen): HTMLDivElement | null {
+    return el.shadowRoot!.querySelector('.range');
+  }
+  function rangeValues(el: EcoseeHomeScreen): HTMLButtonElement[] {
+    return [...el.shadowRoot!.querySelectorAll('.range-value')] as HTMLButtonElement[];
+  }
+  function rangeClose(el: EcoseeHomeScreen): HTMLButtonElement | null {
+    return el.shadowRoot!.querySelector('.range-close');
   }
 
-  it('is absent (no reserved slot) when resumeReserved is false, regardless of resumeAvailable', async () => {
-    const el = await mount(view({ resumeReserved: false, resumeAvailable: false }));
-    expect(resumeButton(el)).toBeNull();
+  it('is absent when resumeAvailable is false — the ovals show instead', async () => {
+    const el = await mount(view({ resumeAvailable: false }));
+    expect(rangePill(el)).toBeNull();
+    expect(ovals(el)).toHaveLength(2);
   });
 
-  it('renders visually hidden — not absent — when reserved but not currently available', async () => {
-    const el = await mount(view({ resumeReserved: true, resumeAvailable: false }));
-    const resume = resumeButton(el);
-    expect(resume).not.toBeNull();
-    expect(resume!.classList.contains('resume-hidden')).toBe(true);
+  it('replaces the ovals with a single pill showing both values, heat left and cool right', async () => {
+    const el = await mount(
+      view({ resumeAvailable: true, mode: 'heat_cool', setpoints: { heat: 70, cool: 75 } }),
+    );
+    expect(ovals(el)).toHaveLength(0);
+    const pill = rangePill(el);
+    expect(pill).not.toBeNull();
+    const [heat, cool] = rangeValues(el);
+    expect(heat.classList.contains('heat')).toBe(true);
+    expect(heat.getAttribute('aria-label')).toBe('Adjust heat setpoint');
+    expect(heat.textContent?.trim()).toBe('70');
+    expect(cool.classList.contains('cool')).toBe(true);
+    expect(cool.getAttribute('aria-label')).toBe('Adjust cool setpoint');
+    expect(cool.textContent?.trim()).toBe('75');
   });
 
-  it('renders visible, beneath the setpoint ovals, when reserved and available, without hiding them', async () => {
-    const el = await mount(view({ resumeReserved: true, resumeAvailable: true }));
-    expect(ovals(el)).toHaveLength(2); // the ovals still show — no combined pill (ADR-0004)
-    const resume = resumeButton(el);
-    expect(resume).not.toBeNull();
-    expect(resume!.classList.contains('resume-hidden')).toBe(false);
-    expect(resume!.textContent).toContain('Resume Schedule');
+  it('shows a single value (no dash) in a single-setpoint mode', async () => {
+    const el = await mount(
+      view({ resumeAvailable: true, mode: 'heat', setpoints: { heat: 68, cool: null } }),
+    );
+    const values = rangeValues(el);
+    expect(values).toHaveLength(1);
+    expect(values[0].classList.contains('heat')).toBe(true);
+    expect(el.shadowRoot!.querySelector('.range-sep')).toBeNull();
   });
 
-  it('emits a resume-schedule action on tap', async () => {
-    const el = await mount(view({ resumeReserved: true, resumeAvailable: true }));
+  it('never shows an "until" hold-expiry time — Home Assistant does not expose one', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
+    expect(rangePill(el)!.textContent).not.toMatch(/until/i);
+  });
+
+  it('emits a temperature action carrying the tapped setpoint, same as the ovals', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
     const fired: HomeActionDetail[] = [];
     el.addEventListener('ecosee-action', (e) =>
       fired.push((e as CustomEvent<HomeActionDetail>).detail),
     );
-    resumeButton(el)!.click();
+    const [heat, cool] = rangeValues(el);
+    heat.click();
+    cool.click();
+    expect(fired).toEqual([
+      { action: 'temperature', setpoint: 'heat' },
+      { action: 'temperature', setpoint: 'cool' },
+    ]);
+  });
+
+  it('emits a resume-schedule action when the trailing ✕ is tapped', async () => {
+    const el = await mount(view({ resumeAvailable: true }));
+    const fired: HomeActionDetail[] = [];
+    el.addEventListener('ecosee-action', (e) =>
+      fired.push((e as CustomEvent<HomeActionDetail>).detail),
+    );
+    rangeClose(el)!.click();
     expect(fired).toEqual([{ action: 'resume-schedule' }]);
   });
 });

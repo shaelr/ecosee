@@ -385,9 +385,11 @@ export class EcoseeHomeScreen extends LitElement {
        Heat oval (♨ + temp) and a blue Cool oval (❄ + temp). Heat / Cool (Auto)
        shows both side by side (heat left, cool right); a single-setpoint mode
        shows just its own, centered by the row. Each oval is a tap target that
-       opens Temperature Adjust for that setpoint. No combined range pill (ADR-0004
-       stands for that). The opt-in Resume Schedule pill (config resume_program,
-       ADR-0012) renders BENEATH these, never replacing them — see .resume below. */
+       opens Temperature Adjust for that setpoint. Replaced entirely by .range
+       (below) whenever the opt-in Resume Schedule check (config resume_program,
+       ADR-0012) says a hold is active — ADR-0004's original "no combined range
+       pill" is superseded for that one case by ADR-0016; the two never show
+       together. */
       .setpoints {
         display: inline-flex;
         align-items: center;
@@ -430,33 +432,41 @@ export class EcoseeHomeScreen extends LitElement {
         color: var(--ecosee-cool, #49b6ea);
       }
 
-      /* Resume Schedule pill (config resume_program, opt-in — ADR-0012): a
-       neutral (not heat/cool-colored) stadium pill beneath the setpoint ovals,
-       mirroring the ecobee device's own manual-override affordance. Text + a
-       small circled ✕ at the trailing edge; the whole pill is the tap target
-       (matching the setpoint ovals' single-button treatment) rather than just the
-       ✕ circle, for a more forgiving touch target. */
-      .resume {
+      /* Combined Heat–Cool range pill (config resume_program, opt-in — ADR-0012,
+       extended by ADR-0016): replaces .setpoints entirely whenever the
+       best-effort hold check says a manual override is active, mirroring the
+       ecobee device's own on-hold home screen — a single "22 – 24 ⓧ" pill
+       instead of two separate setpoint ovals. Deliberately no "until HH:MM"
+       text: Home Assistant's ecobee integration does not expose a hold's end
+       time in any state attribute (confirmed directly against
+       homeassistant/components/ecobee/climate.py's extra_state_attributes,
+       ADR-0003/0004) — showing one would mean fabricating a value the Card has
+       no way to know. The two values keep their oval's own heat/cool color (no
+       separate background wash — unlike .oval, they now share one pill instead
+       of each having its own) so the pairing still reads at a glance; the pill's
+       own border stays neutral, mirroring the old Resume Schedule pill's. */
+      .range {
         display: inline-flex;
         align-items: center;
-        gap: 3cqw;
-        padding: 1.6cqw 2cqw 1.6cqw 4.4cqw;
-        border: 0.5cqw solid var(--ecosee-muted, #6f96a3);
+        gap: 2.4cqw;
+        box-sizing: border-box;
+        padding: 1.8cqw 2.4cqw 1.8cqw 4.4cqw;
+        border: 0.6cqw solid var(--ecosee-muted, #6f96a3);
         border-radius: 999px;
-        color: var(--ecosee-text, #d4eff9);
-        font-size: 5.2cqw;
-        font-weight: 400;
-        cursor: pointer;
+        font-size: 8cqw;
+        font-weight: 600;
+        line-height: 1;
       }
-      /* Visually hidden, not omitted, whenever the best-effort hold check says the
-       thermostat is currently on-schedule — the slot itself stays reserved (see
-       _renderResume) so the cluster above never shifts as this flips on and off.
-       visibility: hidden (not display: none) keeps the box's layout footprint
-       while dropping it from hit-testing, the tab order, and the a11y tree. */
-      .resume.resume-hidden {
-        visibility: hidden;
+      .range-value.heat {
+        color: var(--ecosee-heat, #f3a13c);
       }
-      .resume-close {
+      .range-value.cool {
+        color: var(--ecosee-cool, #49b6ea);
+      }
+      .range-sep {
+        color: var(--ecosee-muted, #6f96a3);
+      }
+      .range-close {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -644,7 +654,7 @@ export class EcoseeHomeScreen extends LitElement {
                     >
                       ${formatTemp(view.currentTemp, view.unit)}
                     </button>
-                    ${this._renderSetpoints(view)} ${this._renderResume(view)}
+                    ${view.resumeAvailable ? this._renderRange(view) : this._renderSetpoints(view)}
                   `
                 : html`<div class="unavailable">${view.name} unavailable</div>`
             }
@@ -780,26 +790,53 @@ export class EcoseeHomeScreen extends LitElement {
     </button>`;
   }
 
-  /** The opt-in Resume Schedule pill (config `resume_program`, ADR-0012), beneath
-   *  the setpoint ovals — never replacing them (the ovals keep showing the live
-   *  heat/cool setpoints exactly as before; ADR-0004's "no combined range pill"
-   *  stands). Rendered (`visibility: hidden`, not omitted) whenever its slot is
-   *  reserved at all (`view.resumeReserved`) — the config toggle is on and
-   *  setpoints are active — so the cluster above it never shifts as the seam's
-   *  best-effort hold check (`view.resumeAvailable`) flips the pill on and off;
-   *  only entities with the feature off, or with no setpoints, skip the slot
-   *  entirely. Tapping it fires `ecosee.resume_program` via the `resume-schedule`
-   *  action; hidden, it is inert (`visibility: hidden` drops it from the tab
-   *  order and the accessibility tree, same as it being absent). */
-  private _renderResume(view: HomeView): TemplateResult | typeof nothing {
-    if (!view.resumeReserved) return nothing;
+  /** The opt-in combined Heat–Cool range pill (config `resume_program`,
+   *  ADR-0012, extended by ADR-0016), replacing the setpoint ovals entirely
+   *  whenever the seam's best-effort hold check (`view.resumeAvailable`) says a
+   *  manual override is active — the Home Screen only ever calls this once
+   *  that check has already passed (see `render`'s ternary), so it renders
+   *  unconditionally. Tapping a value opens Temperature Adjust for that
+   *  setpoint, exactly like tapping its oval would; tapping the trailing ✕
+   *  fires `ecobee.resume_program` via the `resume-schedule` action. */
+  private _renderRange(view: HomeView): TemplateResult | typeof nothing {
+    const setpoints = view.setpoints;
+    if (!setpoints || (setpoints.heat === null && setpoints.cool === null)) return nothing;
+    return html`
+      <div class="range" part="setpoints">
+        ${
+          setpoints.heat !== null
+            ? this._renderRangeValue('heat', setpoints.heat, view.unit)
+            : nothing
+        }
+        ${
+          setpoints.heat !== null && setpoints.cool !== null
+            ? html`<span class="range-sep" aria-hidden="true">–</span>`
+            : nothing
+        }
+        ${
+          setpoints.cool !== null
+            ? this._renderRangeValue('cool', setpoints.cool, view.unit)
+            : nothing
+        }
+        <button
+          class="range-close"
+          aria-label="Resume Schedule"
+          @click=${() => this._emit('resume-schedule')}
+        >
+          ${icons.close}
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderRangeValue(setpoint: SetpointTarget, value: number, unit: string): TemplateResult {
+    const label = setpoint === 'heat' ? 'Adjust heat setpoint' : 'Adjust cool setpoint';
     return html`<button
-      class="resume ${view.resumeAvailable ? '' : 'resume-hidden'}"
-      aria-label="Resume Schedule"
-      @click=${() => this._emit('resume-schedule')}
+      class="range-value ${setpoint}"
+      aria-label=${label}
+      @click=${() => this._emit('temperature', setpoint)}
     >
-      <span class="resume-label">Resume Schedule</span>
-      <span class="resume-close">${icons.close}</span>
+      ${formatTemp(value, unit)}
     </button>`;
   }
 

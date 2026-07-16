@@ -6,6 +6,11 @@ reasoning below remains the Card's *default* — this is not a reversal, it's a
 narrow, user-asserted exception for the one case (a real `ecobee`-integration
 entity) where the Card can back the control honestly.
 
+**The "no combined range pill" consequence below is further narrowed by
+[ADR-0016](./0016-combined-range-pill-on-hold.md)**: still true by default,
+but not while ADR-0012's opt-in hold check is active — see that ADR for why
+a combined pill without a "Hold" claim differs from what this one rejected.
+
 The physical ecobee frames a manual change as a **Hold** and offers a **Resume
 Schedule** action to clear it and hand control back to the program. ecosee does not
 surface either. Home Assistant can't reliably drive the underlying behavior: it has

@@ -223,7 +223,7 @@ Finer-grained knobs for tuning specific screens. `show_fan`, `min_gap`,
 | `min_gap_entity`   | no       | A `sensor` entity carrying the minimum gap instead of a fixed `min_gap` — see below.                                                                                                                                                                                 |
 | `corner_style`     | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`.                                                                                 |
 | `equipment_glow`   | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                                                                                                       |
-| `resume_program`   | no       | Adds a Resume Schedule control beneath the setpoints — see below. **ecobee integration only.** Default off.                                                                                                                                                          |
+| `resume_program`   | no       | Adds a Resume Schedule control that replaces the setpoint ovals with a combined range pill during a hold — see below. **ecobee integration only.** Default off.                                                                                                     |
 | `background_color` | no       | Overrides the card's background everywhere — Home Screen, Standby Screen, and any open menu/picker: any CSS color (`#1a1a2e`, `rgba(...)`, a named color), or `transparent` for no background at all. Picker/chip text stays legible either way. Default near-black. |
 
 ##### Resume Schedule (ecobee integration only)
@@ -235,15 +235,19 @@ to represent this for an arbitrary `climate` entity (see
 [ADR-0004](docs/adr/0004-no-hold-or-resume-schedule.md)), so it stays off by
 default and does not appear for other thermostats.
 
-Turning `resume_program` on adds that control beneath the setpoint ovals — text
-plus a small circled ✕ — for a thermostat bound through Home Assistant's own
-**ecobee integration**. Tapping it calls `ecobee.resume_program`. The card shows it
-on a best-effort basis: it compares the entity's `climate_mode` (what the schedule
-currently calls for) against `preset_mode` (what's actually active) and shows the
-control when they differ or when it can't tell (see
+Turning `resume_program` on, for a thermostat bound through Home Assistant's own
+**ecobee integration**: whenever a hold is detected, the two setpoint ovals are
+replaced by a single combined pill — `68 – 75 ⓧ`, heat and cool in their usual
+colors with a trailing circled ✕ — mirroring the physical device's own on-hold
+home screen ([ADR-0016](docs/adr/0016-combined-range-pill-on-hold.md)). Tapping a
+value still opens Temperature Adjust for that setpoint, same as tapping its oval
+did; tapping the ✕ calls `ecobee.resume_program`. The card shows the pill on a
+best-effort basis: it compares the entity's `climate_mode` (what the schedule
+currently calls for) against `preset_mode` (what's actually active) and shows it
+when they differ or when it can't tell (see
 [ADR-0012](docs/adr/0012-opt-in-resume-schedule.md) for the full reasoning). There
-is no `until 5:28pm` countdown — Home Assistant doesn't expose a hold's end time,
-so the card doesn't fake one.
+is no `until 5:28pm` text on the pill — Home Assistant doesn't expose a hold's end
+time, so the card doesn't fake one.
 
 ```yaml
 resume_program: true

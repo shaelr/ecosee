@@ -34,7 +34,6 @@ function homeView(overrides: Partial<HomeView> = {}): HomeView {
     mode: 'heat_cool',
     setpoints: { heat: 68, cool: 75 },
     resumeAvailable: false,
-    resumeReserved: false,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,

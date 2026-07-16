@@ -11,6 +11,13 @@ generic `climate` entity. This ADR carves out a narrow, **explicitly opt-in**
 exception for the one case where the Card *can* back the control honestly: a bound
 entity that is genuinely driven by Home Assistant's own `ecobee` integration.
 
+**Superseded in part by [ADR-0016](./0016-combined-range-pill-on-hold.md)**: the
+"never replacing them" / "no combined range pill" language below describes the
+pill's original shape only. ADR-0016 replaces the separate text pill with a
+combined Heat–Cool range pill that *does* replace the setpoint ovals while a
+hold is active — the `resumeAvailable` hold check this ADR introduces is
+unchanged and still what gates it.
+
 ## Context
 
 ADR-0004 rejected Hold/Resume for three reasons: (1) no portable "is this entity
