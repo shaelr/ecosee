@@ -175,6 +175,7 @@ mode_color: false # optional, tints the System Mode icon by equipment status lik
 resume_program: false # optional, adds a Resume Schedule control (ecobee integration only)
 background_color: '#0a0d10' # optional, the card's background — any CSS color, or "transparent"
 min_gap: 3 # optional, minimum heat/cool separation in Heat / Cool (Auto)
+min_gap_entity: sensor.ecobee_heat_cool_min_delta # optional, sources the gap from a sensor instead
 sensors: # optional, the Sensors screen (see below)
   - sensor.kitchen_temperature
   - entity: sensor.hallway_temperature
@@ -199,15 +200,17 @@ sensors: # optional, the Sensors screen (see below)
 #### Advanced
 
 Finer-grained knobs for tuning specific screens. `show_fan`, `min_gap`,
-`resume_program`, `corner_style`, `equipment_glow`, `mode_color`, and
-`background_color` are all also in the visual editor; `standby` is YAML-only.
+`min_gap_entity`, `resume_program`, `corner_style`, `equipment_glow`,
+`mode_color`, and `background_color` are all also in the visual editor;
+`standby` is YAML-only.
 
 | Option             | Required | Description                                                                                                                                                                                                                                                          |
 | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `show_fan`         | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                                                                                                   |
 | `standby`          | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                                                                                                            |
 | `mode_color`       | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.                                                                                   |
-| `min_gap`          | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet.                                                                                                                     |
+| `min_gap`          | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet. Ignored while `min_gap_entity` has a reading.                                                                       |
+| `min_gap_entity`   | no       | A `sensor` entity carrying the minimum gap instead of a fixed `min_gap` — see below.                                                                                                                                                                                 |
 | `corner_style`     | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`.                                                                                 |
 | `equipment_glow`   | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                                                                                                       |
 | `resume_program`   | no       | Adds a Resume Schedule control beneath the setpoints — see below. **ecobee integration only.** Default off.                                                                                                                                                          |
@@ -247,6 +250,18 @@ different spread, or `min_gap: 0` to let the two setpoints touch.
 
 ```yaml
 min_gap: 3 # keep heat and cool at least 3° apart in Auto (default 3°F / 1.5°C)
+```
+
+If your thermostat integration exposes its own configured gap as a sensor — for
+example [ha-ecobee](https://github.com/shaelr/ha-ecobee)'s `Heat/Cool Min Delta`
+diagnostic sensor, which mirrors the ecobee's own `heatCoolMinDelta` setting —
+point `min_gap_entity` at it instead of typing the number in by hand. It's used
+whenever it has a valid reading, so the card's gap always matches the
+thermostat's actual setting; `min_gap` (or the default) is the fallback for
+whenever the entity is unset or briefly unavailable.
+
+```yaml
+min_gap_entity: sensor.living_room_heat_cool_min_delta
 ```
 
 ##### Standby screen elements

@@ -214,6 +214,87 @@ describe('setValue', () => {
     expect(next.cool?.value).toBe(70);
     expect(next.heat?.value).toBe(70);
   });
+
+  // min_gap_entity (e.g. an ecobee integration's heatCoolMinDelta sensor): wins
+  // over min_gap whenever it has a valid reading, so the deadband tracks the
+  // thermostat's own setting automatically rather than a hand-typed, stale number.
+  describe('min_gap_entity', () => {
+    function hassWithGapSensor(gapState: string, climateEntity: HassEntityBase): HomeAssistant {
+      return {
+        states: {
+          [climateEntity.entity_id]: climateEntity,
+          'sensor.gap': { entity_id: 'sensor.gap', state: gapState, attributes: {} },
+        },
+        config: { unit_system: { temperature: '°F' } },
+        callService: async () => undefined,
+      };
+    }
+
+    // Dragging cool down onto heat (both start at 70) forces a push: cool holds
+    // the dragged value, heat gets shoved down to cool − gap (mirroring the
+    // existing "pushes heat down..." case above for the default gap).
+    it('uses the entity reading instead of min_gap when both are configured', () => {
+      const auto = toTempAdjustModel(
+        hassWithGapSensor(
+          '5',
+          climate('heat_cool', { target_temp_low: 70, target_temp_high: 75, ...BOUNDS }),
+        ),
+        { ...config, min_gap: 3, min_gap_entity: 'sensor.gap' },
+      );
+      const next = setValue(auto, 70);
+      expect(next.cool?.value).toBe(70);
+      expect(next.heat?.value).toBe(65); // pushed 5 apart, not min_gap's 3
+    });
+
+    it('honors a 0 reading from the entity (setpoints may meet)', () => {
+      const auto = toTempAdjustModel(
+        hassWithGapSensor(
+          '0',
+          climate('heat_cool', { target_temp_low: 70, target_temp_high: 75, ...BOUNDS }),
+        ),
+        { ...config, min_gap: 3, min_gap_entity: 'sensor.gap' },
+      );
+      const next = setValue(auto, 70);
+      expect(next.cool?.value).toBe(70);
+      expect(next.heat?.value).toBe(70);
+    });
+
+    it('falls back to min_gap when the entity is unavailable', () => {
+      const auto = toTempAdjustModel(
+        hassWithGapSensor(
+          'unavailable',
+          climate('heat_cool', { target_temp_low: 70, target_temp_high: 75, ...BOUNDS }),
+        ),
+        { ...config, min_gap: 3, min_gap_entity: 'sensor.gap' },
+      );
+      const next = setValue(auto, 70);
+      expect(next.cool?.value).toBe(70);
+      expect(next.heat?.value).toBe(67);
+    });
+
+    it('falls back to min_gap when the entity does not exist', () => {
+      const auto = toTempAdjustModel(
+        hass(climate('heat_cool', { target_temp_low: 70, target_temp_high: 75, ...BOUNDS })),
+        { ...config, min_gap: 3, min_gap_entity: 'sensor.missing' },
+      );
+      const next = setValue(auto, 70);
+      expect(next.cool?.value).toBe(70);
+      expect(next.heat?.value).toBe(67);
+    });
+
+    it('falls back to the unit default when neither min_gap nor a valid entity reading is present', () => {
+      const auto = toTempAdjustModel(
+        hassWithGapSensor(
+          'unavailable',
+          climate('heat_cool', { target_temp_low: 70, target_temp_high: 75, ...BOUNDS }),
+        ),
+        { ...config, min_gap_entity: 'sensor.gap' },
+      );
+      const next = setValue(auto, 70);
+      expect(next.cool?.value).toBe(70);
+      expect(next.heat?.value).toBe(67); // pushed by the 3°F unit default
+    });
+  });
 });
 
 describe('scrub — inverted drag-to-scrub (#53)', () => {

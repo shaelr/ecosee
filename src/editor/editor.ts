@@ -183,8 +183,18 @@ export function editorSchema(): EditorField[] {
       label: 'Heat / Cool minimum gap',
       helper:
         'Optional. Minimum separation kept between the heat and cool setpoints in Heat / Cool ' +
-        '(Auto), in your temperature unit. 0 lets them meet. Unset uses the default (3°F / 1.5°C).',
+        '(Auto), in your temperature unit. 0 lets them meet. Unset uses the default (3°F / 1.5°C). ' +
+        'Ignored while the minimum gap entity below has a reading.',
       selector: { number: { min: 0, mode: 'box' } },
+    },
+    {
+      name: 'min_gap_entity',
+      label: 'Minimum gap entity',
+      helper:
+        'Optional. A sensor entity carrying the minimum heat/cool gap (e.g. an ecobee integration' +
+        "'s heat/cool delta sensor). Used instead of the fixed gap above whenever it has a reading; " +
+        'falls back to the gap above if unset or unavailable.',
+      selector: { entity: { domain: 'sensor' } },
     },
     {
       name: 'resume_program',

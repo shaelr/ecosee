@@ -151,6 +151,24 @@ describe('parseConfig — min_gap', () => {
   });
 });
 
+describe('parseConfig — min_gap_entity', () => {
+  it('leaves min_gap_entity undefined when the key is absent', () => {
+    expect(parseConfig(base).min_gap_entity).toBeUndefined();
+  });
+
+  it('accepts a sensor entity id', () => {
+    expect(parseConfig({ ...base, min_gap_entity: 'sensor.gap' }).min_gap_entity).toBe(
+      'sensor.gap',
+    );
+  });
+
+  it('throws on a non-string value', () => {
+    expect(() => parseConfig({ ...base, min_gap_entity: 5 })).toThrow(
+      /`min_gap_entity` must be a string entity id/,
+    );
+  });
+});
+
 describe('parseConfig — temperature_entity', () => {
   it('leaves temperature_entity undefined when the key is absent', () => {
     expect(parseConfig(base).temperature_entity).toBeUndefined();

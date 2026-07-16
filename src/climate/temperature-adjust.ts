@@ -1,7 +1,7 @@
 import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
 import type { SystemMode } from './home-view';
-import { toMode } from './home-view';
+import { toMode, UNAVAILABLE } from './home-view';
 import { num } from './parse';
 import type { ServiceCall } from './service-call';
 
@@ -62,10 +62,29 @@ function stepForUnit(unit: string): number {
   return unit.includes('C') ? STEP_C : STEP_F;
 }
 
-/** The minimum heat↔cool separation to keep: the configured `min_gap` (in the
- *  display unit), or the unit default when unset. `0` is honored (setpoints may
- *  meet). */
-function gapForUnit(unit: string, config: EcoseeCardConfig): number {
+/** The configured `min_gap_entity`'s current numeric state (already in the
+ *  display unit — e.g. an ecobee integration's `heatCoolMinDelta` sensor reports
+ *  in whatever unit Home Assistant is configured for), or `null` when unset or
+ *  the entity has no valid reading right now. */
+function gapFromEntity(hass: HomeAssistant, entityId: string | undefined): number | null {
+  if (!entityId) return null;
+  const entity = hass.states[entityId];
+  if (!entity || UNAVAILABLE.has(entity.state)) return null;
+  return num(entity.state);
+}
+
+/** The minimum heat↔cool separation to keep, in the display unit. `min_gap_entity`
+ *  wins whenever it's configured and currently has a valid reading — kept in sync
+ *  with the thermostat's own setting automatically, unlike a hand-typed number.
+ *  Falls back to the configured `min_gap`, then the unit default, whenever the
+ *  entity is unset or its reading is momentarily unavailable — deliberately a
+ *  fallback here, not an unconditional override the way `temperature_entity` /
+ *  `humidity_entity` are: a missing gap reading should keep the last-known
+ *  deadband, not silently drop to "no minimum" until the sensor returns. `0` is
+ *  honored (setpoints may meet). */
+function gapForUnit(hass: HomeAssistant, unit: string, config: EcoseeCardConfig): number {
+  const fromEntity = gapFromEntity(hass, config.min_gap_entity);
+  if (fromEntity !== null) return fromEntity;
   return config.min_gap ?? (unit.includes('C') ? GAP_C : GAP_F);
 }
 
@@ -111,7 +130,7 @@ export function toTempAdjustModel(hass: HomeAssistant, config: EcoseeCardConfig)
 
   const attrs = entity.attributes;
   const step = stepForUnit(unit);
-  const minGap = gapForUnit(unit, config);
+  const minGap = gapForUnit(hass, unit, config);
   const min = num(attrs.min_temp);
   const max = num(attrs.max_temp);
 

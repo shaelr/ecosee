@@ -30,6 +30,7 @@ describe('editorSchema — coverage', () => {
       'fan_min_on_time_entity',
       'inactivity_timeout',
       'min_gap',
+      'min_gap_entity',
       'resume_program',
       'corner_style',
       'equipment_glow',

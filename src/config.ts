@@ -114,6 +114,16 @@ export interface EcoseeCardConfig {
    *  scrubber keeps this gap by *pushing* the paired setpoint instead of stalling.
    *  Absent ⇒ the unit default (3°F / 1.5°C). `0` lets the two setpoints meet. */
   min_gap?: number;
+  /** A `sensor` entity carrying the minimum heat/cool gap as its numeric state, in
+   *  the display unit (e.g. a `heatCoolMinDelta`-backed sensor from an ecobee
+   *  integration that exposes the thermostat's own configured delta). When set and
+   *  the entity currently has a valid numeric reading, its value is used instead
+   *  of `min_gap` — kept in sync with the thermostat's own setting automatically
+   *  rather than needing to be typed in and kept up to date by hand. `min_gap`
+   *  (or the unit default) is the fallback whenever this is unset, or set but the
+   *  entity is unavailable — unlike `temperature_entity`/`humidity_entity`, an
+   *  unavailable reading here falls back rather than zeroing out the gap. */
+  min_gap_entity?: string;
   /** Opt-in Resume Schedule control (ADR-0012): a pill beneath the setpoint ovals
    *  that calls `ecobee.resume_program`, mirroring the ecobee device's own
    *  manual-override → Resume Schedule affordance. Absent ⇒ `false` — no control,
@@ -171,7 +181,8 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
       | 'default_comfort_icon'
       | 'fan_min_on_time_entity'
       | 'air_quality_entity'
-      | 'uv_index_entity',
+      | 'uv_index_entity'
+      | 'min_gap_entity',
   ): string | undefined => {
     const value = raw[key];
     if (value === undefined) return undefined;
@@ -198,6 +209,7 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     standby: parseStandby(raw.standby),
     show_fan: parseShowFan(raw.show_fan),
     min_gap: parseMinGap(raw.min_gap),
+    min_gap_entity: optionalString('min_gap_entity'),
     resume_program: parseResumeProgram(raw.resume_program),
     corner_style: parseCornerStyle(raw.corner_style),
     equipment_glow: parseEquipmentGlow(raw.equipment_glow),
