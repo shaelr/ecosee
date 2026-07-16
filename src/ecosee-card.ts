@@ -359,6 +359,18 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     }
     // background_color changes what --ecosee-text's contrast check runs against.
     if (changed.has('_config')) this._syncThemeText();
+    // Re-measure on every `hass` push, not just when the host's own box actually
+    // resizes. A dashboard's layout can still be mid-settle (masonry/grid columns
+    // not yet at their final width) the moment the ResizeObserver's first callback
+    // fires, latching in a too-small --ecosee-scale that nothing ever revisits if
+    // the host's box happens not to change size again afterward — a stuck small
+    // render that a browser resize or reload doesn't fix, since neither guarantees
+    // the box itself changes size (issue: reported "sometimes renders smaller than
+    // it should"). `hass` pushes are frequent and `_syncDeviceScale` is a cheap
+    // no-op once the measurement is already correct (see its own unchanged-value
+    // guard), so this is a reliable, low-cost self-heal rather than a one-shot bet
+    // on the ResizeObserver's first reading being final.
+    if (changed.has('hass')) this._syncDeviceScale();
   }
 
   /** Measure the dashboard slot and set the transform scale that fits the
@@ -367,7 +379,11 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  the on-screen size, publish it as `--ecosee-rendered-size` (the .sizer
    *  footprint) and the ratio as `--ecosee-scale` (applied to .root). An unmeasured
    *  Card (0 width, e.g. detached or in tests) leaves the CSS defaults — scale 1,
-   *  base-size footprint — in place. */
+   *  base-size footprint — in place. Called from the ResizeObserver, twice at
+   *  startup (`connectedCallback` / `firstUpdated`, since the observer's first
+   *  callback can land before the host is laid out), and on every `hass` push
+   *  (`updated`) as a cheap self-heal against a stale/too-small reading latched in
+   *  before the dashboard's own layout had settled. */
   private _syncDeviceScale(): void {
     const width = this.clientWidth;
     const styles = getComputedStyle(this);
