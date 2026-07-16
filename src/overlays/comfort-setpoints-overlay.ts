@@ -184,8 +184,8 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
         <span class="card-icon" aria-hidden="true">${icons[preset.icon]}</span>
         <span class="name">${preset.label}</span>
         <div class="fields">
-          ${this._renderField(preset.preset, 'cool', preset.cool)}
           ${this._renderField(preset.preset, 'heat', preset.heat)}
+          ${this._renderField(preset.preset, 'cool', preset.cool)}
         </div>
       </div>
     `;
