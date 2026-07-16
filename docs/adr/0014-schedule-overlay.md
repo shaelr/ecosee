@@ -186,3 +186,17 @@ actually Monday, fixed upstream in `ha-ecobee`, not in this Card).
   column can't compress them instead of scrolling — the same lesson ADR-0013's
   and prior sessions' sizing fixes keep re-teaching: a script driving the DOM
   directly proves the *event wiring* works, not that the *layout* does.
+- **Owner-reported**: the Add Block screen's confirm button was cut off at the
+  bottom on a real device. `.picker` is a *fixed* 460×460 box (not
+  content-sized), and `.confirm` reaches the bottom via `margin-top: auto` in
+  a column flex layout — which pins it flush with the box's bottom edge only
+  when the content above fits; if it doesn't, those items overflow the fixed
+  box (an explicit `height` doesn't grow to its children) and get clipped by
+  the shell's `overflow: hidden`, while `.picker`'s own measured rect stays
+  unchanged, which is why a synthetic Playwright rect check (short labels, no
+  overflow in that specific run) didn't reproduce it. Fixed by tightening the
+  screen's vertical rhythm (less padding, smaller gaps, smaller title/subtitle
+  type) for headroom, and — the more load-bearing part — giving `.fields` the
+  same `max-height` + `overflow-y: auto` safety net as `.days` above, so a
+  longer comfort-setting label or different font metrics scroll the field list
+  internally instead of ever pushing `.confirm` past the box again.

@@ -48,37 +48,52 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      gap: calc(5 * var(--ecosee-u, 4.6px));
-      padding: calc(13 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
-        calc(9 * var(--ecosee-u, 4.6px));
+      gap: calc(3.5 * var(--ecosee-u, 4.6px));
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+        calc(7 * var(--ecosee-u, 4.6px));
       text-align: center;
     }
 
     .title {
       margin: 0;
-      font-size: 7.5cqw;
+      font-size: 6.5cqw;
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
     }
     .subtitle {
       margin: 0;
-      font-size: 5cqw;
+      font-size: 4.4cqw;
       font-weight: 500;
       color: var(--ecosee-text, #d4eff9);
     }
 
+    /* max-height + scroll is a safety net, not the normal case: the three rows
+       fit comfortably on their own, but this guarantees a wider comfort-setting
+       label or different font metrics push the *list* into scrolling instead of
+       pushing .confirm past the picker's fixed box — .confirm sits below via
+       margin-top: auto, and an element with an explicit height doesn't resize to
+       its children, so an overflow here would clip at the shell's edge, not
+       visibly shrink anything (matching the day-checklist fix in
+       schedule-copy-overlay.ts's own .days). */
     .fields {
       width: 100%;
+      max-height: 40cqw;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 3.5cqw;
-      margin-top: 2cqw;
+      gap: 2.5cqw;
+      margin-top: 1cqw;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .fields::-webkit-scrollbar {
+      display: none;
     }
     .field-row {
       width: 100%;
       max-width: 78cqw;
+      flex: none;
       display: flex;
       align-items: center;
       justify-content: space-between;
