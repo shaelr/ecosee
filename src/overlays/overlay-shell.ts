@@ -15,6 +15,7 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
   fan: icons.fan,
   calendar: icons.calendar,
   setpoints: icons.setpoints,
+  filter: icons.filter,
 };
 
 /**
@@ -177,7 +178,8 @@ export class EcoseeOverlay extends LitElement {
       }
 
       /* The device's persistent bottom navigation, shown across the Main Menu section
-       screens (System / Sensors / Fan). Shell chrome like the ✕: absolutely placed,
+       screens (System / Sensors / Fan / Schedule / Setpoints / Furnace Filter). Shell
+       chrome like the ✕: absolutely placed,
        sized in the fixed unit (the shell is not a query container), above the content.
        The full-width nav stays pointer-transparent so its empty flanks fall through to
        the dismiss backdrop (outside-tap-to-dismiss); only the buttons opt back in. */
@@ -205,26 +207,13 @@ export class EcoseeOverlay extends LitElement {
         align-items: center;
         justify-content: center;
         pointer-events: auto;
-        /* Inactive tabs are muted; the active section and the temp badge are accent —
-         the device's "you are here" cue. */
+        /* Inactive tabs are muted; the active section is accent — the device's
+         "you are here" cue. */
         color: var(--ecosee-muted, #6f96a3);
         cursor: pointer;
       }
       .tab.active {
         color: var(--ecosee-accent, #62cfe9);
-      }
-      /* Left badge: the current temperature in a cyan ring, tapping it returns to the
-       thermostat (Home). Falls back to the wall-display glyph when temp is unknown. */
-      .tab.temp {
-        border: calc(0.5 * var(--ecosee-u, 4.6px)) solid var(--ecosee-accent, #62cfe9);
-        border-radius: 50%;
-        color: var(--ecosee-text-accent, #62cfe9);
-        font-family: inherit;
-        font-weight: 600;
-        font-size: calc(3.3 * var(--ecosee-u, 4.6px));
-      }
-      .tab.temp.glyph {
-        padding: calc(1.4 * var(--ecosee-u, 4.6px));
       }
       .tab svg {
         width: 100%;
@@ -255,8 +244,9 @@ export class EcoseeOverlay extends LitElement {
     emitOverlayDismiss(this);
   };
 
-  /** Announce a tab tap; the card routes it (a section opens that screen, the temp
-   *  badge returns Home). Bubbling + composed so it clears the shadow boundary and
+  /** Announce a tab tap; the card routes it by opening that section (`_open(kind,
+   *  'home')`, ADR-0017 — every target is a section since the old thermostat-badge
+   *  target was removed). Bubbling + composed so it clears the shadow boundary and
    *  reaches the card's single overlay listener, like the other overlay events. */
   private _selectTab(target: TabTarget): void {
     this.dispatchEvent(
@@ -298,13 +288,6 @@ export class EcoseeOverlay extends LitElement {
     if (!tabs?.available) return nothing;
     return html`
       <nav class="tabbar" aria-label="Menu sections">
-        <button
-          class="tab temp ${tabs.temp === null ? 'glyph' : ''}"
-          aria-label="Thermostat"
-          @click=${() => this._selectTab('thermostat')}
-        >
-          ${tabs.temp === null ? icons.thermostat : tabs.temp}
-        </button>
         ${tabs.items.map(
           (item) => html`
             <button

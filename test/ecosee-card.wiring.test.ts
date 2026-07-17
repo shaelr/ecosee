@@ -38,8 +38,8 @@ function fireAction(card: EcoseeCard, action: string, setpoint?: 'heat' | 'cool'
   );
 }
 
-/** Dispatch a bottom tab-bar tap the way <ecosee-overlay> does (a section target, or
- *  `thermostat` for the temp badge that returns Home). */
+/** Dispatch a bottom tab-bar tap the way <ecosee-overlay> does — every target is a
+ *  Main Menu section (ADR-0017 removed the old `'thermostat'` badge target). */
 function fireTabSelect(card: EcoseeCard, target: string): void {
   card
     .shadowRoot!.querySelector('ecosee-overlay')!
@@ -395,19 +395,35 @@ describe('ecosee-card wiring — navigation (tab bar)', () => {
     expect(overlayPresent(card, 'ecosee-fan-overlay')).toBe(false);
   });
 
-  it('the tab bar temp badge returns to Home from a section', async () => {
+  it('the Furnace Filter tab (ADR-0017) opens its section from a sibling section; dismiss returns Home', async () => {
     const { hass } = fakeHass({
-      entities: [climateEntity('heat', { hvac_modes: ['off', 'heat', 'cool'] })],
+      entities: [
+        climateEntity('heat', { hvac_modes: ['off', 'heat', 'cool'] }),
+        { entity_id: 'date.filter', state: '2025-01-01', attributes: {} },
+      ],
     });
-    const card = await mountCard(hass);
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      filter_last_changed_entity: 'date.filter',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
 
     fireAction(card, 'menu');
     await card.updateComplete;
     expect(overlayPresent(card, 'ecosee-system-overlay')).toBe(true);
 
-    fireTabSelect(card, 'thermostat');
+    fireTabSelect(card, 'filter');
     await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(true);
     expect(overlayPresent(card, 'ecosee-system-overlay')).toBe(false);
+
+    fireDismiss(card);
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(false);
   });
 
   it('opens the Fan sub-screen from the Home top-row shortcut, dismissing back to Home (issue #45)', async () => {

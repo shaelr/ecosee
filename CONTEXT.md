@@ -65,7 +65,7 @@ _Avoid_: rooms view.
 The Main Menu section showing the bound entity's weekly comfort-setting schedule
 (ADR-0014), one day at a time: a day strip (S M T W T F S — today's own circle
 also carries a small dot beneath it, independent of whichever circle is filled
-for the day currently being *viewed*) above that day's ordered
+for the day currently being _viewed_) above that day's ordered
 **blocks** — contiguous runs of a single Comfort Setting, each preceded by a
 boundary label (a clock time, or "From previous day" for a block already active at
 midnight). Tapping an editable block opens its **Start Time** Picker, which can
@@ -116,17 +116,17 @@ _Avoid_: HVAC mode (in UI copy), operation mode, "Auto" alone as the mode name
 
 **Main Menu**:
 The section screens reached from the Home Screen's gear — **System**, **Sensors**,
-**Fan**, **Schedule**, **Comfort Setpoints** — navigated by a persistent **Tab Bar**
-at the bottom. The gear lands directly on the first reachable section (no
-intermediate list); the Tab Bar switches between the sibling sections and its left
-temperature badge returns to the thermostat (Home). The System section holds both
-the System Mode and Comfort Setting selectors; tapping a selector opens a focused
-**Picker** pushed on top (dismissing it returns to the section) — Schedule's Start
-Time Picker and Comfort Setpoints' own value picker work the same way. Weather is
-reached from the Home Screen's own affordance, not the Tab Bar — as on the device,
-whose bottom bar carries thermostat/sensors/fan/settings but not weather (the
-voice/mic tab has no Home Assistant meaning and is dropped). Schedule (ADR-0014)
-and Comfort Setpoints (ADR-0015) are Card additions with no equivalent
+**Fan**, **Schedule**, **Comfort Setpoints**, **Furnace Filter** — navigated by a
+persistent **Tab Bar** at the bottom. The gear lands directly on the first
+reachable section (no intermediate list); the Tab Bar switches between the sibling
+sections. The System section holds both the System Mode and Comfort Setting
+selectors; tapping a selector opens a focused **Picker** pushed on top (dismissing
+it returns to the section) — Schedule's Start Time Picker and Comfort Setpoints'
+own value picker work the same way. Weather is reached from the Home Screen's own
+affordance, not the Tab Bar — as on the device, whose bottom bar carries
+thermostat/sensors/fan/settings but not weather (the voice/mic tab has no Home
+Assistant meaning and is dropped). Schedule (ADR-0014), Comfort Setpoints
+(ADR-0015), and Furnace Filter (ADR-0017) are Card additions with no equivalent
 physical-device tab, but each follows the same reachable-when-configured rule as
 the device's own sections.
 _Avoid_: settings, drawer, drill-down list (the earlier hub list is gone — only the
@@ -135,12 +135,27 @@ selector→Picker step remains a drill-in).
 **Tab Bar**:
 The device's persistent bottom navigation across the Main Menu sections. Rendered as
 shell chrome (like the ✕) on the System / Sensors / Fan / Schedule / Comfort
-Setpoints screens only, never on the pickers, Temperature, or Weather. Left to
-right: a temperature **badge** (returns Home), then one icon tab per reachable
+Setpoints / Furnace Filter screens only, never on the pickers, Temperature, or
+Weather. Left to right: Furnace Filter, then one icon tab per remaining reachable
 section — sensors, fan, schedule, setpoints, and the gear (which is the
 System/settings tab, kept rightmost). A tab shows only when its section is
-reachable for the bound entity (graceful degradation, ADR-0001).
+reachable for the bound entity (graceful degradation, ADR-0001). The leftmost slot
+used to hold a temperature badge that returned to the thermostat (Home); it was
+replaced by the Furnace Filter tab (ADR-0017) as redundant with the shell's own ✕,
+which already returns to the same place.
 _Avoid_: navbar, footer, toolbar.
+
+**Furnace Filter Screen**:
+A Card addition (ADR-0017, no physical-device equivalent) reached via the Tab
+Bar's leftmost slot: the last-changed date and (when a replacement interval is
+configured) the computed due date, styled as a warning once overdue, plus a
+large "I've changed my filter" button — modeled on the ecobee app's own
+filter-change confirmation screen. Backed by `filter_last_changed_entity` (a
+`date`/`datetime`/`input_datetime`/`sensor`), an optional
+`filter_interval_days`/`filter_interval_entity` pair, and an optional
+`filter_reset_entity` (`button`/`script`) the button triggers instead of
+writing the last-changed entity directly.
+_Avoid_: filter screen (ambiguous with a data filter), maintenance screen.
 
 **Comfort Setting**:
 An ecobee named climate preset — Home, Away, Sleep, plus user-defined ones — each

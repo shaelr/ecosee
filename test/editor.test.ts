@@ -37,6 +37,10 @@ describe('editorSchema — coverage', () => {
       'min_gap',
       'min_gap_entity',
       'resume_program',
+      'filter_last_changed_entity',
+      'filter_interval_days',
+      'filter_interval_entity',
+      'filter_reset_entity',
       'corner_style',
       'equipment_glow',
       'mode_color',
@@ -626,13 +630,8 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
       ...base,
       comfort_setpoints: [{ preset: 'Home', heat_entity: 'number.home_heat' }],
     };
-    const next = normalizeEditorConfig(
-      { ...base, [comfortSetpointPresetKey(0)]: 'Home' },
-      prev,
-    );
-    expect(next.comfort_setpoints).toEqual([
-      { preset: 'Home', heat_entity: 'number.home_heat' },
-    ]);
+    const next = normalizeEditorConfig({ ...base, [comfortSetpointPresetKey(0)]: 'Home' }, prev);
+    expect(next.comfort_setpoints).toEqual([{ preset: 'Home', heat_entity: 'number.home_heat' }]);
   });
 
   it('clears a row’s heat entity when its field is emptied in the GUI', () => {
@@ -661,9 +660,7 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
       },
       base,
     );
-    expect(next.comfort_setpoints).toEqual([
-      { preset: 'Home', heat_entity: 'number.home_heat' },
-    ]);
+    expect(next.comfort_setpoints).toEqual([{ preset: 'Home', heat_entity: 'number.home_heat' }]);
   });
 
   it('produces a comfort_setpoints config parseConfig accepts', () => {

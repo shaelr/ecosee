@@ -115,6 +115,32 @@ export interface EcoseeCardConfig {
    *  Comfort Setting and the `number` entity/entities backing its targets. Adds
    *  the Comfort Setpoints Main Menu section; hidden when unset/empty. */
   comfort_setpoints?: ComfortSetpointConfig[];
+  /** An entity whose state is the furnace filter's last-changed date — an
+   *  `input_datetime`, native `date`/`datetime` helper, or any `sensor`
+   *  reporting a date-like state. Adds the Furnace Filter Main Menu section
+   *  (replacing the old temperature badge — CONTEXT.md); hidden when unset. If
+   *  this entity's own domain is `input_datetime`/`date`/`datetime`, the
+   *  "I've changed my filter" button writes today's date straight onto it;
+   *  otherwise `filter_reset_entity` is required for that button to do
+   *  anything. */
+  filter_last_changed_entity?: string;
+  /** Default days between filter changes, used to compute the due date and
+   *  overdue state. Ignored while `filter_interval_entity` has a reading.
+   *  Absent (and no working entity) ⇒ the due date / overdue state simply
+   *  aren't shown — the last-changed date and the button still are. */
+  filter_interval_days?: number;
+  /** A `number`/`input_number`/`sensor` entity carrying the interval in days
+   *  instead of a fixed `filter_interval_days` — kept in sync with whatever
+   *  the integration itself tracks. Used instead of `filter_interval_days`
+   *  whenever it currently has a valid numeric reading; falls back to
+   *  `filter_interval_days` (or "no interval known") otherwise. */
+  filter_interval_entity?: string;
+  /** A `button` or `script` entity to call for the "I've changed my filter"
+   *  action, for a setup where `filter_last_changed_entity` is a read-only
+   *  `sensor` (computed elsewhere) that needs an explicit trigger rather than
+   *  a direct write. Takes priority over writing `filter_last_changed_entity`
+   *  directly whenever it's set. */
+  filter_reset_entity?: string;
   /** Curated temperature sensors for the Sensors sub-screen (issue #9). Each item
    *  may be a bare entity-id string (shorthand) or a `SensorConfig` object. The
    *  thermostat's own temperature is auto-included first, so this lists *extra*
@@ -211,7 +237,10 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
       | 'air_quality_entity'
       | 'uv_index_entity'
       | 'min_gap_entity'
-      | 'schedule_entity',
+      | 'schedule_entity'
+      | 'filter_last_changed_entity'
+      | 'filter_interval_entity'
+      | 'filter_reset_entity',
   ): string | undefined => {
     const value = raw[key];
     if (value === undefined) return undefined;
@@ -234,6 +263,10 @@ export function parseConfig(raw: unknown): EcoseeCardConfig {
     uv_index_entity: optionalString('uv_index_entity'),
     schedule_entity: optionalString('schedule_entity'),
     comfort_setpoints: parseComfortSetpoints(raw.comfort_setpoints),
+    filter_last_changed_entity: optionalString('filter_last_changed_entity'),
+    filter_interval_days: parseFilterIntervalDays(raw.filter_interval_days),
+    filter_interval_entity: optionalString('filter_interval_entity'),
+    filter_reset_entity: optionalString('filter_reset_entity'),
     sensors: parseSensors(raw.sensors),
     inactivity_timeout: parseInactivityTimeout(raw.inactivity_timeout),
     standby_screen: parseStandbyScreen(raw.standby_screen),
@@ -308,6 +341,18 @@ function parseMinGap(raw: unknown): number | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'number' || Number.isNaN(raw) || raw < 0) {
     throw new Error('ecosee: `min_gap` must be a non-negative number of degrees.');
+  }
+  return raw;
+}
+
+/** Parse the optional `filter_interval_days`. Returns `undefined` when absent
+ *  so the seam falls back to `filter_interval_entity` or shows no due
+ *  date/overdue state at all. Throws a user-facing error for anything other
+ *  than a positive number. */
+function parseFilterIntervalDays(raw: unknown): number | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'number' || Number.isNaN(raw) || raw <= 0) {
+    throw new Error('ecosee: `filter_interval_days` must be a positive number of days.');
   }
   return raw;
 }
@@ -392,7 +437,9 @@ function parseInactivityTimeout(raw: unknown): number | undefined {
 function parseComfortSetpoints(raw: unknown): ComfortSetpointConfig[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
-    throw new Error('ecosee: `comfort_setpoints` must be a list of comfort-setting setpoint entries.');
+    throw new Error(
+      'ecosee: `comfort_setpoints` must be a list of comfort-setting setpoint entries.',
+    );
   }
   return raw.map((item, index) => parseComfortSetpoint(item, index));
 }

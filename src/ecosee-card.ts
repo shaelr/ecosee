@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing, type TemplateResult, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { CARD_TYPE, parseConfig, type EcoseeCardConfig } from './config';
-import { toHomeView, formatTemp, type HomeView } from './climate/home-view';
+import { toHomeView, type HomeView } from './climate/home-view';
 import {
   toTempAdjustModel,
   selectSetpoint,
@@ -13,6 +13,7 @@ import { toComfortSettingModel } from './climate/comfort-setting';
 import { toComfortSetpointsModel } from './climate/comfort-setpoint';
 import { toFanModel } from './climate/fan';
 import { resumeProgramCall } from './climate/resume-schedule';
+import { toFurnaceFilterModel } from './climate/furnace-filter';
 import { toTabBarModel, TAB_SECTIONS, type TabBarModel, type TabTarget } from './menu/tab-bar';
 import { InactivityTimer, inactivityTimeoutMs, standbyReturnMs } from './overlays/inactivity-timer';
 import type { SystemSelectTarget } from './overlays/system-overlay';
@@ -66,14 +67,15 @@ import './overlays/schedule-add-block-overlay';
 import './overlays/schedule-copy-overlay';
 import './overlays/comfort-setpoints-overlay';
 import './overlays/comfort-setpoint-overlay';
+import './overlays/furnace-filter-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
 /** An Overlay that can mount over the Home Screen. `system` is the Main Menu's
  *  System sub-screen (the hub holding the System Mode + Comfort Setting selectors);
  *  `system-mode` / `comfort-setting` are the focused pickers it routes to; `fan`,
- *  `sensors`, `schedule`, and `setpoints` are the rest of the Main Menu sections,
- *  reached via the gear and switched between with the bottom tab bar.
+ *  `sensors`, `schedule`, `setpoints`, and `filter` are the rest of the Main Menu
+ *  sections, reached via the gear and switched between with the bottom tab bar.
  *  `schedule-start-time`, `schedule-add-block`, and `schedule-copy` are
  *  Schedule's own pickers (ADR-0014); `setpoint-adjust` is Comfort Setpoints'
  *  own picker (ADR-0015) — all reached the same way `system-mode`/
@@ -91,7 +93,8 @@ type OverlayKind =
   | 'schedule-add-block'
   | 'schedule-copy'
   | 'setpoints'
-  | 'setpoint-adjust';
+  | 'setpoint-adjust'
+  | 'filter';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -373,6 +376,16 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           ></ecosee-comfort-setpoint-overlay>
         `;
       },
+    },
+    filter: {
+      available: (hass, config) => toFurnaceFilterModel(hass, config).available,
+      render: (hass, config) => html`
+        <ecosee-furnace-filter-overlay
+          .model=${toFurnaceFilterModel(hass, config)}
+          .lastChangedEntity=${config.filter_last_changed_entity}
+          .resetEntity=${config.filter_reset_entity}
+        ></ecosee-furnace-filter-overlay>
+      `,
     },
   };
 
@@ -770,7 +783,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     // `pointermove` alone, so a slow drag would otherwise let the timer expire.
     return html`
       <ecosee-overlay
-        .tabs=${this._tabBar(view)}
+        .tabs=${this._tabBar()}
         .equipment=${view.equipment}
         .cornerStyle=${this._config?.corner_style}
         .equipmentGlow=${this._config?.equipment_glow}
@@ -1076,46 +1089,47 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     if (!this.hass || !this._config) return;
     const hass = this.hass;
     const config = this._config;
-    const order: OverlayKind[] = ['system', 'sensors', 'fan', 'schedule', 'setpoints', 'weather'];
+    const order: OverlayKind[] = [
+      'system',
+      'sensors',
+      'fan',
+      'schedule',
+      'setpoints',
+      'filter',
+      'weather',
+    ];
     const first = order.find((kind) => this._overlays[kind].available(hass, config));
     if (first) this._open(first, 'home');
   }
 
   /** The bottom tab bar for the current screen, or `undefined` (⇒ no bar) unless a
-   *  Main Menu section (System / Sensors / Fan / Schedule / Setpoints) is showing.
-   *  Availability comes from the single overlay-descriptor table so the section
-   *  predicates aren't duplicated; the temp badge reads the same current
-   *  temperature as the Home Screen. */
-  private _tabBar(view: HomeView): TabBarModel | undefined {
+   *  Main Menu section (System / Sensors / Fan / Schedule / Setpoints / Furnace
+   *  Filter) is showing. Availability comes from the single overlay-descriptor
+   *  table so the section predicates aren't duplicated. */
+  private _tabBar(): TabBarModel | undefined {
     const kind = this._overlay;
     if (!this.hass || !this._config || !kind) return undefined;
     if (!(TAB_SECTIONS as readonly string[]).includes(kind)) return undefined;
     const hass = this.hass;
     const config = this._config;
-    // The badge mirrors the Home Screen's current temperature — same value, same
-    // shared formatter (whole °F, half °C) — so reuse the already-derived `view`
-    // rather than recomputing `toHomeView`, and never Math.round it independently.
-    const temp = view.currentTemp === null ? null : formatTemp(view.currentTemp, view.unit);
-    const model = toTabBarModel(kind, temp, {
+    const model = toTabBarModel(kind, {
       system: this._overlays.system.available(hass, config),
       sensors: this._overlays.sensors.available(hass, config),
       fan: this._overlays.fan.available(hass, config),
       schedule: this._overlays.schedule.available(hass, config),
       setpoints: this._overlays.setpoints.available(hass, config),
+      filter: this._overlays.filter.available(hass, config),
     });
     return model.available ? model : undefined;
   }
 
-  /** Route a tab tap: the temp badge returns to the thermostat (Home); a section
-   *  replaces the current screen (`'home'` mode) so the sibling sections stay a flat
-   *  switch — dismissing any of them returns Home, as on the device. */
+  /** Route a tab tap: every target is a section, so it replaces the current screen
+   *  (`'home'` mode) so the sibling sections stay a flat switch — dismissing any of
+   *  them returns Home, as on the device. The old thermostat-badge target (which
+   *  called `_revertToHome()` directly) was removed in ADR-0017 — ✕ already does
+   *  the same thing. */
   private _onTabSelect = (event: CustomEvent<{ target: TabTarget }>): void => {
-    const target = event.detail.target;
-    if (target === 'thermostat') {
-      this._revertToHome();
-      return;
-    }
-    this._open(target, 'home');
+    this._open(event.detail.target, 'home');
   };
 
   /** Dismiss (✕ / outside-tap): pop one level and drop per-open state so a later

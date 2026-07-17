@@ -252,6 +252,17 @@ export const icons = {
     <circle cx="9.5" cy="16" r="2.4" fill="currentColor" />
   `),
 
+  /** Furnace Filter Main Menu tab (Card addition, ADR-0017) — a framed pleated
+   *  filter panel: a rounded rect with a zig-zag pleat pattern, the closest
+   *  generic reading of an HVAC filter. Replaces the left temp badge that
+   *  used to occupy this tab-bar slot (redundant with the shell's own ✕). */
+  filter: wrap(svg`
+    <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.2" />
+      <path d="M6.5 17 L9 7 L11.5 17 L14 7 L16.5 17" stroke-linecap="round" />
+    </g>
+  `),
+
   // Weather-condition glyphs. Mapped from a Home Assistant `weather` condition by
   // `weatherIcon` below; `sun` (above) covers a clear day. Tinted a natural
   // per-condition color inside the Weather Overlay (`conditionColor`, issue #31),

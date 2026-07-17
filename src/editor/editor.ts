@@ -85,7 +85,7 @@ const SENSORS_HELPER =
 /** Helper copy for the Comfort Setpoints block — on the base anchor field and,
  *  in the rendered schema, on the trailing "add a Comfort Setting" field. */
 const COMFORT_SETPOINTS_HELPER =
-  'Optional. Per-Comfort-Setting Heat/Cool number entities (e.g. an ecobee integration\'s ' +
+  "Optional. Per-Comfort-Setting Heat/Cool number entities (e.g. an ecobee integration's " +
   'per-comfort-setting Heat/Cool Temp entities). Adds the Comfort Setpoints Main Menu section, ' +
   'hidden until you add one. Name a Comfort Setting exactly as it appears on the thermostat ' +
   '(e.g. "Home", "Away", "Sleep", or a custom name), then set its Heat and/or Cool entity below it.';
@@ -235,6 +235,41 @@ export function editorSchema(): EditorField[] {
         "ecobee.resume_program — only works for a thermostat bound through Home Assistant's " +
         'ecobee integration. Off by default.',
       selector: { boolean: {} },
+    },
+    {
+      name: 'filter_last_changed_entity',
+      label: 'Furnace filter last-changed entity',
+      helper:
+        'Optional. A date, datetime, input_datetime, or sensor entity holding when the furnace ' +
+        'filter was last changed. Adds the Furnace Filter Main Menu section; hidden until an ' +
+        'entity is set.',
+      selector: { entity: {} },
+    },
+    {
+      name: 'filter_interval_days',
+      label: 'Furnace filter replacement interval (days)',
+      helper:
+        'Optional. How many days between filter changes, used to compute the due date and overdue ' +
+        'styling. Ignored while the interval entity below has a reading.',
+      selector: { number: { min: 1, mode: 'box', unit_of_measurement: 'days' } },
+    },
+    {
+      name: 'filter_interval_entity',
+      label: 'Furnace filter interval entity',
+      helper:
+        'Optional. A number entity carrying the replacement interval in days. Used instead of the ' +
+        'fixed interval above whenever it has a reading; falls back to the interval above if unset ' +
+        'or unavailable.',
+      selector: { entity: { domain: 'number' } },
+    },
+    {
+      name: 'filter_reset_entity',
+      label: 'Furnace filter reset entity',
+      helper:
+        'Optional. A button or script entity that resets the last-changed reading elsewhere (e.g. ' +
+        'an automation). When set, the "I\'ve changed my filter" button triggers this instead of ' +
+        'writing to the last-changed entity above directly.',
+      selector: { entity: {} },
     },
     {
       name: 'corner_style',
@@ -634,7 +669,10 @@ function readComfortSetpointRows(
     if (!key.startsWith(COMFORT_SETPOINT_PRESET_PREFIX)) continue;
     const raw = formValue[key];
     if (typeof raw !== 'string' || raw.trim() === '') continue;
-    rows.push({ index: Number(key.slice(COMFORT_SETPOINT_PRESET_PREFIX.length)), preset: raw.trim() });
+    rows.push({
+      index: Number(key.slice(COMFORT_SETPOINT_PRESET_PREFIX.length)),
+      preset: raw.trim(),
+    });
   }
   rows.sort((a, b) => a.index - b.index);
   return rows;

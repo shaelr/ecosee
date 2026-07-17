@@ -168,6 +168,7 @@ humidity_entity: sensor.hallway_humidity # optional, overrides the thermostat's 
 air_quality_entity: sensor.air_quality_index # optional, adds the AQI gauge
 uv_index_entity: sensor.uv_index # optional, adds the UV gauge
 schedule_entity: calendar.living_room_schedule # optional, adds the Schedule Main Menu section
+filter_last_changed_entity: date.furnace_filter_changed # optional, adds the Furnace Filter Main Menu section (see below)
 comfort_setpoints: # optional, the Comfort Setpoints screen (see below)
   - preset: Home
     heat_entity: number.living_room_home_heat_temp
@@ -184,6 +185,9 @@ resume_program: false # optional, adds a Resume Schedule control (ecobee integra
 background_color: '#0a0d10' # optional, the card's background — any CSS color, or "transparent"
 min_gap: 3 # optional, minimum heat/cool separation in Heat / Cool (Auto)
 min_gap_entity: sensor.ecobee_heat_cool_min_delta # optional, sources the gap from a sensor instead
+filter_interval_days: 90 # optional, days between furnace filter changes
+filter_interval_entity: number.furnace_filter_interval # optional, sources the interval from a number entity instead
+filter_reset_entity: button.reset_furnace_filter # optional, a button/script the "I've changed my filter" button triggers instead
 sensors: # optional, the Sensors screen (see below)
   - sensor.kitchen_temperature
   - entity: sensor.hallway_temperature
@@ -191,40 +195,45 @@ sensors: # optional, the Sensors screen (see below)
     occupancy_entity: binary_sensor.hallway_occupancy
 ```
 
-| Option                   | Required | Description                                                                                                                                                                               |
-| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `entity`                 | yes      | The `climate.*` entity the card is bound to. One card drives one thermostat.                                                                                                              |
-| `name`                   | no       | Label override. Defaults to the entity's friendly name.                                                                                                                                   |
-| `weather_entity`         | no       | A `weather` entity. Enables the weather icon and the Weather screen.                                                                                                                      |
-| `temperature_entity`     | no       | Overrides the thermostat's own current-temperature reading everywhere the card shows it (Home Screen, Standby Screen, and the Sensors screen's thermostat card) with this entity's value. |
-| `humidity_entity`        | no       | Overrides the thermostat's own humidity reading with this entity's value.                                                                                                                 |
-| `air_quality_entity`     | no       | An entity carrying a US EPA air-quality index. Adds the AQI gauge.                                                                                                                        |
-| `uv_index_entity`        | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                                                         |
-| `fan_min_on_time_entity` | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                                                             |
-| `schedule_entity`        | no       | A `calendar` entity representing the weekly comfort-setting schedule. Adds the Schedule Main Menu section — see below.                                                                    |
-| `comfort_setpoints`      | no       | Per-Comfort-Setting Heat/Cool `number` entities. Adds the Comfort Setpoints Main Menu section — see below.                                                                                 |
-| `sensors`                | no       | Temperature entities for the Sensors screen (see below).                                                                                                                                  |
-| `inactivity_timeout`     | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                                                                     |
-| `standby_screen`         | no       | Dim to a minimal clock display when left idle. Default off.                                                                                                                               |
+| Option                       | Required | Description                                                                                                                                                                               |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entity`                     | yes      | The `climate.*` entity the card is bound to. One card drives one thermostat.                                                                                                              |
+| `name`                       | no       | Label override. Defaults to the entity's friendly name.                                                                                                                                   |
+| `weather_entity`             | no       | A `weather` entity. Enables the weather icon and the Weather screen.                                                                                                                      |
+| `temperature_entity`         | no       | Overrides the thermostat's own current-temperature reading everywhere the card shows it (Home Screen, Standby Screen, and the Sensors screen's thermostat card) with this entity's value. |
+| `humidity_entity`            | no       | Overrides the thermostat's own humidity reading with this entity's value.                                                                                                                 |
+| `air_quality_entity`         | no       | An entity carrying a US EPA air-quality index. Adds the AQI gauge.                                                                                                                        |
+| `uv_index_entity`            | no       | An entity carrying a UV index. Adds the UV gauge.                                                                                                                                         |
+| `fan_min_on_time_entity`     | no       | A `number` entity for fan minimum runtime. Adds a selector to the Fan screen.                                                                                                             |
+| `schedule_entity`            | no       | A `calendar` entity representing the weekly comfort-setting schedule. Adds the Schedule Main Menu section — see below.                                                                    |
+| `comfort_setpoints`          | no       | Per-Comfort-Setting Heat/Cool `number` entities. Adds the Comfort Setpoints Main Menu section — see below.                                                                                |
+| `filter_last_changed_entity` | no       | A `date`/`datetime`/`input_datetime`/`sensor` entity holding when the furnace filter was last changed. Adds the Furnace Filter Main Menu section — see below.                             |
+| `sensors`                    | no       | Temperature entities for the Sensors screen (see below).                                                                                                                                  |
+| `inactivity_timeout`         | no       | Seconds an open control waits, idle, before returning home. `0` disables. Default 25.                                                                                                     |
+| `standby_screen`             | no       | Dim to a minimal clock display when left idle. Default off.                                                                                                                               |
 
 #### Advanced
 
 Finer-grained knobs for tuning specific screens. `show_fan`, `min_gap`,
-`min_gap_entity`, `resume_program`, `corner_style`, `equipment_glow`,
-`mode_color`, and `background_color` are all also in the visual editor;
-`standby` is YAML-only.
+`min_gap_entity`, `resume_program`, `filter_last_changed_entity`,
+`filter_interval_days`, `filter_interval_entity`, `filter_reset_entity`,
+`corner_style`, `equipment_glow`, `mode_color`, and `background_color` are all
+also in the visual editor; `standby` is YAML-only.
 
-| Option             | Required | Description                                                                                                                                                                                                                                                          |
-| ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `show_fan`         | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                                                                                                   |
-| `standby`          | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                                                                                                            |
-| `mode_color`       | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.                                                                                   |
-| `min_gap`          | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet. Ignored while `min_gap_entity` has a reading.                                                                       |
-| `min_gap_entity`   | no       | A `sensor` entity carrying the minimum gap instead of a fixed `min_gap` — see below.                                                                                                                                                                                 |
-| `corner_style`     | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`.                                                                                 |
-| `equipment_glow`   | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                                                                                                       |
-| `resume_program`   | no       | Adds a Resume Schedule control that replaces the setpoint ovals with a combined range pill during a hold — see below. **ecobee integration only.** Default off.                                                                                                     |
-| `background_color` | no       | Overrides the card's background everywhere — Home Screen, Standby Screen, and any open menu/picker: any CSS color (`#1a1a2e`, `rgba(...)`, a named color), or `transparent` for no background at all. Picker/chip text stays legible either way. Default near-black. |
+| Option                   | Required | Description                                                                                                                                                                                                                                                          |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `show_fan`               | no       | When to show the Home Screen fan shortcut: `auto` (only for fans with real speeds), `always` (any fan, On/Auto included), `never`. Default `auto`.                                                                                                                   |
+| `standby`                | no       | Hide individual elements of the standby (idle) screen — see below. Ignored unless `standby_screen` is on.                                                                                                                                                            |
+| `mode_color`             | no       | Tints the Home Screen System Mode icon by equipment status, like the ecobee device: blue while cooling, amber while heating, split left/right for Heat / Cool (Auto). Default off.                                                                                   |
+| `min_gap`                | no       | Minimum separation between the heat and cool setpoints in Heat / Cool (Auto), in your temperature unit. Default 3°F / 1.5°C. `0` lets them meet. Ignored while `min_gap_entity` has a reading.                                                                       |
+| `min_gap_entity`         | no       | A `sensor` entity carrying the minimum gap instead of a fixed `min_gap` — see below.                                                                                                                                                                                 |
+| `corner_style`           | no       | The card's outer corner treatment: `squircle` (the ecobee Premium's full-bubble motif), `rounded` (a smaller, conventional radius), or `square` (sharp corners). Default `squircle`.                                                                                 |
+| `equipment_glow`         | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                                                                                                       |
+| `resume_program`         | no       | Adds a Resume Schedule control that replaces the setpoint ovals with a combined range pill during a hold — see below. **ecobee integration only.** Default off.                                                                                                      |
+| `filter_interval_days`   | no       | Days between furnace filter changes, used to compute the due date and overdue styling — see below. Ignored while `filter_interval_entity` has a reading.                                                                                                             |
+| `filter_interval_entity` | no       | A `number` entity carrying the replacement interval instead of a fixed `filter_interval_days` — see below.                                                                                                                                                           |
+| `filter_reset_entity`    | no       | A `button`/`script` entity the "I've changed my filter" button triggers instead of writing to `filter_last_changed_entity` directly — see below.                                                                                                                     |
+| `background_color`       | no       | Overrides the card's background everywhere — Home Screen, Standby Screen, and any open menu/picker: any CSS color (`#1a1a2e`, `rgba(...)`, a named color), or `transparent` for no background at all. Picker/chip text stays legible either way. Default near-black. |
 
 ##### Resume Schedule (ecobee integration only)
 
@@ -309,7 +318,7 @@ whatever was there.
 
 ##### Comfort Setpoints
 
-Distinct from Schedule above (which changes *when* the thermostat switches
+Distinct from Schedule above (which changes _when_ the thermostat switches
 Comfort Settings): `comfort_setpoints` lets you change what temperature each
 Comfort Setting actually targets, without leaving the card. Each entry names a
 Comfort Setting — exactly as it appears on the thermostat, e.g. "Home",
@@ -343,6 +352,38 @@ Settings listed there are offered — a preset your thermostat reports but you
 never listed here (an unused custom preset, for instance) stays off every
 picker. Leave `comfort_setpoints` unset and every picker lists everything the
 thermostat itself reports, unchanged from before this option existed.
+
+##### Furnace Filter
+
+The physical ecobee device has no furnace-filter screen of its own — this is
+a card addition, modeled on the ecobee app's own filter-change confirmation
+screen. Point `filter_last_changed_entity` at whatever entity tracks when
+you last changed your furnace filter — a `date`, `datetime`, `input_datetime`,
+or a read-only `sensor` computed elsewhere — and the card adds a **Furnace
+Filter** section to the Main Menu, in the tab bar's leftmost slot (see below).
+
+```yaml
+filter_last_changed_entity: date.furnace_filter_changed
+filter_interval_days: 90
+filter_reset_entity: button.reset_furnace_filter # optional — see below
+```
+
+The section shows the last-changed date and — once `filter_interval_days`
+(or `filter_interval_entity`, which takes priority whenever it has a valid
+reading) is set — the computed due date, switching to a warning style once
+overdue. A large **"I've changed my filter"** button at the bottom records
+the change: if `filter_reset_entity` is set (a `button` or `script`, for a
+setup where `filter_last_changed_entity` is a read-only sensor computed
+elsewhere), tapping it presses/triggers that entity instead; otherwise it
+writes today's date directly onto `filter_last_changed_entity`, provided its
+domain supports it (`date`, `datetime`, `input_datetime` — a plain `sensor`
+can't be written to, so the button stays disabled unless `filter_reset_entity`
+is also set).
+
+This section replaces the tab bar's old temperature badge, which used to sit
+in the same leftmost slot and returned to the thermostat when tapped — now
+redundant with the shell's own ✕ in the top-left corner, which returns to the
+same place.
 
 ##### Standby screen elements
 

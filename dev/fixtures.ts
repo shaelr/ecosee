@@ -363,6 +363,84 @@ const unavailableWithAirQuality: Fixture = {
   }),
 };
 
+// ADR-0017: the Furnace Filter Main Menu section, in its two visually distinct
+// states — within-interval, and overdue (the readout/note switch to the Heat
+// amber). Both write-back paths (`filter_reset_entity` set vs. writing
+// `filter_last_changed_entity` directly) are already covered by
+// furnace-filter.test.ts / furnace-filter-overlay.test.ts; these two exist for
+// eyeballing the layout and the overdue color switch, not the logic.
+const furnaceFilterOk: Fixture = {
+  label: 'Furnace Filter (on schedule)',
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    filter_last_changed_entity: 'date.furnace_filter_changed',
+    filter_interval_days: 90,
+  },
+  hass: makeHass({
+    climate: {
+      entity_id: 'climate.living_room',
+      state: 'heat_cool',
+      attributes: {
+        friendly_name: 'Living Room',
+        current_temperature: 75,
+        target_temp_low: 70,
+        target_temp_high: 75,
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+        min_temp: 45,
+        max_temp: 92,
+        target_temp_step: 1,
+      },
+    },
+    extra: [
+      {
+        entity_id: 'date.furnace_filter_changed',
+        state: '2026-06-01',
+        attributes: { friendly_name: 'Furnace Filter Changed' },
+      },
+    ],
+  }),
+};
+
+const furnaceFilterOverdue: Fixture = {
+  label: 'Furnace Filter (overdue)',
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    filter_last_changed_entity: 'date.furnace_filter_changed',
+    filter_interval_days: 90,
+    filter_reset_entity: 'button.reset_furnace_filter',
+  },
+  hass: makeHass({
+    climate: {
+      entity_id: 'climate.living_room',
+      state: 'heat_cool',
+      attributes: {
+        friendly_name: 'Living Room',
+        current_temperature: 75,
+        target_temp_low: 70,
+        target_temp_high: 75,
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+        min_temp: 45,
+        max_temp: 92,
+        target_temp_step: 1,
+      },
+    },
+    extra: [
+      {
+        entity_id: 'date.furnace_filter_changed',
+        state: '2026-02-01',
+        attributes: { friendly_name: 'Furnace Filter Changed' },
+      },
+      {
+        entity_id: 'button.reset_furnace_filter',
+        state: 'unknown',
+        attributes: { friendly_name: 'Reset Furnace Filter' },
+      },
+    ],
+  }),
+};
+
 export const fixtures: Fixture[] = [
   ecobeeAuto,
   ecobeeHeating,
@@ -370,6 +448,8 @@ export const fixtures: Fixture[] = [
   ecobeeOff,
   ecobeeSensors,
   ecobeeAirQuality,
+  furnaceFilterOk,
+  furnaceFilterOverdue,
   genericDegraded,
   unavailable,
   unavailableWithAirQuality,
