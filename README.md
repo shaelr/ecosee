@@ -336,6 +336,14 @@ straight to the `number` entity, so the change takes effect the next time that
 Comfort Setting becomes active (a schedule block, a manual pick, or Resume
 Schedule), not the thermostat's current hold.
 
+It also curates every other Comfort Setting picker in the card (the System
+section's Comfort Setting selector, and the Schedule Add Block screen's own
+Comfort Setting dropdown): once `comfort_setpoints` is set, only the Comfort
+Settings listed there are offered — a preset your thermostat reports but you
+never listed here (an unused custom preset, for instance) stays off every
+picker. Leave `comfort_setpoints` unset and every picker lists everything the
+thermostat itself reports, unchanged from before this option existed.
+
 ##### Standby screen elements
 
 `standby` is a YAML-only block (not in the visual editor) that hides individual

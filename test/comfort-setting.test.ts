@@ -104,6 +104,69 @@ describe('toComfortSettingModel — graceful degradation', () => {
   });
 });
 
+describe('toComfortSettingModel — comfort_setpoints allowlist (ADR-0015)', () => {
+  it('lists every entity-reported preset when comfort_setpoints is unset (unchanged default)', () => {
+    const model = toComfortSettingModel(hass(FULL), config);
+    expect(model.options.map((o) => o.preset)).toEqual(['Home', 'Away', 'Sleep', 'Vacation']);
+  });
+
+  it('lists every preset when comfort_setpoints is an empty list', () => {
+    const model = toComfortSettingModel(hass(FULL), { ...config, comfort_setpoints: [] });
+    expect(model.options.map((o) => o.preset)).toEqual(['Home', 'Away', 'Sleep', 'Vacation']);
+  });
+
+  it('narrows the options to only the presets named in comfort_setpoints', () => {
+    const model = toComfortSettingModel(hass(FULL), {
+      ...config,
+      comfort_setpoints: [
+        { preset: 'Home', heat_entity: 'number.home_heat' },
+        { preset: 'Away', heat_entity: 'number.away_heat' },
+      ],
+    });
+    expect(model.options.map((o) => o.preset)).toEqual(['Home', 'Away']);
+  });
+
+  it('preserves the entity’s own order rather than the config list’s order', () => {
+    const model = toComfortSettingModel(hass(FULL), {
+      ...config,
+      // Listed Away-then-Home, the reverse of FULL's own preset_modes order.
+      comfort_setpoints: [
+        { preset: 'Away', heat_entity: 'number.away_heat' },
+        { preset: 'Home', heat_entity: 'number.home_heat' },
+      ],
+    });
+    expect(model.options.map((o) => o.preset)).toEqual(['Home', 'Away']);
+  });
+
+  it('matches case-insensitively, mirroring comfortIconFor/comfortLabelFor', () => {
+    const model = toComfortSettingModel(hass(FULL), {
+      ...config,
+      comfort_setpoints: [{ preset: 'home', heat_entity: 'number.home_heat' }], // lowercase
+    });
+    expect(model.options.map((o) => o.preset)).toEqual(['Home']);
+  });
+
+  it('is unavailable when comfort_setpoints names nothing the entity actually reports', () => {
+    const model = toComfortSettingModel(hass(FULL), {
+      ...config,
+      comfort_setpoints: [{ preset: 'Vacation Home', heat_entity: 'number.x' }],
+    });
+    expect(model.options).toEqual([]);
+    expect(model.available).toBe(false);
+  });
+
+  it('still tracks the active preset’s selected flag within the narrowed list', () => {
+    const model = toComfortSettingModel(hass(FULL), {
+      ...config,
+      comfort_setpoints: [
+        { preset: 'Home', heat_entity: 'number.home_heat' },
+        { preset: 'Away', heat_entity: 'number.away_heat' },
+      ],
+    });
+    expect(model.options.find((o) => o.preset === 'Home')?.selected).toBe(true);
+  });
+});
+
 describe('setPresetModeCall', () => {
   it('builds the climate.set_preset_mode call for the chosen preset', () => {
     expect(setPresetModeCall('Away', 'climate.t')).toEqual({

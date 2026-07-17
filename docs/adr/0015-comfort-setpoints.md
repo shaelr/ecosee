@@ -144,3 +144,35 @@ Schedule's `_sendScheduleUpdate`.
   Comfort Setting deleted on the thermostat since) still renders normally —
   the two lists are read independently (ADR-0001) — it just falls back to the
   default Comfort Setting glyph rather than a mismatch or error.
+
+## Extension: comfort_setpoints as a Comfort Setting picker allowlist
+
+**Origin**: owner report ("the comfort settings in the menu should adhere to
+the set comfort settings in the card config. that way it only displays the
+comfort settings i want").
+
+`toComfortSettingModel` (`comfort-setting.ts`) previously listed every preset
+the bound entity's own `preset_modes` reported, with no way to hide one a
+user doesn't actually use (e.g. a stale custom preset, or a name the
+thermostat exposes but the household never picks). Since `comfort_setpoints`
+already represents "the Comfort Settings I've deliberately set up in ecosee,"
+it now doubles as an allowlist for this picker too: when configured, only the
+presets it names are offered, in the entity's own order (not the config
+list's order — the config is a filter, not a reordering); when unset or
+empty, every entity-reported preset stays available, unchanged from before
+this existed (ADR-0001: an unset optional key never narrows behavior).
+Matched case-insensitively, mirroring `comfortIconFor`/`comfortLabelFor`'s
+own lookup and the same casing gotcha ADR-0012's "Correction" already hit
+(ecobee's own preset naming doesn't always match how a user typed a name in
+YAML).
+
+Because `toComfortSettingModel` is a shared seam — the System sub-screen's
+Comfort Setting selector, the actual Comfort Setting picker
+(`comfort-setting-overlay.ts`) it opens, and the Schedule Add Block screen's
+own Comfort Setting dropdown (`schedule-add-block-overlay.ts`) all call it —
+the allowlist applies to all three consistently, not just the one screen the
+owner named. This is deliberate, not an accidental side effect: the same
+"comfort settings I want" curation the owner asked for one picker to respect
+would otherwise leave Schedule's Add Block screen still offering the
+un-curated full list, an inconsistency between two pickers backed by the
+identical model.

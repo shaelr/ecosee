@@ -93,9 +93,24 @@ export function toComfortSettingModel(
     typeof entity.attributes.preset_mode === 'string' ? entity.attributes.preset_mode : null;
   const fallback = defaultIcon(config);
 
+  // When comfort_setpoints (ADR-0015) is configured, it doubles as an allowlist
+  // for this picker — a Comfort Setting the entity reports but the user hasn't
+  // listed there is left off, so a thermostat's raw preset_modes (which can
+  // include ones the user never uses, e.g. a stale custom preset) doesn't force
+  // every one of them into the selector. Absent/empty comfort_setpoints leaves
+  // every entity-reported preset selectable, unchanged from before this existed
+  // (ADR-0001: an unset optional key never narrows behavior). Compared
+  // case-insensitively, matching comfortIconFor/comfortLabelFor's own lookup —
+  // ecobee's own preset_mode casing doesn't always match how a user typed a
+  // name in YAML (ADR-0012's "Correction").
+  const allowed = config.comfort_setpoints?.length
+    ? new Set(config.comfort_setpoints.map((row) => row.preset.toLowerCase()))
+    : null;
+
   const options: ComfortSettingOption[] = [];
   for (const preset of presets) {
     if (typeof preset !== 'string' || preset === '') continue;
+    if (allowed && !allowed.has(preset.toLowerCase())) continue;
     const known = KNOWN[preset.toLowerCase()];
     options.push({
       preset,
