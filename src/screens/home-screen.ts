@@ -460,6 +460,17 @@ export class EcoseeHomeScreen extends LitElement {
         font-weight: 600;
         line-height: 1;
       }
+      /* Dual (Heat / Cool Auto) only: fixed to the same total span the two
+         setpoint ovals occupy (34cqw min-width each + .setpoints' own 3cqw gap
+         = 71cqw) rather than shrinking to its own content, so the pill's outer
+         edges land exactly where the ovals' outer edges do — the two states
+         read as the same shape swapping content, not two differently-sized
+         controls. A single-setpoint mode has only one oval to match, so it
+         keeps sizing to its own content instead (.range-close's auto left
+         margin below is then a no-op — nothing to push into). */
+      .range.dual {
+        width: 71cqw;
+      }
       .range-value.heat {
         color: var(--ecosee-heat, #f3a13c);
       }
@@ -473,8 +484,10 @@ export class EcoseeHomeScreen extends LitElement {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        flex: none;
         width: 6.5cqw;
         height: 6.5cqw;
+        margin-left: auto;
         border: 0.5cqw solid currentColor;
         border-radius: 50%;
         padding: 1.2cqw;
@@ -804,8 +817,9 @@ export class EcoseeHomeScreen extends LitElement {
   private _renderRange(view: HomeView): TemplateResult | typeof nothing {
     const setpoints = view.setpoints;
     if (!setpoints || (setpoints.heat === null && setpoints.cool === null)) return nothing;
+    const dual = setpoints.heat !== null && setpoints.cool !== null;
     return html`
-      <div class="range" part="setpoints">
+      <div class="range ${dual ? 'dual' : ''}" part="setpoints">
         ${
           setpoints.heat !== null
             ? this._renderRangeValue('heat', setpoints.heat, view.unit)

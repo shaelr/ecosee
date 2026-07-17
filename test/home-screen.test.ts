@@ -140,6 +140,10 @@ describe('Home Screen combined range pill (resume_program, ADR-0012/0016)', () =
     expect(ovals(el)).toHaveLength(0);
     const pill = rangePill(el);
     expect(pill).not.toBeNull();
+    // Fixed to the ovals' own combined span (issue: the pill was shrinking to
+    // its own content instead of aligning with where the two ovals' outer
+    // edges would sit).
+    expect(pill!.classList.contains('dual')).toBe(true);
     const [heat, cool] = rangeValues(el);
     expect(heat.classList.contains('heat')).toBe(true);
     expect(heat.getAttribute('aria-label')).toBe('Adjust heat setpoint');
@@ -157,6 +161,9 @@ describe('Home Screen combined range pill (resume_program, ADR-0012/0016)', () =
     expect(values).toHaveLength(1);
     expect(values[0].classList.contains('heat')).toBe(true);
     expect(el.shadowRoot!.querySelector('.range-sep')).toBeNull();
+    // No fixed-width class — there's only one oval to match, so it sizes to
+    // its own content instead (unlike the dual case above).
+    expect(rangePill(el)!.classList.contains('dual')).toBe(false);
   });
 
   it('never shows an "until" hold-expiry time — Home Assistant does not expose one', async () => {
