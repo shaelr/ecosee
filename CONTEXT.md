@@ -56,7 +56,9 @@ The Overlay listing temperature readings from configured Home Assistant sensor
 entities (not limited to ecobee remote sensors). Each card may carry an
 **"Occupied"/"Unoccupied"** badge; its occupancy source is the sensor's explicit
 `occupancy_entity` or, failing that, the occupancy `binary_sensor` auto-paired from
-the same device (ADR-0010).
+the same device (ADR-0010). Tapping a card fires Home Assistant's own
+`hass-more-info` event for that sensor's entity, opening HA's stock more-info
+dialog (History graph included) — the Card renders no history UI of its own.
 _Avoid_: rooms view.
 
 **Schedule Screen**:

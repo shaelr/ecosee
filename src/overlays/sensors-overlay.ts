@@ -14,13 +14,16 @@ import { icons } from '../icons';
  * sensor glyph, the
  * sensor name, a `73° | Occupied` reading line, and a circled expand chevron.
  *
- * Purely presentational and **read-only**: it renders the already-degraded
- * SensorsModel (the thermostat's own temp first, then each usable curated sensor;
- * unavailable sensors and absent occupancy are dropped upstream by
- * `toSensorsModel`). There is no "participating in average" control — Home
- * Assistant can't back it (issue #9). The expand chevron is a fidelity affordance;
- * there is no per-sensor detail screen, so cards emit no events. Dismissal is the
- * shell's job (✕ / outside-tap), which returns to the Main Menu (hub-and-picker).
+ * Read-only (no "participating in average" control — Home Assistant can't back
+ * it, issue #9) but not inert: tapping a card fires the standard
+ * `hass-more-info` DOM event (bubbling + composed, the same event every stock
+ * Lovelace card's entity row fires — confirmed against
+ * home-assistant/frontend's own `handle-action.ts`) carrying that sensor's
+ * entity id, so Home Assistant's own more-info dialog opens with its History
+ * graph — no history data is fetched or rendered here, the Card only asks HA
+ * to show what it already knows how to show. The chevron is this tap target's
+ * affordance, not a separate control. Dismissal is the shell's job (✕ /
+ * outside-tap), which returns to the Main Menu (hub-and-picker).
  */
 @customElement('ecosee-sensors-overlay')
 export class EcoseeSensorsOverlay extends LitElement {
@@ -103,16 +106,30 @@ export class EcoseeSensorsOverlay extends LitElement {
       display: none;
     }
 
-    /* One horizontal sensor card: a cyan-outlined squircle. */
+    /* One horizontal sensor card: a cyan-outlined squircle, and — unlike a
+       plain div — a real tap target (opens the entity's history via
+       hass-more-info), so it carries its own button reset rather than
+       inheriting one from elsewhere in this file. */
     .card {
+      appearance: none;
+      width: 100%;
       box-sizing: border-box;
       flex: none;
       display: flex;
       align-items: center;
       gap: 3.5cqw;
       padding: 3.4cqw 4cqw;
+      background: none;
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 5cqw;
+      font: inherit;
+      text-align: left;
+      color: inherit;
+      cursor: pointer;
+    }
+    .card:focus-visible {
+      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      outline-offset: 1cqw;
     }
 
     .card-icon {
@@ -163,9 +180,27 @@ export class EcoseeSensorsOverlay extends LitElement {
     }
   `;
 
+  /** Ask Home Assistant to open its own more-info dialog (History graph
+   *  included) for this sensor's entity — the standard `hass-more-info` event
+   *  every stock Lovelace entity row fires, not a screen this Card renders
+   *  itself. `card.key` is the entity id (`sensors.ts`'s own doc comment). */
+  private _showHistory(card: SensorCard): void {
+    this.dispatchEvent(
+      new CustomEvent('hass-more-info', {
+        detail: { entityId: card.key },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private _renderCard(card: SensorCard, unit: string): TemplateResult {
     return html`
-      <div class="card" role="listitem">
+      <button
+        class="card"
+        aria-label="${card.name}, view history"
+        @click=${() => this._showHistory(card)}
+      >
         <span class="card-icon" aria-hidden="true">
           ${card.isThermostat ? icons.thermostat : icons.sensor}
         </span>
@@ -182,7 +217,7 @@ export class EcoseeSensorsOverlay extends LitElement {
           </div>
         </div>
         <span class="chevron" aria-hidden="true">${icons.chevron}</span>
-      </div>
+      </button>
     `;
   }
 

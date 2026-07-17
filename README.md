@@ -383,6 +383,10 @@ with no extra config. Set `occupancy_entity` only to point at a specific binary
 sensor or to override that automatic pairing; a sensor with no occupancy source
 shows just its temperature.
 
+Tapping a card opens Home Assistant's own more-info dialog for that entity —
+the same dialog you'd get tapping it anywhere else in your dashboard, History
+graph included — rather than a history view built into the card.
+
 ## Development
 
 Run `npm run dev` for a live preview harness that renders the card against sample
