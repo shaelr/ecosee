@@ -54,9 +54,11 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
       flex-direction: column;
       align-items: center;
       /* Top padding lines the title's own vertical center up with the shell's ✕
-         (top: 9u, 9u tall — vertical center 13.5u from the content box's top). */
-      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
-        var(--ecosee-tabbar-inset, calc(8 * var(--ecosee-u, 4.6px)));
+         (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
+         Horizontal padding matches every other Main Menu section (7u, the same
+         value schedule-overlay.ts uses). */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(7 * var(--ecosee-u, 4.6px))
+        var(--ecosee-tabbar-inset, calc(7 * var(--ecosee-u, 4.6px)));
     }
 
     .title {
@@ -83,9 +85,13 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
       margin-top: calc(5 * var(--ecosee-u, 4.6px));
     }
 
+    /* Full width (matching schedule-overlay.ts's own agenda) rather than a
+       further-inset 84cqw — the container's own horizontal padding is
+       already the inset. max-height matches schedule-overlay.ts's own
+       agenda cap. */
     .list {
-      width: 84cqw;
-      max-height: 54cqw;
+      width: 100%;
+      max-height: 60cqw;
       display: flex;
       flex-direction: column;
       gap: 3cqw;

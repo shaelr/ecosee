@@ -55,8 +55,11 @@ export class EcoseeSystemOverlay extends LitElement {
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top),
          so the two read as one inline row instead of the title sitting visibly
-         lower than the close affordance beside it. */
-      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
+         lower than the close affordance beside it. Horizontal padding matches
+         every other Main Menu section (7u, the same value schedule-overlay.ts
+         uses) rather than each screen picking its own — a wider or narrower
+         inset read as the sections not sharing one canvas. */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(7 * var(--ecosee-u, 4.6px))
         calc(10 * var(--ecosee-u, 4.6px));
       text-align: center;
     }

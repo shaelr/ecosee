@@ -47,11 +47,13 @@ export class EcoseeSensorsOverlay extends LitElement {
       align-items: center;
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
-         Reserve the tab bar's zone at the bottom so the scrolling list can't hide its
-         last card behind it. The size is the shell's --ecosee-tabbar-inset (it owns
-         the bar's geometry); this falls back to the normal 8u when no bar is present. */
-      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
-        var(--ecosee-tabbar-inset, calc(8 * var(--ecosee-u, 4.6px)));
+         Horizontal padding matches every other Main Menu section (7u, the same
+         value schedule-overlay.ts uses). Reserve the tab bar's zone at the
+         bottom so the scrolling list can't hide its last card behind it. The
+         size is the shell's --ecosee-tabbar-inset (it owns the bar's
+         geometry); this falls back to the normal 7u when no bar is present. */
+      padding: calc(9 * var(--ecosee-u, 4.6px)) calc(7 * var(--ecosee-u, 4.6px))
+        var(--ecosee-tabbar-inset, calc(7 * var(--ecosee-u, 4.6px)));
     }
 
     .title {
@@ -80,12 +82,15 @@ export class EcoseeSensorsOverlay extends LitElement {
 
     /* The card stack. Opts back into pointer events (the shell makes slotted
        content transparent so empty areas dismiss) so a long list can scroll;
-       empty margins still fall through to the backdrop. */
+       empty margins still fall through to the backdrop. Full width (matching
+       schedule-overlay.ts's own agenda) rather than a further-inset 84cqw —
+       the container's own horizontal padding is already the inset. */
     .list {
-      width: 84cqw;
+      width: 100%;
       /* Caps how many cards are visible before the list scrolls (the last one peeks,
-         as on the device); the root's bottom inset keeps it clear of the tab bar. */
-      max-height: 54cqw;
+         as on the device, matching schedule-overlay.ts's own agenda cap); the
+         root's bottom inset keeps it clear of the tab bar. */
+      max-height: 60cqw;
       display: flex;
       flex-direction: column;
       gap: 3cqw;
