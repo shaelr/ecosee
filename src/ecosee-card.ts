@@ -378,8 +378,27 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   static override styles = [
     tokens,
     css`
+      /* flex-shrink: 0 — confirmed against home-assistant/frontend's own
+         hui-vertical-stack-card.ts: its #root is "flex: 1; min-height: 0;"
+         inside a "height: 100%" host, the standard flexbox pattern that lets a
+         flex item be compressed BELOW its own content's natural height when
+         the stack's own available height falls short. A card that self-sizes
+         to a square purely from its measured WIDTH (.sizer below) has no way
+         to communicate that height back to the outer flex layout ahead of
+         time, so without this the host can end up assigned a shorter box than
+         .sizer actually renders at — and since .sizer's own height comes from
+         a CSS custom property, not the host's box, the excess doesn't reflow
+         the stack, it just gets clipped by whatever ancestor has
+         overflow: hidden (issue: a Main Menu section with enough rows to
+         reach the canvas's true square height got its last row cut off,
+         reproducible only inside a vertical-stack — a plain top-level card
+         has nothing forcing it to shrink in the first place). flex-shrink: 0
+         tells any flex-based wrapper (vertical-stack or otherwise) this card
+         is never the one that gives up space when content and container
+         height disagree — the wrapper grows to fit it instead. */
       :host {
         display: block;
+        flex-shrink: 0;
       }
       /* Fixed-canvas device (issue #35 / #36). .root holds the whole Card laid out
          once at --ecosee-base-size; the ResizeObserver measures the slot and sets
