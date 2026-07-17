@@ -306,6 +306,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
             this._scheduleSelectedDate(),
             this._scheduleDayIndex,
           )}
+          .todayIndex=${new Date().getDay()}
         ></ecosee-schedule-overlay>
       `,
     },

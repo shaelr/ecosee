@@ -28,6 +28,13 @@ export class EcoseeScheduleOverlay extends LitElement {
   /** The already-degraded day strip + block agenda, derived by the host from
    *  `hass` plus the currently-fetched day's raw events. */
   @property({ attribute: false }) model?: ScheduleModel;
+  /** Today's day-strip index (`Date#getDay()`, Sunday-first — matching
+   *  `ScheduleDayOption.index`), supplied by the host rather than read from
+   *  the wall clock in here, the same host-reads-the-clock split
+   *  `ecosee-card.ts`'s own `_scheduleSelectedDate` already draws. Marks the
+   *  day-strip circle with a small dot independent of `.selected` — the day
+   *  being *viewed* and the day that *is* today are frequently different. */
+  @property({ attribute: false }) todayIndex = -1;
 
   static override styles = css`
     :host {
@@ -93,6 +100,15 @@ export class EcoseeScheduleOverlay extends LitElement {
       gap: 2.5cqw;
       pointer-events: auto;
     }
+    /* Groups a day's circle with its own today-dot slot beneath, so the dot's
+       reserved space doesn't add a gap the OTHER six days don't have — every
+       column is the same height whether or not it carries the mark. */
+    .day-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1cqw;
+    }
     .day {
       appearance: none;
       background: none;
@@ -115,6 +131,21 @@ export class EcoseeScheduleOverlay extends LitElement {
     .day.selected {
       background: var(--ecosee-accent, #62cfe9);
       color: var(--ecosee-chip-ink, #0a0d10);
+    }
+    /* Marks today specifically — independent of .selected (the day being
+       viewed/edited), which may or may not be the same day. visibility, not
+       display: none, keeps every column the same height regardless of which
+       one (if any — the reference calendar apps this dot idiom comes from
+       always have a "today"; this schedule always does too, since it only
+       ever shows the current Sunday-through-Saturday week, ADR-0014). */
+    .today-dot {
+      width: 1.6cqw;
+      height: 1.6cqw;
+      border-radius: 50%;
+      background: var(--ecosee-accent, #62cfe9);
+    }
+    .today-dot.hidden {
+      visibility: hidden;
     }
 
     /* The agenda. A boundary label (clock time / "From previous day") precedes
@@ -280,18 +311,22 @@ export class EcoseeScheduleOverlay extends LitElement {
         </button>
         <h2 class="title">Schedule</h2>
         <nav class="days" aria-label="Day of week">
-          ${model.days.map(
-            (day) => html`
-              <button
-                class="day ${day.selected ? 'selected' : ''}"
-                aria-label=${day.label}
-                aria-pressed=${day.selected}
-                @click=${() => this._selectDay(day)}
-              >
-                ${day.label}
-              </button>
-            `,
-          )}
+          ${model.days.map((day) => {
+            const isToday = day.index === this.todayIndex;
+            return html`
+              <div class="day-col">
+                <button
+                  class="day ${day.selected ? 'selected' : ''}"
+                  aria-label=${isToday ? `${day.label}, today` : day.label}
+                  aria-pressed=${day.selected}
+                  @click=${() => this._selectDay(day)}
+                >
+                  ${day.label}
+                </button>
+                <span class="today-dot ${isToday ? '' : 'hidden'}" aria-hidden="true"></span>
+              </div>
+            `;
+          })}
         </nav>
         <div class="agenda" role="list" aria-label="Schedule for the selected day">
           ${

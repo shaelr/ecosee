@@ -63,7 +63,9 @@ _Avoid_: rooms view.
 
 **Schedule Screen**:
 The Main Menu section showing the bound entity's weekly comfort-setting schedule
-(ADR-0014), one day at a time: a day strip (S M T W T F S) above that day's ordered
+(ADR-0014), one day at a time: a day strip (S M T W T F S — today's own circle
+also carries a small dot beneath it, independent of whichever circle is filled
+for the day currently being *viewed*) above that day's ordered
 **blocks** — contiguous runs of a single Comfort Setting, each preceded by a
 boundary label (a clock time, or "From previous day" for a block already active at
 midnight). Tapping an editable block opens its **Start Time** Picker, which can
