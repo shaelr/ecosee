@@ -252,14 +252,18 @@ export const icons = {
     <circle cx="9.5" cy="16" r="2.4" fill="currentColor" />
   `),
 
-  /** Furnace Filter Main Menu tab (Card addition, ADR-0017) — a framed pleated
-   *  filter panel: a rounded rect with a zig-zag pleat pattern, the closest
-   *  generic reading of an HVAC filter. Replaces the left temp badge that
-   *  used to occupy this tab-bar slot (redundant with the shell's own ✕). */
+  /** Furnace Filter Main Menu tab (Card addition, ADR-0017) — a chamfered-corner
+   *  filter panel with wavy airflow lines passing through it, modeled on the
+   *  widely-recognized "air filter" glyph (redrawn by hand in this file's own
+   *  monoline stroke style, not a literal trace of any specific icon set's path
+   *  data). Replaces the left temp badge that used to occupy this tab-bar slot
+   *  (redundant with the shell's own ✕). */
   filter: wrap(svg`
-    <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-      <rect x="3.5" y="4.5" width="17" height="15" rx="2.2" />
-      <path d="M6.5 17 L9 7 L11.5 17 L14 7 L16.5 17" stroke-linecap="round" />
+    <g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9.2 3 H14.8 L20 8.2 V19 A2 2 0 0 1 18 21 H9.2 A2 2 0 0 1 7.2 19 V5 A2 2 0 0 1 9.2 3 Z" />
+      <path d="M2 10 C5 7.5 8 12.5 11 10 S17 7.5 20 10" />
+      <path d="M2 14 C5 11.5 8 16.5 11 14 S17 11.5 20 14" />
+      <path d="M5 18 C7.5 16 10 20 12.5 18 S17.5 16 20 18" />
     </g>
   `),
 
