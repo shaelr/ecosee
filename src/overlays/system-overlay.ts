@@ -52,12 +52,6 @@ export class EcoseeSystemOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      /* The top padding / gap are kept deliberately tight: a looser rhythm pushed
-         the lower selector pill into the bottom squircle curve and clipped it. This
-         still matters when the two selectors wrap to stacked rows (a long custom
-         Comfort Setting value), which runs the cluster tall. */
-      gap: calc(6 * var(--ecosee-u, 4.6px));
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top),
          so the two read as one inline row instead of the title sitting visibly
@@ -73,6 +67,28 @@ export class EcoseeSystemOverlay extends LitElement {
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
+    }
+
+    /* .content is what actually centers the selectors/equipment-status line —
+       within whatever space remains below the (fixed-position) title, not the
+       full screen — so a short thermostat (one selector, no equipment line)
+       doesn't leave a large dead gap between it and the tab bar (matching the
+       Home Screen's own .cluster: title stays put near the top, content
+       centers in the real remaining space beneath it). The top padding / gap
+       used to sit directly on .system and were kept deliberately tight because
+       a looser rhythm pushed the lower selector pill into the bottom squircle
+       curve — that same tightness now lives on .content's own gap so the two
+       selectors still can't grow past their own footprint when they wrap to
+       stacked rows (a long custom Comfort Setting value). */
+    .content {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--ecosee-u, 4.6px));
+      margin-top: calc(4 * var(--ecosee-u, 4.6px));
     }
 
     /* Selectors sit side by side as on the device. Each column is only as wide as
@@ -159,20 +175,27 @@ export class EcoseeSystemOverlay extends LitElement {
     return html`
       <div class="system">
         <h2 class="title">System</h2>
-        <div class="selectors">
-          ${this._renderSelector('System Mode', this._modeValue(), 'system-mode', this.systemMode)}
-          ${this._renderSelector(
-            'Comfort Setting',
-            this._comfortValue(),
-            'comfort-setting',
-            this.comfort,
-          )}
+        <div class="content">
+          <div class="selectors">
+            ${this._renderSelector(
+              'System Mode',
+              this._modeValue(),
+              'system-mode',
+              this.systemMode,
+            )}
+            ${this._renderSelector(
+              'Comfort Setting',
+              this._comfortValue(),
+              'comfort-setting',
+              this.comfort,
+            )}
+          </div>
+          ${
+            this.equipment !== null
+              ? html`<p class="equipment">${this._equipmentLabel(this.equipment)}</p>`
+              : nothing
+          }
         </div>
-        ${
-          this.equipment !== null
-            ? html`<p class="equipment">${this._equipmentLabel(this.equipment)}</p>`
-            : nothing
-        }
       </div>
     `;
   }

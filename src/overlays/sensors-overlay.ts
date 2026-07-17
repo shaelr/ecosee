@@ -45,8 +45,6 @@ export class EcoseeSensorsOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      gap: calc(5 * var(--ecosee-u, 4.6px));
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
          Reserve the tab bar's zone at the bottom so the scrolling list can't hide its
@@ -62,6 +60,22 @@ export class EcoseeSensorsOverlay extends LitElement {
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
+    }
+
+    /* .content centers the card stack within whatever space remains below the
+       (fixed-position) title, not the full screen — so one or two sensors don't
+       leave a large dead gap between the list and the tab bar (matching the
+       Home Screen's own .cluster). A long list still hits .list's own
+       max-height and scrolls exactly as before; .content only changes where
+       a SHORT list sits. */
+    .content {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: calc(5 * var(--ecosee-u, 4.6px));
     }
 
     /* The card stack. Opts back into pointer events (the shell makes slotted
@@ -173,12 +187,14 @@ export class EcoseeSensorsOverlay extends LitElement {
     return html`
       <div class="sensors">
         <h2 class="title">Sensors</h2>
-        <div class="list" role="list" aria-label="Sensors">
-          ${repeat(
-            model.cards,
-            (card) => card.key,
-            (card) => this._renderCard(card, model.unit),
-          )}
+        <div class="content">
+          <div class="list" role="list" aria-label="Sensors">
+            ${repeat(
+              model.cards,
+              (card) => card.key,
+              (card) => this._renderCard(card, model.unit),
+            )}
+          </div>
         </div>
       </div>
     `;

@@ -62,8 +62,6 @@ export class EcoseeFanOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      gap: calc(4.5 * var(--ecosee-u, 4.6px));
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top).
          Reserve the tab bar's zone at the bottom so the runtime dropdown can't hide
@@ -86,6 +84,25 @@ export class EcoseeFanOverlay extends LitElement {
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
+    }
+
+    /* .content centers the toggle/runtime block within whatever space remains
+       below the (fixed-position) title, not the full screen — so a plain
+       two-mode fan with no runtime entity doesn't leave a large dead gap
+       between the toggle and the tab bar (matching the Home Screen's own
+       .cluster). The tightest case (a stacked multi-speed toggle plus the
+       3-line runtime block) needs the same total height either way — centering
+       doesn't add overflow risk, it only changes where slack space (if any)
+       goes. */
+    .content {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(4.5 * var(--ecosee-u, 4.6px));
+      margin-top: calc(4.5 * var(--ecosee-u, 4.6px));
     }
 
     /* The On / Auto segmented pill: a cyan-outlined pill holding the segments; the
@@ -263,24 +280,26 @@ export class EcoseeFanOverlay extends LitElement {
     return html`
       <div class="fan">
         <h2 class="title">Fan Mode</h2>
-        <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label="Fan Mode">
-          ${model.options.map((option) => {
-            // Once a pick is settling, the optimistic choice wins the fill;
-            // otherwise it follows the entity's reported fan mode.
-            const selected =
-              this._pending !== null ? option.fanMode === this._pending : option.selected;
-            return html`
-              <button
-                class="segment ${selected ? 'selected' : ''}"
-                aria-pressed=${selected}
-                @click=${() => this._selectMode(option)}
-              >
-                ${option.label}
-              </button>
-            `;
-          })}
+        <div class="content">
+          <div class="toggle ${stacked ? 'stacked' : ''}" role="group" aria-label="Fan Mode">
+            ${model.options.map((option) => {
+              // Once a pick is settling, the optimistic choice wins the fill;
+              // otherwise it follows the entity's reported fan mode.
+              const selected =
+                this._pending !== null ? option.fanMode === this._pending : option.selected;
+              return html`
+                <button
+                  class="segment ${selected ? 'selected' : ''}"
+                  aria-pressed=${selected}
+                  @click=${() => this._selectMode(option)}
+                >
+                  ${option.label}
+                </button>
+              `;
+            })}
+          </div>
+          ${this._renderRuntime(model.minRuntime)}
         </div>
-        ${this._renderRuntime(model.minRuntime)}
       </div>
     `;
   }

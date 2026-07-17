@@ -53,8 +53,6 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      gap: calc(5 * var(--ecosee-u, 4.6px));
       /* Top padding lines the title's own vertical center up with the shell's ✕
          (top: 9u, 9u tall — vertical center 13.5u from the content box's top). */
       padding: calc(9 * var(--ecosee-u, 4.6px)) calc(8 * var(--ecosee-u, 4.6px))
@@ -67,6 +65,22 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--ecosee-text-accent, #62cfe9);
+    }
+
+    /* .content centers the card stack within whatever space remains below the
+       (fixed-position) title, not the full screen — so one or two Comfort
+       Settings don't leave a large dead gap between the list and the tab bar
+       (matching the Home Screen's own .cluster). A long list still hits
+       .list's own max-height and scrolls exactly as before; .content only
+       changes where a SHORT list sits. */
+    .content {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: calc(5 * var(--ecosee-u, 4.6px));
     }
 
     .list {
@@ -189,12 +203,14 @@ export class EcoseeComfortSetpointsOverlay extends LitElement {
     return html`
       <div class="setpoints">
         <h2 class="title">Setpoints</h2>
-        <div class="list" role="list" aria-label="Comfort Setting setpoints">
-          ${repeat(
-            model.presets,
-            (preset) => preset.preset,
-            (preset) => this._renderCard(preset),
-          )}
+        <div class="content">
+          <div class="list" role="list" aria-label="Comfort Setting setpoints">
+            ${repeat(
+              model.presets,
+              (preset) => preset.preset,
+              (preset) => this._renderCard(preset),
+            )}
+          </div>
         </div>
       </div>
     `;
