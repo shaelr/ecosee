@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 // Side-effect import: registers <ecosee-card> via @customElement (see
 // ecosee-card.wiring.test.ts's own comment on why this must be a value import).
 import '../src/ecosee-card';
@@ -78,96 +78,6 @@ describe('ecosee-card — device scale resync', () => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
     );
-
-    expect(card.style.getPropertyValue('--ecosee-rendered-size')).toBe('333px');
-    expect(card.style.getPropertyValue('--ecosee-scale')).toBe(String(333 / 460));
-  });
-
-  // Further owner report: still happened occasionally even with the rAF pair
-  // above, on a dashboard where the same vertical-stack holds several HACS
-  // custom cards (each lazy-loading its own element definition, one evaluating
-  // Jinja templates over the websocket) — a column that can keep reflowing for
-  // hundreds of milliseconds, well past two animation frames. The owner's own
-  // screenshot showed the card noticeably narrower than a sibling card sharing
-  // the same stack on the Home Screen, matching that sibling's width once a
-  // Main Menu section was opened — i.e. still unsettled long after connect,
-  // self-correcting only once something else (a hass push, a nav change)
-  // happened to trigger a re-read later. These two staggered timeouts close
-  // that gap without needing either to land first.
-  it('re-measures again via a 500ms timeout backstop, catching a slower settle than the rAF pair covers', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      const { hass } = fakeHass({ entities: [climateEntity('heat_cool')] });
-      const card = document.createElement('ecosee-card') as EcoseeCard;
-      card.setConfig({ type: 'custom:ecosee-card', entity: 'climate.t' });
-      card.hass = hass;
-
-      let width = 0; // still unsettled at connect, and past the rAF pair's window
-      Object.defineProperty(card, 'clientWidth', { configurable: true, get: () => width });
-
-      document.body.appendChild(card);
-      width = 333; // the host's own layout only finishes settling later
-
-      await vi.advanceTimersByTimeAsync(500);
-
-      expect(card.style.getPropertyValue('--ecosee-rendered-size')).toBe('333px');
-      expect(card.style.getPropertyValue('--ecosee-scale')).toBe(String(333 / 460));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('re-measures again via a 2000ms timeout backstop, catching an even slower settle', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      const { hass } = fakeHass({ entities: [climateEntity('heat_cool')] });
-      const card = document.createElement('ecosee-card') as EcoseeCard;
-      card.setConfig({ type: 'custom:ecosee-card', entity: 'climate.t' });
-      card.hass = hass;
-
-      let width = 0;
-      Object.defineProperty(card, 'clientWidth', { configurable: true, get: () => width });
-
-      document.body.appendChild(card);
-      await vi.advanceTimersByTimeAsync(500); // the 500ms backstop fires too early to help
-      width = 333; // settles only after that
-
-      await vi.advanceTimersByTimeAsync(1500); // total 2000ms since connect
-
-      expect(card.style.getPropertyValue('--ecosee-rendered-size')).toBe('333px');
-      expect(card.style.getPropertyValue('--ecosee-scale')).toBe(String(333 / 460));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // The owner's own report ("opening a Main Menu section always shows the
-  // correct size") shouldn't be a coincidence of a hass push happening to land
-  // around the same moment — navigating resyncs directly.
-  it('recomputes on a navigation change alone, with no hass push involved', async () => {
-    const { hass } = fakeHass({
-      entities: [climateEntity('heat_cool', { hvac_modes: ['off', 'heat_cool'] })],
-    });
-    const card = document.createElement('ecosee-card') as EcoseeCard;
-    card.setConfig({ type: 'custom:ecosee-card', entity: 'climate.t' });
-    card.hass = hass;
-    document.body.appendChild(card);
-    await card.updateComplete;
-
-    Object.defineProperty(card, 'clientWidth', { configurable: true, get: () => 333 });
-
-    // Open the Main Menu — a navigation change, not a hass push. Needs at
-    // least one Main Menu section actually available (hvac_modes backs
-    // System Mode) or _openMenu finds nothing and _nav never changes.
-    const home = card.shadowRoot!.querySelector('ecosee-home-screen')!;
-    home.dispatchEvent(
-      new CustomEvent('ecosee-action', {
-        detail: { action: 'menu' },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await card.updateComplete;
 
     expect(card.style.getPropertyValue('--ecosee-rendered-size')).toBe('333px');
     expect(card.style.getPropertyValue('--ecosee-scale')).toBe(String(333 / 460));

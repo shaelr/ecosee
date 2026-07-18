@@ -505,23 +505,6 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         if (this.isConnected) this._syncDeviceScale();
       });
     });
-    // A further owner report ("still happens sometimes, opening a menu fixes
-    // it") traced to a dashboard column that keeps reflowing well past two
-    // frames: several HACS custom cards sharing the same vertical-stack (each
-    // lazy-loading its own element definition, one evaluating Jinja templates
-    // over the websocket) can keep shifting column width for hundreds of
-    // milliseconds — far longer than the double rAF waits, and possibly longer
-    // than the gap until the first `hass` push that would otherwise catch it
-    // (`updated`, below). Two staggered timeout backstops re-measure well after
-    // that kind of slow settle without needing a `hass` push or user
-    // interaction to land first; each is a cheap no-op once the reading is
-    // already correct (`_syncDeviceScale`'s own unchanged-value guard).
-    setTimeout(() => {
-      if (this.isConnected) this._syncDeviceScale();
-    }, 500);
-    setTimeout(() => {
-      if (this.isConnected) this._syncDeviceScale();
-    }, 2000);
     // Register the bundled Montserrat faces (ADR-0007) before the first
     // probe pass, so the stack's guaranteed fallback exists document-wide.
     ensureBundledFont();
@@ -582,14 +565,8 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     // preview pane), which fires neither connectedCallback nor the ResizeObserver.
     // `hass` pushes are frequent and `_syncDeviceScale` is a cheap no-op once the
     // measurement is already correct (its own unchanged-value guard), so this
-    // costs little and catches that remaining gap. `_nav` is included too: an
-    // owner report of the small-render bug specifically noted that opening a
-    // Main Menu section always showed the correct size, which a `hass`-only
-    // trigger can't fully explain (a menu open doesn't imply a `hass` push just
-    // landed) — resyncing on every navigation as well means that observation
-    // is actually causal, not a coincidence of timing against a background
-    // `hass` push landing around the same moment.
-    if (changed.has('hass') || changed.has('_nav')) this._syncDeviceScale();
+    // costs little and catches that remaining gap.
+    if (changed.has('hass')) this._syncDeviceScale();
   }
 
   /** Measure the dashboard slot and set the transform scale that fits the
@@ -599,27 +576,35 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  footprint) and the ratio as `--ecosee-scale` (applied to .root). An unmeasured
    *  Card (0 width, e.g. detached or in tests) leaves the CSS defaults — scale 1,
    *  base-size footprint — in place. Called from the ResizeObserver; at startup
-   *  from `connectedCallback` (synchronously, then again after a double rAF, then
-   *  again at 500ms and 2000ms — a slow-settling dashboard column, e.g. several
-   *  HACS custom cards sharing a vertical-stack, can keep reflowing well past a
-   *  couple of frames) and `firstUpdated` (the observer's first callback can land
-   *  before the host is laid out); and on every `hass` push or navigation
-   *  (`updated`) as a cheap self-heal against a stale/too-small reading latched in
-   *  before the dashboard's own layout had settled. Every one of these is a no-op
-   *  once the reading is already correct (the unchanged-value guard below), so
-   *  calling it this often costs essentially nothing.
+   *  from `connectedCallback` (synchronously, then again after a double rAF, for a
+   *  host framework's own JS-driven layout pass — e.g. Home Assistant's masonry
+   *  view balancing column widths — still mid-settle at the exact instant this
+   *  element connects) and `firstUpdated` (the observer's first callback can land
+   *  before the host is laid out); and on every `hass` push (`updated`) as a cheap
+   *  self-heal for a host framework re-parenting an already-connected card into a
+   *  differently-sized slot without a disconnect/reconnect cycle (e.g. a dashboard
+   *  editor's preview pane), which fires neither connectedCallback nor the
+   *  ResizeObserver. Every one of these is a no-op once the reading is already
+   *  correct (the unchanged-value guard below), so calling it this often costs
+   *  essentially nothing.
    *
    *  This is the fix for `.root` (this file's own CSS) coming out too small; it's
    *  not the only way the Card can render undersized. `.root` itself can be
    *  perfectly correctly sized (this fully resynced) while `<ecosee-home-screen>`/
    *  `<ecosee-standby-screen>` still collapse, because — before their own fix — they
    *  sized themselves by auto-fitting their shadow DOM's fixed-size `.screen`
-   *  rather than by directly filling their already-known-correct parent, the same
-   *  category of race one level down. See home-screen.ts's own `:host` doc
-   *  comment (`position: absolute; inset: 0`, matching `<ecosee-overlay>`, which
-   *  never had this bug) for that half of the story — confirmed via DevTools
-   *  against a real dashboard showing `.root` a correct 410×410 square next to a
-   *  `<ecosee-home-screen>` collapsed to 410×73. */
+   *  rather than by directly filling their already-known-correct parent, a
+   *  completely different race one level down that this function cannot detect or
+   *  correct (it only ever writes `--ecosee-scale`/`--ecosee-rendered-size`,
+   *  consumed solely by `.root`'s own transform). See home-screen.ts's own `:host`
+   *  doc comment (`position: absolute; inset: 0`, matching `<ecosee-overlay>`,
+   *  which never had this bug) for that half of the story — confirmed via
+   *  DevTools against a real dashboard showing `.root` a correct 410×410 square
+   *  next to a `<ecosee-home-screen>` collapsed to 410×73. A now-removed extra
+   *  layer of insurance here (500ms/2000ms timeout backstops, a `_nav` trigger)
+   *  had been added chasing that exact symptom before its real cause was found;
+   *  it's gone because it mechanistically could never have fixed it — re-running
+   *  this function doesn't touch `<ecosee-home-screen>`'s own box at all. */
   private _syncDeviceScale(): void {
     const width = this.clientWidth;
     const styles = getComputedStyle(this);
