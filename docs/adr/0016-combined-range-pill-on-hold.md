@@ -84,3 +84,44 @@ check that gated the old text pill. The only new judgment call was scope
   time, the pill gains a natural place to show it (matching the reference
   screenshot exactly) without a structural change — ADR-0003's own closing
   note ("if HA ever exposes per-call hold durations, revisit") still applies.
+
+## Extension: `hold_end_time` — the "until HH:MM" text arrives
+
+**Origin**: the closing note above, realized directly — the owner's own
+`ha-ecobee` fork now computes and exposes `hold_end_time` in
+`extra_state_attributes`: an ISO 8601 string with an explicit UTC offset
+(`"2026-07-18T17:28:00-04:00"`), derived from the real active hold event's
+`endDate`/`endTime`, not a guess. Deliberately absent for an indefinite hold
+— ecobee's own `endDate` for those is a far-future placeholder, not a real
+expiry, and surfacing that as `hold_end_time` would itself be exactly the
+fabricated data this ADR (and ADR-0003 before it) was built to rule out. On
+the `climate` entity itself, not a separate helper — it's intrinsically part
+of "what is the current hold," the same entity `climate_mode`/`preset_mode`
+already come from.
+
+No stock upstream integration exposes this yet, so this stays exactly the
+kind of best-effort, opt-in-only, fork-specific reading ADR-0012 already
+established the trust boundary for: read only once `resume_program` has
+already asserted "my bound entity is a real ecobee-backed thermostat," with
+no new config key of its own (unlike `filter_interval_entity` — that one
+names an entirely separate helper entity a user must point at; this one is
+just another attribute on the entity the Card is already reading).
+
+`climate/resume-schedule.ts` gains `resumeEndTime(attrs): Date | null` —
+parses `hold_end_time` if present and valid, `null` otherwise (absent,
+empty, or unparseable — no partial/guessed value ever produced).
+`HomeView.resumeUntil` surfaces it, computed only when `resumeAvailable` is
+already true (nothing to attach an end time to when there's no hold pill
+showing at all). `home-screen.ts`'s `.range` pill appends a "| until HH:MM"
+segment (24-hour, zero-padded — matching the Schedule Overlay's own
+boundary-label format, not a locale-dependent 12-hour string) whenever
+`resumeUntil` resolves; omitted entirely otherwise, preserving this ADR's
+original "never fake it" behavior byte-for-byte for every install that
+doesn't have this attribute.
+
+The Decision section's fixed `71cqw` dual-mode pill width (matching the two
+setpoint ovals' own combined span) only ever applied to the no-until case —
+with "until" text the pill unavoidably carries more content than either oval
+arrangement did, so exact edge-alignment no longer applies;
+`.range.dual.with-until` reverts to `width: auto` rather than clipping or
+overflowing a fixed one.

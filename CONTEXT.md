@@ -183,13 +183,15 @@ An opt-in (`resume_program` config key, ADR-0012) affordance that clears a manua
 override and hands control back to the ecobee's own program, via
 `ecobee.resume_program` — a trailing ✕ on the combined **range pill** (ADR-0016)
 that replaces the setpoint ovals entirely while a hold is detected, mirroring the
-device's own on-hold home screen ("22 – 24 ⓧ") rather than a separate labeled pill
-beneath them. Only meaningful — and only ever shown — for a bound entity actually
-driven by Home Assistant's `ecobee` integration; the Card cannot verify this and
-takes the config key itself as the user's assertion that it's true. No hold-expiry
-text (`until 5:28pm`) accompanies it — Home Assistant does not expose a hold's end
-time (ADR-0003). Off by default (ADR-0004's no-Hold/-Resume stance is still the
-Card's default everywhere else).
+device's own on-hold home screen ("22 – 24 | until 23:00 ⓧ") rather than a
+separate labeled pill beneath them. Only meaningful — and only ever shown — for a
+bound entity actually driven by Home Assistant's `ecobee` integration; the Card
+cannot verify this and takes the config key itself as the user's assertion that
+it's true. Home Assistant's own `ecobee` integration still exposes no hold-expiry
+time (ADR-0003) — the "until HH:MM" segment only ever appears when the entity's
+`hold_end_time` attribute resolves (a personal `ha-ecobee` fork addition, ADR-0016's
+own closing note); absent otherwise, never a guessed time. Off by default
+(ADR-0004's no-Hold/-Resume stance is still the Card's default everywhere else).
 _Avoid_: Hold (as a shown label — the Card cannot always positively confirm one is
 active, so it never claims "Hold Active"), Resume (bare, without "Schedule").
 

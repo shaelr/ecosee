@@ -456,15 +456,16 @@ export class EcoseeHomeScreen extends LitElement {
        extended by ADR-0016): replaces .setpoints entirely whenever the
        best-effort hold check says a manual override is active, mirroring the
        ecobee device's own on-hold home screen — a single "22 – 24 ⓧ" pill
-       instead of two separate setpoint ovals. Deliberately no "until HH:MM"
-       text: Home Assistant's ecobee integration does not expose a hold's end
-       time in any state attribute (confirmed directly against
-       homeassistant/components/ecobee/climate.py's extra_state_attributes,
-       ADR-0003/0004) — showing one would mean fabricating a value the Card has
-       no way to know. The two values keep their oval's own heat/cool color (no
-       separate background wash — unlike .oval, they now share one pill instead
-       of each having its own) so the pairing still reads at a glance; the pill's
-       own border stays neutral, mirroring the old Resume Schedule pill's. */
+       instead of two separate setpoint ovals, extended with a "| until HH:MM"
+       segment (.range-until below) whenever view.resumeUntil resolves — a
+       personal ha-ecobee fork addition (ADR-0016's own closing note); Home
+       Assistant's own ecobee integration still exposes no hold-expiry time
+       (ADR-0003/0004), so the segment is simply absent rather than guessed
+       whenever the reading isn't there. The two values keep their oval's own
+       heat/cool color (no separate background wash — unlike .oval, they now
+       share one pill instead of each having its own) so the pairing still
+       reads at a glance; the pill's own border stays neutral, mirroring the
+       old Resume Schedule pill's. */
       .range {
         display: inline-flex;
         align-items: center;
@@ -477,16 +478,23 @@ export class EcoseeHomeScreen extends LitElement {
         font-weight: 600;
         line-height: 1;
       }
-      /* Dual (Heat / Cool Auto) only: fixed to the same total span the two
-         setpoint ovals occupy (34cqw min-width each + .setpoints' own 3cqw gap
-         = 71cqw) rather than shrinking to its own content, so the pill's outer
-         edges land exactly where the ovals' outer edges do — the two states
-         read as the same shape swapping content, not two differently-sized
-         controls. A single-setpoint mode has only one oval to match, so it
-         keeps sizing to its own content instead (.range-close's auto left
-         margin below is then a no-op — nothing to push into). */
+      /* Dual (Heat / Cool Auto), no "until" text: fixed to the same total span
+         the two setpoint ovals occupy (34cqw min-width each + .setpoints' own
+         3cqw gap = 71cqw) rather than shrinking to its own content, so the
+         pill's outer edges land exactly where the ovals' outer edges do — the
+         two states read as the same shape swapping content, not two
+         differently-sized controls. A single-setpoint mode has only one oval
+         to match, so it keeps sizing to its own content instead
+         (.range-close's auto left margin below is then a no-op — nothing to
+         push into). With "until" text the pill necessarily carries more
+         content than either oval arrangement ever did, so exact edge-alignment
+         no longer applies — .with-until below reverts to auto width rather
+         than clipping/overflowing a fixed one. */
       .range.dual {
         width: 71cqw;
+      }
+      .range.dual.with-until {
+        width: auto;
       }
       .range-value.heat {
         color: var(--ecosee-heat, #f3a13c);
@@ -496,6 +504,15 @@ export class EcoseeHomeScreen extends LitElement {
       }
       .range-sep {
         color: var(--ecosee-muted, #6f96a3);
+      }
+      /* Smaller and dimmer than the setpoint values themselves — a secondary
+         reading riding along on the pill, not competing with the headline
+         numbers (matches the reference ecobee app screenshot's own weight). */
+      .range-until {
+        font-size: 4.6cqw;
+        font-weight: 500;
+        color: var(--ecosee-muted, #6f96a3);
+        white-space: nowrap;
       }
       .range-close {
         display: inline-flex;
@@ -830,13 +847,17 @@ export class EcoseeHomeScreen extends LitElement {
    *  that check has already passed (see `render`'s ternary), so it renders
    *  unconditionally. Tapping a value opens Temperature Adjust for that
    *  setpoint, exactly like tapping its oval would; tapping the trailing ✕
-   *  fires `ecobee.resume_program` via the `resume-schedule` action. */
+   *  fires `ecobee.resume_program` via the `resume-schedule` action. Appends
+   *  a "| until HH:MM" segment when `view.resumeUntil` is set (a personal
+   *  `ha-ecobee` fork addition — ADR-0016's own closing note); omitted
+   *  entirely otherwise, never a guessed or fabricated time. */
   private _renderRange(view: HomeView): TemplateResult | typeof nothing {
     const setpoints = view.setpoints;
     if (!setpoints || (setpoints.heat === null && setpoints.cool === null)) return nothing;
     const dual = setpoints.heat !== null && setpoints.cool !== null;
+    const until = view.resumeUntil;
     return html`
-      <div class="range ${dual ? 'dual' : ''}" part="setpoints">
+      <div class="range ${dual ? 'dual' : ''} ${until ? 'with-until' : ''}" part="setpoints">
         ${
           setpoints.heat !== null
             ? this._renderRangeValue('heat', setpoints.heat, view.unit)
@@ -852,6 +873,14 @@ export class EcoseeHomeScreen extends LitElement {
             ? this._renderRangeValue('cool', setpoints.cool, view.unit)
             : nothing
         }
+        ${
+          until
+            ? html`
+                <span class="range-sep" aria-hidden="true">|</span>
+                <span class="range-until">until ${this._formatUntil(until)}</span>
+              `
+            : nothing
+        }
         <button
           class="range-close"
           aria-label="Resume Schedule"
@@ -861,6 +890,18 @@ export class EcoseeHomeScreen extends LitElement {
         </button>
       </div>
     `;
+  }
+
+  /** "HH:MM", 24-hour zero-padded — matching the Schedule Overlay's own
+   *  boundary-label format (`schedule-overlay.ts`'s `_boundaryLabel`) rather
+   *  than a locale-based 12-hour string, so a clock time reads the same
+   *  everywhere in the Card. `date`'s own local hour/minute — the Card has no
+   *  independent line on the thermostat's timezone, so (as elsewhere) assumes
+   *  the dashboard is being viewed from the same one the thermostat is in. */
+  private _formatUntil(date: Date): string {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   }
 
   private _renderRangeValue(setpoint: SetpointTarget, value: number, unit: string): TemplateResult {

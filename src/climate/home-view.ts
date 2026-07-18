@@ -2,7 +2,7 @@ import type { HomeAssistant } from '../types/hass';
 import type { EcoseeCardConfig } from '../config';
 import { num } from './parse';
 import { toFanModel, showFanAffordance } from './fan';
-import { resumeAvailable } from './resume-schedule';
+import { resumeAvailable, resumeEndTime } from './resume-schedule';
 
 // The graceful-degradation seam (ADR-0001). `toHomeView` is a pure function from
 // raw `hass` + config to a normalized, already-degraded view model: every field
@@ -77,6 +77,13 @@ export interface HomeView {
    *  are active, and the entity can't be shown to already be on-schedule. See
    *  `climate/resume-schedule.ts`. */
   resumeAvailable: boolean;
+  /** The active hold's end time, when the bound entity's `hold_end_time`
+   *  attribute exposes one (a personal `ha-ecobee` fork addition — ADR-0016's
+   *  closing note) — `null` when absent, unparseable, or `resumeAvailable` is
+   *  false (nothing to attach it to). The combined range pill shows it as
+   *  "until HH:MM" when present; omits the text entirely otherwise, never a
+   *  guessed or fabricated time. See `climate/resume-schedule.ts`. */
+  resumeUntil: Date | null;
   /** Whether a usable `weather` entity is configured (gates the weather icon). */
   weatherAvailable: boolean;
   /** Whether the Home Screen shows its top-row fan glyph — the quick shortcut into
@@ -313,6 +320,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
       mode: 'unknown',
       setpoints: null,
       resumeAvailable: false,
+      resumeUntil: null,
       weatherAvailable: weather !== null,
       weatherCondition: weather,
       fanAvailable: false,
@@ -328,6 +336,7 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
   const equipment =
     fromHvacAction(str(attrs.hvac_action)) ?? inferEquipment(mode, currentTemp, setpoints);
   const humidity = resolveHumidity(hass, config, num(attrs.current_humidity));
+  const resuming = resumeAvailable(config, setpoints, attrs);
 
   return {
     available: true,
@@ -338,7 +347,8 @@ export function toHomeView(hass: HomeAssistant, config: EcoseeCardConfig): HomeV
     equipment,
     mode,
     setpoints,
-    resumeAvailable: resumeAvailable(config, setpoints, attrs),
+    resumeAvailable: resuming,
+    resumeUntil: resuming ? resumeEndTime(attrs) : null,
     weatherAvailable: weather !== null,
     weatherCondition: weather,
     fanAvailable: showFanAffordance(toFanModel(hass, config), config.show_fan),

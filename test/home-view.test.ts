@@ -331,6 +331,67 @@ describe('toHomeView — resumeAvailable (ADR-0012)', () => {
   });
 });
 
+describe('toHomeView — resumeUntil (ADR-0016 closing note)', () => {
+  const heatCool = (attrs: Record<string, unknown>) =>
+    hass({
+      climate: {
+        entity_id: 'climate.t',
+        state: 'heat_cool',
+        attributes: { target_temp_low: 68, target_temp_high: 75, ...attrs },
+      },
+    });
+
+  it('resolves hold_end_time when resumeAvailable is true', () => {
+    const view = toHomeView(
+      heatCool({
+        climate_mode: 'Home',
+        preset_mode: 'temp',
+        hold_end_time: '2026-07-18T23:00:00-04:00',
+      }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(true);
+    expect(view.resumeUntil?.toISOString()).toBe(
+      new Date('2026-07-18T23:00:00-04:00').toISOString(),
+    );
+  });
+
+  it('is null when hold_end_time is absent, even mid-hold (an indefinite hold, or an older integration)', () => {
+    const view = toHomeView(
+      heatCool({ climate_mode: 'Home', preset_mode: 'temp' }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(true);
+    expect(view.resumeUntil).toBeNull();
+  });
+
+  it('is null whenever resumeAvailable is false, even if hold_end_time happens to be present', () => {
+    // On-schedule (climate_mode === preset_mode): nothing to attach an "until"
+    // time to, regardless of whatever the entity's own attribute currently reads.
+    const view = toHomeView(
+      heatCool({
+        climate_mode: 'Home',
+        preset_mode: 'Home',
+        hold_end_time: '2026-07-18T23:00:00-04:00',
+      }),
+      config({ resume_program: true }),
+    );
+    expect(view.resumeAvailable).toBe(false);
+    expect(view.resumeUntil).toBeNull();
+  });
+
+  it('is null when resume_program is unset, even on an obvious hold with hold_end_time present', () => {
+    const view = toHomeView(
+      heatCool({
+        climate_mode: 'Home',
+        preset_mode: 'temp',
+        hold_end_time: '2026-07-18T23:00:00-04:00',
+      }),
+      config(),
+    );
+    expect(view.resumeUntil).toBeNull();
+  });
+});
 
 describe('toHomeView — fan glyph availability (issues #45, #73)', () => {
   const fanView = (attributes: Record<string, unknown>, state = 'cool') =>

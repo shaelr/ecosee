@@ -254,9 +254,14 @@ did; tapping the ✕ calls `ecobee.resume_program`. The card shows the pill on a
 best-effort basis: it compares the entity's `climate_mode` (what the schedule
 currently calls for) against `preset_mode` (what's actually active) and shows it
 when they differ or when it can't tell (see
-[ADR-0012](docs/adr/0012-opt-in-resume-schedule.md) for the full reasoning). There
-is no `until 5:28pm` text on the pill — Home Assistant doesn't expose a hold's end
-time, so the card doesn't fake one.
+[ADR-0012](docs/adr/0012-opt-in-resume-schedule.md) for the full reasoning).
+
+Home Assistant's stock ecobee integration doesn't expose a hold's end time, so by
+default there's no `until 5:28pm` text on the pill — the card never fakes one. If
+your own integration exposes a `hold_end_time` attribute on the climate entity (an
+ISO 8601 timestamp, e.g. from a customized `ha-ecobee` build), the pill picks it up
+automatically and shows it: `68 – 75 | until 17:28 ⓧ`. No separate config key —
+it's read from whichever entity `resume_program` already points at.
 
 ```yaml
 resume_program: true

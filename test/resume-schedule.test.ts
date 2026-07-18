@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resumeAvailable, resumeReserved, resumeProgramCall } from '../src/climate/resume-schedule';
+import {
+  resumeAvailable,
+  resumeReserved,
+  resumeProgramCall,
+  resumeEndTime,
+} from '../src/climate/resume-schedule';
 import type { EcoseeCardConfig } from '../src/config';
 import type { Setpoints } from '../src/climate/home-view';
 
@@ -140,6 +145,39 @@ describe('resumeAvailable — case-insensitive comparison (real ecobee casing)',
         preset_mode: 'Guest Mode',
       }),
     ).toBe(false);
+  });
+});
+
+describe('resumeEndTime — the personal ha-ecobee fork addition (ADR-0016 closing note)', () => {
+  it('parses the real reported attribute shape (ISO 8601 with an explicit UTC offset)', () => {
+    const date = resumeEndTime({ hold_end_time: '2026-07-18T23:00:00-04:00' });
+    expect(date).not.toBeNull();
+    expect(date?.toISOString()).toBe(new Date('2026-07-18T23:00:00-04:00').toISOString());
+  });
+
+  it('is null when the attribute is absent — no active hold', () => {
+    expect(resumeEndTime({})).toBeNull();
+  });
+
+  it('is null when the attribute is an empty string', () => {
+    expect(resumeEndTime({ hold_end_time: '' })).toBeNull();
+  });
+
+  it('is null when the attribute is not a string (e.g. Python None serialized through)', () => {
+    expect(resumeEndTime({ hold_end_time: null })).toBeNull();
+  });
+
+  it('is null when the attribute does not parse as a date', () => {
+    expect(resumeEndTime({ hold_end_time: 'garbage' })).toBeNull();
+  });
+
+  // The integration deliberately omits hold_end_time for an indefinite hold
+  // (its own endDate is a far-future placeholder, not a real expiry) — from
+  // this seam's point of view that's indistinguishable from "no active hold
+  // at all," which is the point: nothing here should ever surface a fabricated
+  // expiry (ADR-0003).
+  it('is null for an indefinite hold, exactly like a bound entity with no hold at all', () => {
+    expect(resumeEndTime({ preset_mode: 'away_indefinitely' })).toBeNull();
   });
 });
 

@@ -133,6 +133,40 @@ const ecobeeAuto: Fixture = {
   }),
 };
 
+// ADR-0012/0016, extended by the hold_end_time follow-up (a personal
+// ha-ecobee fork addition): the combined range pill on hold, with an "until
+// HH:MM" segment. climate_mode/preset_mode differ ("Home" vs "temp") so
+// resumeAvailable is true; hold_end_time is a few hours from a fixed "now".
+const resumeSchedule: Fixture = {
+  label: 'Resume Schedule (until time)',
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    resume_program: true,
+  },
+  hass: makeHass({
+    climate: {
+      entity_id: 'climate.living_room',
+      state: 'heat_cool',
+      attributes: {
+        friendly_name: 'Living Room',
+        current_temperature: 21.5,
+        current_humidity: 45,
+        target_temp_low: 22,
+        target_temp_high: 24,
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+        preset_modes: ['Home', 'Away', 'Sleep'],
+        climate_mode: 'Home',
+        preset_mode: 'temp',
+        hold_end_time: '2026-07-18T23:00:00-04:00',
+        min_temp: 7,
+        max_temp: 35,
+        target_temp_step: 0.5,
+      },
+    },
+  }),
+};
+
 const ecobeeHeating: Fixture = {
   label: 'Heating',
   config: { type: 'custom:ecosee-card', entity: 'climate.bedroom', weather_entity: 'weather.home' },
@@ -463,6 +497,7 @@ const furnaceFilterOverdue: Fixture = {
 
 export const fixtures: Fixture[] = [
   ecobeeAuto,
+  resumeSchedule,
   ecobeeHeating,
   ecobeeCooling,
   ecobeeOff,

@@ -34,6 +34,7 @@ function view(equipment: EquipmentStatus | null): HomeView {
     mode: 'heat_cool',
     setpoints: { heat: 70, cool: 75 },
     resumeAvailable: false,
+    resumeUntil: null,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,

@@ -23,6 +23,7 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
     mode: 'heat_cool',
     setpoints: { heat: 70, cool: 75 },
     resumeAvailable: false,
+    resumeUntil: null,
     weatherAvailable: false,
     weatherCondition: null,
     fanAvailable: false,
@@ -111,11 +112,13 @@ describe('Home Screen setpoint ovals', () => {
 // The opt-in combined Heat–Cool range pill (config `resume_program`, ADR-0012,
 // extended by ADR-0016): replaces the setpoint ovals entirely whenever the
 // best-effort hold check (`view.resumeAvailable`) says a manual override is
-// active, mirroring the ecobee device's own on-hold home screen. No "until
-// HH:MM" text — Home Assistant's ecobee integration exposes no hold-expiry
-// time (ADR-0003/0004). The Home Screen itself does nothing but reflect
-// `resumeAvailable`; the hold-detection logic lives in
-// climate/resume-schedule.ts (tested there).
+// active, mirroring the ecobee device's own on-hold home screen. An "until
+// HH:MM" segment appears only when `view.resumeUntil` resolves (a personal
+// ha-ecobee fork addition — Home Assistant's own ecobee integration still
+// exposes no hold-expiry time, ADR-0003/0004) — never a guessed time. The Home
+// Screen itself does nothing but reflect `resumeAvailable`/`resumeUntil`; the
+// hold-detection/end-time logic lives in climate/resume-schedule.ts (tested
+// there).
 describe('Home Screen combined range pill (resume_program, ADR-0012/0016)', () => {
   function rangePill(el: EcoseeHomeScreen): HTMLDivElement | null {
     return el.shadowRoot!.querySelector('.range');
@@ -166,9 +169,36 @@ describe('Home Screen combined range pill (resume_program, ADR-0012/0016)', () =
     expect(rangePill(el)!.classList.contains('dual')).toBe(false);
   });
 
-  it('never shows an "until" hold-expiry time — Home Assistant does not expose one', async () => {
-    const el = await mount(view({ resumeAvailable: true }));
+  it('omits the "until" segment when resumeUntil is null — never a guessed time', async () => {
+    const el = await mount(view({ resumeAvailable: true, resumeUntil: null }));
     expect(rangePill(el)!.textContent).not.toMatch(/until/i);
+    expect(el.shadowRoot!.querySelector('.range-until')).toBeNull();
+    // No fixed-width class collision: still the plain dual-oval-span width.
+    expect(rangePill(el)!.classList.contains('with-until')).toBe(false);
+  });
+
+  it('shows "until HH:MM" (24-hour, zero-padded) when resumeUntil resolves', async () => {
+    const el = await mount(
+      view({
+        resumeAvailable: true,
+        resumeUntil: new Date(2026, 0, 1, 17, 28),
+      }),
+    );
+    const pill = rangePill(el)!;
+    expect(pill.classList.contains('with-until')).toBe(true);
+    const until = el.shadowRoot!.querySelector('.range-until');
+    expect(until).not.toBeNull();
+    expect(until!.textContent?.trim()).toBe('until 17:28');
+  });
+
+  it('zero-pads a single-digit hour and minute in the "until" time', async () => {
+    const el = await mount(
+      view({
+        resumeAvailable: true,
+        resumeUntil: new Date(2026, 0, 1, 5, 3),
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.range-until')!.textContent?.trim()).toBe('until 05:03');
   });
 
   it('emits a temperature action carrying the tapped setpoint, same as the ovals', async () => {
