@@ -43,8 +43,12 @@ function button(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement {
   return el.shadowRoot!.querySelector('.mark-changed') as HTMLButtonElement;
 }
 
-function pillInput(el: EcoseeFurnaceFilterOverlay, type: 'date'): HTMLInputElement | null {
-  return el.shadowRoot!.querySelector(`.pill-native[type="${type}"]`);
+function datePillButton(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement | null {
+  return el.shadowRoot!.querySelector('.pill-button');
+}
+
+function dateInput(el: EcoseeFurnaceFilterOverlay): HTMLInputElement | null {
+  return el.shadowRoot!.querySelector('.date-native');
 }
 
 function intervalSelect(el: EcoseeFurnaceFilterOverlay): HTMLSelectElement | null {
@@ -174,9 +178,10 @@ describe('Furnace Filter overlay — mark changed button', () => {
 });
 
 describe('Furnace Filter overlay — editable "Last changed"', () => {
-  it('renders plain text, no native date input, when canEditLastChanged is false', async () => {
+  it('renders plain text, no pill/button, when canEditLastChanged is false', async () => {
     const el = await mount(model({ canEditLastChanged: false }));
-    expect(pillInput(el, 'date')).toBeNull();
+    expect(datePillButton(el)).toBeNull();
+    expect(dateInput(el)).toBeNull();
     const row = [...el.shadowRoot!.querySelectorAll('.row')].find((r) =>
       r.textContent?.includes('Last changed'),
     )!;
@@ -184,44 +189,56 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     expect(row.querySelector('.value')).not.toBeNull();
   });
 
-  it('renders a tappable pill with a native date input when canEditLastChanged is true', async () => {
+  it('renders a tappable pill button showing the formatted date when canEditLastChanged is true', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const input = pillInput(el, 'date');
+    const btn = datePillButton(el);
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent?.trim()).toContain('Jan 1, 2025');
+  });
+
+  // Regression guard: an earlier version layered an invisible native
+  // <input type="date"> directly over the styled label ("real control
+  // captured by an invisible overlay" — the same trick fan-overlay.ts's
+  // runtime <select> uses). Chrome renders a *focused* date input's own
+  // value/segment-highlight at full system styling while its native picker
+  // is open — no CSS on the input itself (transparent color, ::selection,
+  // ::-webkit-datetime-edit-*, even an opaque higher-stacked backing layer)
+  // could suppress it, confirmed by an owner screenshot after each attempt.
+  // The visible pill is now an ordinary <button> — never a form control
+  // Chrome could render natively — so there is nothing left for that
+  // behavior to apply to.
+  it('the visible pill is a real <button>, not a styled label over a native input', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const btn = datePillButton(el);
+    expect(btn?.tagName).toBe('BUTTON');
+    // The actual date input is a separate, genuinely tiny/invisible element
+    // — never layered over the button's own visible text.
+    const input = dateInput(el);
     expect(input).not.toBeNull();
-    expect(input!.value).toBe('2025-01-01');
+    expect(input).not.toBe(btn);
+    expect(input!.getAttribute('tabindex')).toBe('-1');
+    expect(input!.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('renders a full-coverage opaque backing layer behind the label, ahead of the native input', async () => {
-    // Regression guard: Chrome renders a date input's own value at full
-    // system styling while its calendar picker is open, ignoring this
-    // input's own color/::selection — .pill-backing physically covers the
-    // whole pill rather than relying on the input's own text staying
-    // invisible. It must stay a *separate* element from .pill-label (not
-    // just a background on the label itself) — .pill-label is the pill's
-    // only in-flow child once .pill-native is taken out of flow, so .pill's
-    // own width is measured from it; making .pill-label absolutely
-    // positioned too (to get full coverage) collapses the whole pill.
+  it('seeds the hidden date input with the current value', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const pill = el.shadowRoot!.querySelector('.pill')!;
-    const backing = pill.querySelector('.pill-backing');
-    const label = pill.querySelector('.pill-label');
-    expect(backing).not.toBeNull();
-    expect(backing).not.toBe(label);
+    expect(dateInput(el)!.value).toBe('2025-01-01');
   });
 
-  it('caps the native date input at today — no picking a future last-changed date', async () => {
+  it('caps the hidden date input at today — no picking a future last-changed date', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const input = pillInput(el, 'date')!;
     const now = new Date();
     const pad = (n: number): string => String(n).padStart(2, '0');
     const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    expect(input.max).toBe(today);
+    expect(dateInput(el)!.max).toBe(today);
   });
 
   it('emits ecosee-service-call with the picked date on change', async () => {
@@ -232,7 +249,7 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     el.addEventListener('ecosee-service-call', (e) =>
       fired.push((e as CustomEvent<{ call: ServiceCall }>).detail.call),
     );
-    fireChange(pillInput(el, 'date')!, '2026-03-15');
+    fireChange(dateInput(el)!, '2026-03-15');
     expect(fired).toEqual([
       {
         domain: 'date',
@@ -250,18 +267,17 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     el.addEventListener('ecosee-service-call', (e) =>
       fired.push((e as CustomEvent<{ call: ServiceCall }>).detail.call),
     );
-    fireChange(pillInput(el, 'date')!, '');
+    fireChange(dateInput(el)!, '');
     expect(fired).toHaveLength(0);
   });
 
-  it('calls the native input’s own showPicker() on click, so the calendar always opens', async () => {
+  it('clicking the pill button calls the hidden input’s own showPicker()', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const input = pillInput(el, 'date')!;
     const showPicker = vi.fn();
-    (input as unknown as { showPicker: () => void }).showPicker = showPicker;
-    input.click();
+    (dateInput(el) as unknown as { showPicker: () => void }).showPicker = showPicker;
+    datePillButton(el)!.click();
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 
@@ -269,9 +285,8 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const input = pillInput(el, 'date')!;
-    expect((input as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
-    expect(() => input.click()).not.toThrow();
+    expect((dateInput(el) as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
+    expect(() => datePillButton(el)!.click()).not.toThrow();
   });
 });
 

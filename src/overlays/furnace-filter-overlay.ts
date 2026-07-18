@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, query } from 'lit/decorators.js';
 import {
   markFilterChangedCall,
   setLastChangedDateCall,
@@ -27,16 +27,23 @@ import { emitServiceCall } from './service-call-event';
  * - **Last changed** renders as a tappable pill when `canEditLastChanged`
  *   (the entity's own domain is directly writable — a read-only `sensor`
  *   backed only by `filter_reset_entity` stays plain text, since there's
- *   nothing to write an arbitrary date onto). The pill layers a transparent
- *   native `<input type="date">` over the styled label — the same
- *   "real native control captured by an invisible overlay, styled pill
- *   underneath" trick `fan-overlay.ts`'s runtime `<select>` already uses —
- *   and explicitly calls the input's own `showPicker()` on tap so the
- *   platform's calendar picker always opens, rather than leaving it to the
- *   browser's own click heuristic (which on desktop otherwise as often lands
- *   in "type the date into this segment" mode as it does the calendar,
- *   depending exactly where the invisible input was tapped). The write goes
- *   through `setLastChangedDateCall`.
+ *   nothing to write an arbitrary date onto). The visible pill is an
+ *   ordinary opaque `<button>` (`.pill-button`), not a styled label with an
+ *   invisible native `<input type="date">` layered on top of it — an
+ *   earlier version tried exactly that (mirroring `fan-overlay.ts`'s
+ *   `.select-native` trick), but Chrome renders a *focused* date input's own
+ *   value/segment-highlight at full system styling while its native picker
+ *   UI is open, a deliberate "stay legible while showing" behavior no
+ *   combination of `color`/`::selection`/`::-webkit-datetime-edit-*`/an
+ *   opaque higher-stacked backing layer could suppress (confirmed by an
+ *   owner screenshot after each attempt — see ADR-0017's corrections). A
+ *   real `<button>` sidesteps the category entirely: it is never a form
+ *   control Chrome could render natively, so there is nothing for that
+ *   behavior to apply to. The actual `<input type="date">` (`.date-native`)
+ *   still exists — genuinely tiny and invisible, tucked at the pill's own
+ *   corner, never itself the tap target — purely so the button's click
+ *   handler can call its `showPicker()` explicitly and its `change` event
+ *   can drive the write (`setLastChangedDateCall`).
  * - **Interval** renders as a dropdown-menu pill when `intervalEdit` is
  *   present (a live `filter_interval_entity`, not a static
  *   `filter_interval_days`) — a native `<select>` of the entity's own
@@ -63,6 +70,11 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
   @property({ attribute: false }) lastChangedEntity?: string;
   /** `config.filter_reset_entity`. */
   @property({ attribute: false }) resetEntity?: string;
+  /** The tiny, genuinely-invisible `<input type="date">` `.pill-button`'s
+   *  click handler calls `showPicker()` on — see `.date-native`'s own CSS
+   *  doc comment. Only rendered (and only ever non-null) once
+   *  `canEditLastChanged` is true. */
+  @query('.date-native') private _dateInput?: HTMLInputElement;
 
   static override styles = css`
     :host {
@@ -148,12 +160,7 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
 
     /* An editable reading (Last changed / Interval): a small cyan-outlined
        pill, matching the value-pill language used elsewhere (Comfort
-       Setpoints' own Heat/Cool pills) so it reads as tappable at a glance.
-       A transparent native input is layered on top (.pill-native) — the
-       same "real platform control captured by an invisible overlay, styled
-       pill underneath" trick fan-overlay.ts's .select-native runtime
-       dropdown already uses, so the platform's own date/number picker opens
-       on tap rather than this file building custom picker UI. */
+       Setpoints' own Heat/Cool pills) so it reads as tappable at a glance. */
     .pill {
       position: relative;
       display: inline-flex;
@@ -163,116 +170,79 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       border-radius: 100cqw;
       font-weight: 600;
       pointer-events: auto;
-      /* Clips anything the native date input renders (its own text, a
-         picker-open highlight) to the pill's own rounded silhouette rather
-         than letting it square off past the corners. */
-      overflow: hidden;
     }
     .pill-label {
       pointer-events: none;
     }
-    /* The date pill only: a dedicated opaque layer, .pill-backing, painted
-       directly ON TOP of .pill-native and spanning the pill's FULL content
-       box (inset: 0, matching .pill-native's own footprint exactly) — not
-       just colored transparent. Chrome renders a date input's own value at
-       full system styling while its calendar picker is open, overriding
-       this element's color and ::selection — a deliberate "stay legible
-       while the native UI is active" browser behavior, not something page
-       CSS can suppress on the input itself. Physically covering the whole
-       input sidesteps that entirely: it doesn't matter what the browser
-       insists on drawing underneath if nothing of it is left uncovered.
-       A separate element, not a background on .pill-label itself, because
-       .pill-label must stay in normal flow — it's the pill's only in-flow
-       child (.pill-native is absolutely positioned out of flow already), so
-       .pill's own inline-flex width is measured FROM it; giving it
-       position: absolute too (to span the full pill like .pill-backing
-       does) left .pill with nothing in flow to size against and collapsed
-       it to its padding alone. .pill-backing carries no content of its own,
-       so it's free to be absolutely positioned without that risk.
-       pointer-events: none on both still lets taps fall through to
-       .pill-native beneath, so the picker still opens. */
-    .pill-backing {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      background: var(--ecosee-bg, #0a0d10);
-      pointer-events: none;
+    /* Last changed: an ordinary opaque <button> carrying the pill's own
+       visual look (font/color/appearance:none, inheriting .pill's border
+       etc.) — not a styled label with an invisible native input layered on
+       top. Earlier attempts along that road (transparent color,
+       ::selection, ::-webkit-datetime-edit-* overrides, an opaque backing
+       layer with a higher z-index) all still lost to Chrome rendering a
+       focused date input's own value/segment-highlight at full system
+       styling while its native picker UI is active — a deliberate
+       "stay legible while showing" browser behavior that page-level CSS
+       cannot reach, confirmed by an owner screenshot after each attempt. A
+       real button sidesteps the whole category: it is never a form control
+       Chrome could decide to render natively, so there is nothing for that
+       behavior to apply to. Tapping it calls .date-native's showPicker()
+       (below) explicitly. */
+    .pill-button {
+      appearance: none;
+      background: none;
+      border: none;
+      margin: 0;
+      padding: 0;
+      font: inherit;
+      font-weight: inherit;
+      color: inherit;
+      cursor: pointer;
     }
-    .pill-label.cover {
-      position: relative;
-      z-index: 2;
+    .pill-button:focus-visible {
+      /* Flush against the pill's own border (no outline-offset) so this
+         reads as the border getting thicker, not a second detached ring
+         (the double-outline this replaced). */
+      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      border-radius: inherit;
     }
-    .pill-native {
+    /* The actual <input type="date"> backing the button above: genuinely
+       tiny and invisible (not just styled to look that way), tucked at the
+       pill's own corner. It is never the tap target and never directly
+       focused by a user (tabindex="-1", aria-hidden="true" — the button is
+       what keyboard/screen-reader users reach); .pill-button's click
+       handler calls its showPicker() explicitly. Because nothing about it
+       is ever meant to be seen or tapped directly, opacity: 0 is safe here
+       — the earlier "invisible inputs can suppress the native picker on tap"
+       finding was specifically about relying on a raw tap landing on an
+       invisible element's own hit-region, which a programmatic showPicker()
+       call doesn't depend on.
+
+       Known rough edge, confirmed in testing, not yet addressed: the
+       calendar popup itself doesn't anchor next to this input the way it
+       would for a normal, unscaled page — it opens near the top of the
+       viewport instead. Tried both this 1px sizing and a full-pill-sized
+       input; sizing made no difference, which points at the whole Card's
+       own .root transform: scale(...) rule (the fixed-canvas architecture
+       every screen relies on) confusing the browser's own popup-anchor
+       calculation, not this element specifically. A fixed-position input
+       wouldn't escape it either — a transformed ancestor becomes the
+       containing block for fixed descendants too, per spec. The real fix
+       would be rendering this input outside the transformed subtree
+       entirely (a portal to document.body, positioned via
+       getBoundingClientRect() at click time) — deferred until confirmed
+       against a real device, not just headless Chromium. */
+    .date-native {
       position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
       margin: 0;
       padding: 0;
       border: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background: transparent;
-      color: transparent;
-      /* Chrome/Safari sometimes render a form control's own text through
-         -webkit-text-fill-color rather than color — the same override
-         mechanism behind autofill's forced yellow-background text color
-         ignoring page CSS. A date input showing its native value at full
-         system styling while its own calendar picker is open (rather than
-         staying invisible under .pill-label) is the same class of "the
-         browser insists this stay legible while its native UI is active"
-         behavior already true of the segment-highlight below — this is a
-         second attempt at suppressing it, not a confirmed fix. */
-      -webkit-text-fill-color: transparent;
-      font: inherit;
-      cursor: pointer;
-      /* Suppress the browser's own default focus ring on the native control
-         itself — .pill:focus-within below draws the one visible focus cue,
-         now that removing opacity: 0 (next comment) lets the native ring
-         actually paint instead of being hidden along with everything else. */
-      outline: none;
-    }
-    /* No opacity: 0 — some mobile browsers (notably iOS Safari) treat a
-       near-zero-opacity form control as invisible enough to suppress its own
-       native picker/keyboard from opening on tap, even though the element
-       still receives focus (the double-outline/dead-tap bug this replaced).
-       Fully transparent color/background achieves the same invisible LOOK
-       without opacity, so the platform still treats it as a real, interactive
-       control. The calendar-icon affordance date inputs render internally is
-       hidden the same way rather than left to clash with the pill. */
-    .pill-native::-webkit-calendar-picker-indicator {
-      background: transparent;
-      cursor: pointer;
-    }
-    /* A date input's individual segment (month/day/year) shows a highlighted
-       "currently selected" state while focused/edited via keyboard or tap —
-       rendered through ::selection, which color: transparent on the input
-       itself does NOT reach (selected-text rendering is a separate paint
-       pass with its own default background/foreground). Left alone, tapping
-       or tabbing to the pill briefly reveals a solid highlighted box with
-       real digits in it, defeating the whole invisible-input trick. */
-    .pill-native::selection {
-      background: transparent;
-      color: transparent;
-    }
-    /* The month/day/year sub-fields Chrome renders a date input's value
-       through each carry their own text rendering, independent of the host
-       input's own color/-webkit-text-fill-color — targeting them directly is
-       the last layer available before there's nothing left in the public
-       CSS surface to try. */
-    .pill-native::-webkit-datetime-edit,
-    .pill-native::-webkit-datetime-edit-fields-wrapper,
-    .pill-native::-webkit-datetime-edit-text,
-    .pill-native::-webkit-datetime-edit-month-field,
-    .pill-native::-webkit-datetime-edit-day-field,
-    .pill-native::-webkit-datetime-edit-year-field {
-      color: transparent;
-      -webkit-text-fill-color: transparent;
-    }
-    .pill:focus-within {
-      /* Flush against the pill's own border (no outline-offset) so this
-         reads as the border getting thicker, not a second detached ring. */
-      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      opacity: 0;
+      pointer-events: none;
     }
 
     /* The Interval pill's caret, marking it as a menu (fan-overlay.ts's own
@@ -362,22 +332,19 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     if (call) emitServiceCall(this, call);
   }
 
-  /** Force the calendar picker open on tap, rather than leaving it to the
-   *  browser's own default click behavior — Chrome desktop otherwise opens
-   *  the picker only when the (invisible) click happens to land on the
-   *  input's own calendar-icon hit region; anywhere else in the box just
-   *  focuses a segment for keyboard typing, which reads as "nothing
-   *  happened" when the whole pill is expected to always open the calendar
-   *  (owner report). showPicker (Baseline 2023 — Chrome/Edge 99+, Safari
-   *  16.4+, Firefox 101+) is declared on TypeScript's own HTMLInputElement
-   *  type but not guaranteed present at runtime on an older engine, hence
-   *  the explicit existence check rather than a bare call; wrapped in
-   *  try/catch too since it can throw (rate-limited, not a genuine user
-   *  gesture) — either way the input's own default click behavior still
-   *  applies, so there's nothing to recover. */
-  private _openDatePicker(event: Event): void {
-    const input = event.currentTarget as HTMLInputElement;
-    if (typeof input.showPicker !== 'function') return;
+  /** `.pill-button`'s click handler — explicitly opens the calendar picker
+   *  on the hidden `.date-native` input, rather than relying on a native tap
+   *  landing on a form control at all (there is no visible form control to
+   *  tap here, by design — see `.pill-button`'s own CSS doc comment).
+   *  showPicker (Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox
+   *  101+) is declared on TypeScript's own HTMLInputElement type but not
+   *  guaranteed present at runtime on an older engine, hence the explicit
+   *  existence check rather than a bare call; wrapped in try/catch too
+   *  since it can throw (rate-limited, not a genuine user gesture) — either
+   *  way there's simply nothing to open in that case. */
+  private _openDatePicker(): void {
+    const input = this._dateInput;
+    if (!input || typeof input.showPicker !== 'function') return;
     try {
       input.showPicker();
     } catch {
@@ -405,15 +372,21 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     return html`<p class="row">
       Last changed
       <span class="pill">
-        <span class="pill-backing" aria-hidden="true"></span>
-        <span class="pill-label cover">${this._formatDate(lastChanged)}</span>
+        <button
+          type="button"
+          class="pill-button"
+          aria-label="Last changed date, ${this._formatDate(lastChanged)}"
+          @click=${this._openDatePicker}
+        >
+          ${this._formatDate(lastChanged)}
+        </button>
         <input
-          class="pill-native"
+          class="date-native"
           type="date"
-          aria-label="Last changed date"
+          tabindex="-1"
+          aria-hidden="true"
           max=${toIsoDate(new Date())}
           .value=${toIsoDate(lastChanged)}
-          @click=${(e: Event) => this._openDatePicker(e)}
           @change=${(e: Event) => this._onLastChangedInput(e)}
         />
       </span>

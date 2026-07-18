@@ -381,3 +381,55 @@ its padding alone, caught immediately by screenshot before shipping.
 positioned freely; `.pill-label` stays in normal flow, still sized from its
 own text, just lifted above `.pill-backing` (`z-index: 2` vs `1`) so it
 still reads on top.
+
+## Correction (post-ship): a real `<button>`, not a covered `<input>`
+
+**Origin**: `.pill-backing` didn't hold either — a further owner screenshot,
+taken *after* that fix shipped, still showed a highlighted date segment
+rendered over the pill. The owner's own diagnosis cut straight to it: *"cant
+we just make it so its not a text box? and just a clickable button that
+opens the calendar?"*
+
+Every attempt up to this point shared one premise: keep `<input
+type="date">` as the thing the user actually taps, and make it *look*
+invisible (transparent color, an opaque covering sibling, whatever). That
+premise was the bug. Chrome renders a *focused* date input's own value —
+and, worse, an active-segment highlight — at full system styling while its
+native picker UI is open, a "stay legible while showing" behavior that
+turned out to reach past `color`, `::selection`,
+`::-webkit-datetime-edit-*`, and even a higher-stacked opaque sibling in
+normal page paint order. No further CSS property was going to out-stubborn
+that; it reads as intentional, not a gap.
+
+The fix drops the premise instead of the fight: `.pill-button` is an
+ordinary, fully opaque `<button>` — never a form control, so there is
+nothing for Chrome to ever decide to render natively over it. The actual
+`<input type="date">` (`.date-native`) still exists, but only as a trigger:
+genuinely tiny (`1px × 1px`) and `opacity: 0` — safe now, unlike
+`.pill-native` before it, because nothing about it is ever the direct tap
+target a raw touch/click needs to land on (the earlier "invisible inputs
+can suppress the native picker on tap" finding was specifically about that
+reliance, which a JS-invoked `showPicker()` doesn't have) — `tabindex="-1"`
+and `aria-hidden="true"` (the button is what keyboard/screen-reader users
+reach), and only ever focused programmatically, from `.pill-button`'s own
+click handler calling `input.showPicker()` directly.
+
+Confirmed working in the dev harness: the pill's own text stays exactly our
+own styling at every stage, click through picker-open, with no highlight or
+native text visible anywhere on it.
+
+A secondary, *not yet fixed*, rough edge surfaced during that same testing:
+the calendar popup itself doesn't anchor next to the pill the way it would
+on an unscaled page — it opens near the top of the viewport instead. Not a
+sizing issue (tried both the 1px input and a full-pill-sized one, no
+difference) — it points at the whole Card's fixed-canvas
+`transform: scale(...)` (every screen's own architecture, not specific to
+this pill) confusing the browser's popup-anchor calculation. A
+`position: fixed` input wouldn't escape it either, since a transformed
+ancestor becomes the containing block for fixed descendants too. The actual
+fix would render `.date-native` outside the transformed subtree entirely —
+a portal to `document.body`, positioned via `getBoundingClientRect()` at
+click time — deferred pending confirmation this reproduces on a real device
+and not just headless Chromium testing, since it's a real jump in
+complexity (a DOM node Lit doesn't own or reactively re-render) for what
+may end up being a headless-testing-only artifact.
