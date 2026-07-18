@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 
 // Real-engine rendering suite (issue #85). The jsdom/happy-dom unit tests can
@@ -6,7 +7,19 @@ import { defineConfig } from 'vitest/config';
 // config runs test/browser/** inside REAL headless Firefox via Playwright, so
 // assertions are made against boxes and pixels Gecko actually computed.
 // Run with `npm run test:browser`; the unit suite excludes test/browser/**.
+
+// gecko-parity.test.ts imports src/ecosee-card.ts, which references
+// __ECOSEE_VERSION__ (the console-banner version) — this separate config
+// needs its own copy of the same define the main vite.config.ts carries, or
+// the identifier is left unresolved in this suite.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as {
+  version: string;
+};
+
 export default defineConfig({
+  define: {
+    __ECOSEE_VERSION__: JSON.stringify(pkg.version),
+  },
   optimizeDeps: {
     // Pre-bundle every lit entry the card imports. Without this, vite discovers
     // the directive entries mid-run on a cold cache (CI is always cold) and

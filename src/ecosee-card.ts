@@ -110,7 +110,13 @@ interface OverlayDescriptor {
   render(hass: HomeAssistant, config: EcoseeCardConfig): TemplateResult | typeof nothing;
 }
 
-const VERSION = '0.10.0';
+// Injected by vite.config.ts's `define` from package.json at build time, so
+// the console banner below can never drift from the real published version
+// again (it had, silently, since v0.9.0 — always printing "v0.10.0" — which
+// is exactly the kind of thing that makes "is this dashboard actually running
+// the fix I just shipped" hard for a user to self-check).
+declare const __ECOSEE_VERSION__: string;
+const VERSION = __ECOSEE_VERSION__;
 
 /**
  * `<ecosee-card>` — the host Lovelace element. It owns the `hass` wiring and
