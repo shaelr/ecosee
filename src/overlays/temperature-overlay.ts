@@ -300,9 +300,9 @@ export class EcoseeTemperatureOverlay extends LitElement {
   /** Set on release when the just-finished gesture was a value-neutral *tap* (a
    *  press/release that never moved the value), so the trailing `click` dismisses
    *  the overlay. Dismissing on the *click* — not on `pointerup` — is what stops the
-   *  gesture's ghost click from reopening the overlay: the ✕ and backdrop dismiss on
-   *  click and never suffer this, because the click that would reopen is the same one
-   *  that closed, and it hit-tests the scrubber (still mounted at click time), not the
+   *  gesture's ghost click from reopening the overlay: the ✕ dismisses on click and
+   *  never suffers this, because the click that would reopen is the same one that
+   *  closed, and it hit-tests the scrubber (still mounted at click time), not the
    *  Home Screen temperature button (#112). Suppressing the compat click on
    *  `pointerdown` instead — the 0.8.1 approach — is not honored by iOS WebKit for
    *  touch, so the ghost click survived and the overlay reopened on the device. */
@@ -463,8 +463,8 @@ export class EcoseeTemperatureOverlay extends LitElement {
 
   // The tap's trailing `click`: a value-neutral tap on the selected value dismisses
   // here, matching the device and sending no setpoint write (#93). Dismissing on the
-  // click (like the ✕ and backdrop) — not on `pointerup` — means the click that would
-  // otherwise reopen the overlay is the same one that closes it, and it lands on the
+  // click (like the ✕) — not on `pointerup` — means the click that would otherwise
+  // reopen the overlay is the same one that closes it, and it lands on the
   // still-mounted scrubber, never the Home Screen temperature button underneath
   // (#112). A scrub/nudge emits no dismiss: `_tapToDismiss` is only set for a genuine
   // stationary tap, so a click that trails a scrub is ignored.

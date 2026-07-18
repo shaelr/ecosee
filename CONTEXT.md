@@ -42,7 +42,11 @@ _Avoid_: main view, dashboard, face, dial, ring.
 **Overlay**:
 A transient view invoked from the Home Screen that temporarily replaces it and then
 reverts (temperature adjust, System Mode, Comfort Setting, Fan, Weather, Sensors).
-Mirrors how the physical device's screens are reached and auto-return.
+Mirrors how the physical device's screens are reached and auto-return. Every
+Overlay dismisses via its shell's own ✕ only — tapping empty (non-control) space
+is a deliberate no-op on every Overlay, Main Menu section or picker alike (owner
+report: an accidental tap shouldn't back you out of what you were doing; the ✕ is
+always right there for an intentional exit).
 _Avoid_: modal, popup, page, dialog.
 
 **Weather Screen**:
@@ -142,11 +146,7 @@ System/settings tab, kept rightmost). A tab shows only when its section is
 reachable for the bound entity (graceful degradation, ADR-0001). The leftmost slot
 used to hold a temperature badge that returned to the thermostat (Home); it was
 replaced by the Furnace Filter tab (ADR-0017) as redundant with the shell's own ✕,
-which already returns to the same place. Because the shell's own ✕ already returns
-to Home, an outside (backdrop) tap on empty space within a Tab-Bar-bearing section
-is a no-op rather than also dismissing — an accidental tap while browsing a section
-shouldn't undo the navigation; only the ✕ does. Pickers, Temperature, and Weather
-carry no Tab Bar and keep the original outside-tap-to-dismiss behavior.
+which already returns to the same place.
 _Avoid_: navbar, footer, toolbar.
 
 **Furnace Filter Screen**:

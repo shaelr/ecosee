@@ -1,7 +1,8 @@
 /** The event an Overlay emits to ask the host card to close it (pop one nav level).
  *  Bubbling + composed so it escapes the emitter's shadow root, crosses the
- *  <ecosee-overlay> shell, and reaches the card's single listener. The shell's ✕ and
- *  backdrop emit it directly; the value pickers emit it after a selection to
+ *  <ecosee-overlay> shell, and reaches the card's single listener. The shell's ✕
+ *  emits it directly (the only tap that ever does — a backdrop tap on empty space
+ *  is a deliberate no-op); the value pickers emit it after a selection to
  *  auto-close (issues #38, #39). */
 export const OVERLAY_DISMISS_EVENT = 'ecosee-overlay-dismiss';
 
