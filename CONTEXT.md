@@ -156,10 +156,14 @@ filter-change confirmation screen. Backed by `filter_last_changed_entity` (a
 `filter_reset_entity` (`button`/`script`) the button triggers instead of
 writing the last-changed entity directly. The last-changed date and (when
 backed by a live entity) the interval are each also editable in place, as a
-small tappable pill next to their row — a native date/number picker layered
-invisibly over the pill, the same real-native-control-under-a-styled-pill
-trick the Fan screen's runtime dropdown uses — for correcting a wrong reading
-or setting up history by hand, not just marking "today."
+small tappable pill next to their row: the date pill opens the native
+calendar picker (a transparent native date input layered over the pill, the
+same real-native-control-under-a-styled-pill trick the Fan screen's runtime
+dropdown uses, forced open on tap via `showPicker()` rather than the
+browser's own ambiguous default click behavior); the interval pill opens a
+dropdown menu of the entity's own min–max-by-step values, the same style as
+the Fan screen's minimum-runtime selector. Both exist for correcting a wrong
+reading or setting up history by hand, not just marking "today."
 _Avoid_: filter screen (ambiguous with a data filter), maintenance screen.
 
 **Comfort Setting**:

@@ -386,14 +386,15 @@ can't be written to, so the button stays disabled unless `filter_reset_entity`
 is also set).
 
 The last-changed date and, when `filter_interval_entity` is configured, the
-interval are each also shown as a small tappable pill — tap the date to open
-your device's own date picker and set an arbitrary date (useful for
+interval are each also shown as a small tappable pill. Tap the date to open
+your device's own calendar picker and set an arbitrary date (useful for
 correcting a wrong reading or backfilling history, not just marking
-"today"); tap the interval to change it directly, bounded to whatever
-range that `number` entity itself accepts. The last-changed pill only
-appears when `filter_last_changed_entity`'s own domain is directly writable
-(`date`, `datetime`, `input_datetime` — a plain `sensor` has no arbitrary
-date to set, only whatever the button/script triggered by
+"today"); tap the interval to open a dropdown menu of that `number` entity's
+own values (min–max by step) — the same style of menu as the Fan screen's
+minimum-runtime selector, not a free-form number field. The last-changed
+pill only appears when `filter_last_changed_entity`'s own domain is directly
+writable (`date`, `datetime`, `input_datetime` — a plain `sensor` has no
+arbitrary date to set, only whatever the button/script triggered by
 `filter_reset_entity` does); the interval pill only appears when
 `filter_interval_entity` is set, since a static `filter_interval_days` has
 no entity to write to.

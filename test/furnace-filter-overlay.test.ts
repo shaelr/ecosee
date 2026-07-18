@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 // Side-effect import: registers <ecosee-furnace-filter-overlay> via @customElement.
 import '../src/overlays/furnace-filter-overlay';
 import type { EcoseeFurnaceFilterOverlay } from '../src/overlays/furnace-filter-overlay';
-import type { FurnaceFilterModel } from '../src/climate/furnace-filter';
+import type { FurnaceFilterModel, FilterIntervalEdit } from '../src/climate/furnace-filter';
 import type { ServiceCall } from '../src/climate/service-call';
 
 // Render/interaction tests for the Furnace Filter Main Menu section (ADR-0017):
@@ -43,16 +43,36 @@ function button(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement {
   return el.shadowRoot!.querySelector('.mark-changed') as HTMLButtonElement;
 }
 
-function pillInput(
-  el: EcoseeFurnaceFilterOverlay,
-  type: 'date' | 'number',
-): HTMLInputElement | null {
+function pillInput(el: EcoseeFurnaceFilterOverlay, type: 'date'): HTMLInputElement | null {
   return el.shadowRoot!.querySelector(`.pill-native[type="${type}"]`);
 }
 
-function fireChange(input: HTMLInputElement, value: string): void {
+function intervalSelect(el: EcoseeFurnaceFilterOverlay): HTMLSelectElement | null {
+  return el.shadowRoot!.querySelector('.select-native');
+}
+
+function fireChange(input: HTMLInputElement | HTMLSelectElement, value: string): void {
   input.value = value;
   input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/** A representative `FilterIntervalEdit` — a months-ranged 1–12 dropdown,
+ *  mirroring the real-world entity shape an owner reported (min 1, max 12,
+ *  step 1, unit_of_measurement "months"). `intervalOptions`'s own generation
+ *  logic is unit-tested directly in furnace-filter.test.ts; this fixture
+ *  only needs to look like its output for the overlay's own render/interaction
+ *  tests. */
+function intervalEditFixture(current = 6): FilterIntervalEdit {
+  return {
+    entityId: 'number.filter_interval',
+    value: current,
+    unit: 'months',
+    options: Array.from({ length: 12 }, (_, i) => i + 1).map((value) => ({
+      value,
+      label: `${value} ${value === 1 ? 'month' : 'months'}`,
+      selected: value === current,
+    })),
+  };
 }
 
 afterEach(() => {
@@ -213,58 +233,61 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     fireChange(pillInput(el, 'date')!, '');
     expect(fired).toHaveLength(0);
   });
+
+  it('calls the native input’s own showPicker() on click, so the calendar always opens', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const input = pillInput(el, 'date')!;
+    const showPicker = vi.fn();
+    (input as unknown as { showPicker: () => void }).showPicker = showPicker;
+    input.click();
+    expect(showPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when showPicker is unsupported by the environment', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const input = pillInput(el, 'date')!;
+    expect((input as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
+    expect(() => input.click()).not.toThrow();
+  });
 });
 
-describe('Furnace Filter overlay — editable "Interval"', () => {
+describe('Furnace Filter overlay — editable "Interval" (dropdown menu)', () => {
   it('omits the Interval row entirely when intervalEdit is null', async () => {
     const el = await mount(model({ intervalEdit: null }));
-    expect(pillInput(el, 'number')).toBeNull();
+    expect(intervalSelect(el)).toBeNull();
     const rows = [...el.shadowRoot!.querySelectorAll('.row')].map((r) => r.textContent);
     expect(rows.some((t) => t?.includes('Interval'))).toBe(false);
   });
 
-  it('renders a pill labeled with the entity’s own value and unit, bounded to its min/max/step', async () => {
-    const el = await mount(
-      model({
-        intervalEdit: {
-          entityId: 'number.filter_interval',
-          value: 6,
-          unit: 'months',
-          min: 1,
-          max: 12,
-          step: 1,
-        },
-      }),
-    );
+  it('renders a dropdown pill labeled with the current value, listing every option', async () => {
+    const el = await mount(model({ intervalEdit: intervalEditFixture(6) }));
     const row = [...el.shadowRoot!.querySelectorAll('.row')].find((r) =>
       r.textContent?.includes('Interval'),
     )!;
     expect(row.querySelector('.pill-label')?.textContent).toBe('6 months');
-    const input = pillInput(el, 'number')!;
-    expect(input.min).toBe('1');
-    expect(input.max).toBe('12');
-    expect(input.step).toBe('1');
-    expect(input.value).toBe('6');
+    const select = intervalSelect(el)!;
+    expect([...select.options].map((o) => o.value)).toEqual(
+      Array.from({ length: 12 }, (_, i) => String(i + 1)),
+    );
+    expect([...select.options].map((o) => o.textContent?.trim())).toContain('1 month');
+    // Checked on the individual <option>'s own attribute rather than the
+    // parent <select>'s .value — happy-dom doesn't recompute .value from a
+    // programmatically-set `selected` attribute the way a real browser does.
+    const selectedOption = [...select.options].find((o) => o.hasAttribute('selected'));
+    expect(selectedOption?.value).toBe('6');
   });
 
   it('emits ecosee-service-call via number.set_value on change, in the entity’s own unit', async () => {
-    const el = await mount(
-      model({
-        intervalEdit: {
-          entityId: 'number.filter_interval',
-          value: 6,
-          unit: 'months',
-          min: 1,
-          max: 12,
-          step: 1,
-        },
-      }),
-    );
+    const el = await mount(model({ intervalEdit: intervalEditFixture(6) }));
     const fired: ServiceCall[] = [];
     el.addEventListener('ecosee-service-call', (e) =>
       fired.push((e as CustomEvent<{ call: ServiceCall }>).detail.call),
     );
-    fireChange(pillInput(el, 'number')!, '9');
+    fireChange(intervalSelect(el)!, '9');
     expect(fired).toEqual([
       {
         domain: 'number',

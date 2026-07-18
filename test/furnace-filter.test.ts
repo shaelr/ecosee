@@ -397,7 +397,7 @@ describe('toFurnaceFilterModel — canEditLastChanged / intervalEdit', () => {
     expect(model.intervalEdit).toBeNull();
   });
 
-  it('intervalEdit carries the raw entity value, resolved unit, and min/max/step', () => {
+  it('intervalEdit carries the raw entity value, resolved unit, and a dropdown of options across the entity’s min/max/step', () => {
     const config = {
       ...BASE_CONFIG,
       filter_last_changed_entity: 'date.filter',
@@ -415,14 +415,69 @@ describe('toFurnaceFilterModel — canEditLastChanged / intervalEdit', () => {
       ]),
       config,
     );
-    expect(model.intervalEdit).toEqual({
-      entityId: 'number.filter_interval',
-      value: 6,
-      unit: 'months',
-      min: 1,
-      max: 12,
-      step: 1,
-    });
+    expect(model.intervalEdit?.entityId).toBe('number.filter_interval');
+    expect(model.intervalEdit?.value).toBe(6);
+    expect(model.intervalEdit?.unit).toBe('months');
+    expect(model.intervalEdit?.options.map((o) => o.value)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    expect(model.intervalEdit?.options.map((o) => o.label)).toEqual([
+      '1 month',
+      '2 months',
+      '3 months',
+      '4 months',
+      '5 months',
+      '6 months',
+      '7 months',
+      '8 months',
+      '9 months',
+      '10 months',
+      '11 months',
+      '12 months',
+    ]);
+    expect(model.intervalEdit?.options.filter((o) => o.selected)).toEqual([
+      { value: 6, label: '6 months', selected: true },
+    ]);
+  });
+
+  it('falls back to default bounds (1..24 by 1) when the entity omits min/max/step', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(1)),
+        entity('number.filter_interval', '3', { unit_of_measurement: 'weeks' }),
+      ]),
+      config,
+    );
+    expect(model.intervalEdit?.options).toHaveLength(24);
+    expect(model.intervalEdit?.options[0]?.value).toBe(1);
+    const options = model.intervalEdit?.options ?? [];
+    expect(options[options.length - 1]?.value).toBe(24);
+  });
+
+  it('always includes the current value in options, even if it falls off the entity’s own step grid', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(1)),
+        entity('number.filter_interval', '2.5', {
+          min: 1,
+          max: 12,
+          step: 1,
+          unit_of_measurement: 'months',
+        }),
+      ]),
+      config,
+    );
+    expect(model.intervalEdit?.options.some((o) => o.value === 2.5 && o.selected)).toBe(true);
   });
 
   it('intervalEdit is null when filter_interval_entity is unavailable', () => {

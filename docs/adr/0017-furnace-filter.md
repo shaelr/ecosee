@@ -287,3 +287,57 @@ necessarily limited: headless Chromium (this project's only available
 browser automation target) doesn't render native OS-level picker overlays
 at all, so the fix here is grounded in documented cross-browser behavior
 rather than a captured screenshot of the picker actually opening.
+
+## Correction (post-ship): Interval is a dropdown menu, not a number field; the date pill always opens the calendar
+
+**Origin**: two owner follow-ups after confirming the previous correction's
+mobile fix worked ("the date last changed works great on the mobile,
+touching the pill opens the calendar"): "can the interval be a menu style
+like the fan duration" and "on a computer clicking the pill allows you to
+type the date in ... i want it to always open the calendar."
+
+### Interval → a `<select>` dropdown, mirroring `fan.ts`'s own runtime selector
+
+The interval pill's `<input type="number">` is replaced with a native
+`<select>` populated from the entity's own `min`/`max`/`step` — the exact
+shape `fan.ts`'s `MinRuntimeModel`/`runtimeOptions` already builds for the
+Fan screen's minimum-runtime selector, copied here as
+`FilterIntervalEdit.options`/`intervalOptions` rather than generalized into
+a shared helper (the two are close enough in shape but different enough in
+context — a `MinRuntimeOption`'s value is always minutes, an
+`IntervalOption`'s label runs through `formatIntervalUnit`'s three-way
+day/week/month pluralization — that sharing one generic function would cost
+more in indirection than the ~15 lines it would save). `FilterIntervalEdit`
+dropped its old `min`/`max`/`step` fields (no longer needed once the overlay
+renders a `<select>`, not a bounded `<input>`) in favor of `options:
+IntervalOption[]`; the current value is always included even if it falls off
+the entity's own step grid (mirrors `runtimeOptions`'s identical guarantee),
+so the selector never hides the active setting. The overlay's `.select-native`
+reuses `fan-overlay.ts`'s own `opacity: 0` hiding trick rather than the
+`.pill-native` transparent-color workaround above — a `<select>` isn't
+subject to the same WebKit invisible-date/number-input heuristic, confirmed
+by the Fan screen's own runtime dropdown having shipped opacity-hidden
+without incident.
+
+### Last changed → `showPicker()` forces the calendar open on every tap
+
+Chrome's default click behavior on a **visible** `<input type="date">`
+depends on exactly where within the box the click lands: the calendar-icon
+region opens the picker, elsewhere in the box just focuses a segment for
+keyboard typing. Our invisible input covers the *entire* pill, so a tap
+essentially never lands on the (hidden) icon's own hit-region — on desktop,
+where mouse clicks are precise, this reliably lands in "type the date"
+segment-edit mode instead of opening the calendar; on mobile, apparently
+different tap-handling made this materialize as "the calendar opens" per
+the owner's own confirmation, so the inconsistency is desktop/mobile input
+handling, not the earlier opacity fix. `HTMLInputElement.prototype.showPicker()`
+(Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox 101+) sidesteps this
+ambiguity entirely: called explicitly from the pill's `@click` handler, it
+opens the calendar picker unconditionally, regardless of where in the box
+the tap landed. Feature-detected (`typeof input.showPicker === 'function'`)
+and wrapped in `try`/`catch` (the spec allows it to throw when rate-limited
+or called outside a genuine user gesture) — either way, an unsupported or
+throwing engine just falls back to the input's own default click behavior,
+same as before this correction. Keyboard-only Tab-focus (no click) never
+calls `showPicker()`, so accessible keyboard-driven typing into the date
+segments is untouched.

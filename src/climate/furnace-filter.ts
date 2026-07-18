@@ -141,24 +141,77 @@ function resolveInterval(hass: HomeAssistant, config: EcoseeCardConfig): Resolve
   return days !== undefined ? { amount: days, unit: 'days' } : null;
 }
 
+/** `"3 months"` / `"1 month"` — the entity's own resolved unit
+ *  (`intervalUnitFromEntity`), pluralized. All three recognized units are
+ *  regular plurals, so a bare `-s` trim covers the singular case. */
+export function formatIntervalUnit(amount: number, unit: IntervalUnit): string {
+  const singular = unit.slice(0, -1);
+  return `${amount} ${amount === 1 ? singular : unit}`;
+}
+
+/** One selectable interval value, in the entity's own unit. */
+export interface IntervalOption {
+  value: number;
+  label: string;
+  selected: boolean;
+}
+
 /** The interval, editable from the section itself — only present when
  *  `filter_interval_entity` is actually configured and currently resolves (a
  *  plain `filter_interval_days` has no entity to write to, so there's nothing
  *  to edit in that case; the section still shows the computed due date, just
- *  without an edit affordance on it). Carries the entity's own `min`/`max`/
- *  `step` capability attributes (confirmed against HA core's `number/const.py`
- *  — the same attributes `comfort-setpoint.ts`'s own field reader uses) so the
- *  overlay's native number input can be bounded to what the entity itself
- *  accepts, and the raw value/unit as the entity itself reports them (not the
- *  day-converted `intervalDays` above) — editing "3 months" should read and
- *  write "3", not a derived day count. */
+ *  without an edit affordance on it). A dropdown menu of discrete `options`
+ *  (owner request: "can the interval be a menu style like the fan
+ *  duration"), matching the Fan screen's own minimum-runtime selector
+ *  (`fan.ts`'s `MinRuntimeModel`) rather than a free-form numeric input — the
+ *  values/labels are in the entity's own unit (e.g. `{ value: 3, unit:
+ *  'months' }`), not the day-converted `intervalDays` above. */
 export interface FilterIntervalEdit {
   entityId: string;
   value: number;
   unit: IntervalUnit;
-  min: number | null;
-  max: number | null;
-  step: number;
+  options: IntervalOption[];
+}
+
+/** Fallback bounds when the entity itself doesn't report `min`/`max`/`step` —
+ *  defensive only, mirroring `fan.ts`'s own `DEFAULT_MIN`/`DEFAULT_MAX`/
+ *  `DEFAULT_STEP`; a real `number` entity almost always reports all three
+ *  (HA's own `number` domain defaults them when a platform doesn't
+ *  override). */
+const DEFAULT_INTERVAL_MIN = 1;
+const DEFAULT_INTERVAL_MAX = 24;
+const DEFAULT_INTERVAL_STEP = 1;
+
+/** Kill the floating-point dust a repeated `+= step` accumulates (e.g.
+ *  0.5 * 3), mirroring `fan.ts`'s own `tidy`. */
+function tidy(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/** Build the selectable interval grid from the entity's own bounds, mirroring
+ *  `fan.ts`'s `runtimeOptions` exactly (same "always include the current
+ *  value, even off-grid" guarantee, so the selector never hides the active
+ *  setting). */
+function intervalOptions(
+  min: number,
+  max: number,
+  step: number,
+  current: number,
+  unit: IntervalUnit,
+): IntervalOption[] {
+  const values = new Set<number>([current]);
+  if (step > 0 && max >= min) {
+    for (let value = min; value <= max + 1e-9; value = tidy(value + step)) {
+      values.add(tidy(value));
+    }
+  }
+  return [...values]
+    .sort((a, b) => a - b)
+    .map((value) => ({
+      value,
+      label: formatIntervalUnit(value, unit),
+      selected: value === current,
+    }));
 }
 
 function buildIntervalEdit(
@@ -170,22 +223,11 @@ function buildIntervalEdit(
   if (!entity || UNAVAILABLE.has(entity.state)) return null;
   const value = num(entity.state);
   if (value === null) return null;
-  return {
-    entityId,
-    value,
-    unit: intervalUnitFromEntity(entity),
-    min: num(entity.attributes.min),
-    max: num(entity.attributes.max),
-    step: num(entity.attributes.step) ?? 1,
-  };
-}
-
-/** `"3 months"` / `"1 month"` — the entity's own resolved unit
- *  (`intervalUnitFromEntity`), pluralized. All three recognized units are
- *  regular plurals, so a bare `-s` trim covers the singular case. */
-export function formatIntervalUnit(amount: number, unit: IntervalUnit): string {
-  const singular = unit.slice(0, -1);
-  return `${amount} ${amount === 1 ? singular : unit}`;
+  const unit = intervalUnitFromEntity(entity);
+  const min = num(entity.attributes.min) ?? DEFAULT_INTERVAL_MIN;
+  const max = num(entity.attributes.max) ?? DEFAULT_INTERVAL_MAX;
+  const step = num(entity.attributes.step) ?? DEFAULT_INTERVAL_STEP;
+  return { entityId, value, unit, options: intervalOptions(min, max, step, value, unit) };
 }
 
 export interface FurnaceFilterModel {

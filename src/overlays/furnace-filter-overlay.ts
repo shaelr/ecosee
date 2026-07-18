@@ -4,11 +4,11 @@ import {
   markFilterChangedCall,
   setLastChangedDateCall,
   parseFilterDate,
-  formatIntervalUnit,
   toIsoDate,
   type FurnaceFilterModel,
 } from '../climate/furnace-filter';
 import { setNumberValueCall } from '../climate/comfort-setpoint';
+import { icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 
 /**
@@ -31,16 +31,23 @@ import { emitServiceCall } from './service-call-event';
  *   native `<input type="date">` over the styled label — the same
  *   "real native control captured by an invisible overlay, styled pill
  *   underneath" trick `fan-overlay.ts`'s runtime `<select>` already uses —
- *   so tapping it opens the platform's own date picker rather than this file
- *   building calendar-grid UI from scratch, and the write goes through
- *   `setLastChangedDateCall`.
- * - **Interval** renders the same pill treatment when `intervalEdit` is
+ *   and explicitly calls the input's own `showPicker()` on tap so the
+ *   platform's calendar picker always opens, rather than leaving it to the
+ *   browser's own click heuristic (which on desktop otherwise as often lands
+ *   in "type the date into this segment" mode as it does the calendar,
+ *   depending exactly where the invisible input was tapped). The write goes
+ *   through `setLastChangedDateCall`.
+ * - **Interval** renders as a dropdown-menu pill when `intervalEdit` is
  *   present (a live `filter_interval_entity`, not a static
- *   `filter_interval_days`) via a native `<input type="number">` bounded to
- *   the entity's own `min`/`max`/`step`, writing through the already-exported
- *   `setNumberValueCall` (comfort-setpoint.ts) — the exact same
- *   `number.set_value` write Comfort Setpoints uses, reused rather than
- *   duplicated. Absent when there's no live entity to write to.
+ *   `filter_interval_days`) — a native `<select>` of the entity's own
+ *   discrete `min`..`max` (by `step`) values, the same pattern (and the same
+ *   underlying `.select-native` trick) as the Fan screen's own
+ *   minimum-runtime selector, rather than a free-form numeric input (owner
+ *   request: "can the interval be a menu style like the fan duration").
+ *   Writes through the already-exported `setNumberValueCall`
+ *   (comfort-setpoint.ts) — the exact same `number.set_value` write Comfort
+ *   Setpoints uses, reused rather than duplicated. Absent when there's no
+ *   live entity to write to.
  *
  * Otherwise unchanged from before: no lasting edit state, every write emits
  * the shared `ecosee-service-call` and the section re-renders once `hass`
@@ -209,6 +216,46 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
     }
 
+    /* The Interval pill's caret, marking it as a menu (fan-overlay.ts's own
+       minimum-runtime dropdown carries the identical caret for the same
+       reason — a value pill with no caret reads as a static value, one with
+       a caret reads as "tap for a list"). */
+    .pill.select {
+      gap: 1.8cqw;
+    }
+    .caret {
+      width: 3.6cqw;
+      height: 3.6cqw;
+      flex: none;
+      color: var(--ecosee-accent, #62cfe9);
+      pointer-events: none;
+    }
+    /* A native <select>, unlike <input type="date">/<input type="number">,
+       isn't subject to the opacity-suppresses-the-picker WebKit quirk above
+       — fan-overlay.ts's own .select-native has used opacity: 0 successfully
+       since that dropdown shipped — so this one keeps the simpler trick
+       rather than the transparent-color workaround .pill-native needs. */
+    .select-native {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background: none;
+      color: transparent;
+      font: inherit;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .select-native option {
+      color: var(--ecosee-text, #d4eff9);
+      background: var(--ecosee-bg, #0a0d10);
+    }
+
     /* Large call-to-action button (ecobee app's own "I've changed my filter"
        screen, the owner's reference) — filled cyan pill with dark text,
        matching the squircle "selected"/primary-action fill used elsewhere
@@ -256,8 +303,31 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     if (call) emitServiceCall(this, call);
   }
 
-  private _onIntervalInput(event: Event, entityId: string): void {
-    const raw = (event.target as HTMLInputElement).value;
+  /** Force the calendar picker open on tap, rather than leaving it to the
+   *  browser's own default click behavior — Chrome desktop otherwise opens
+   *  the picker only when the (invisible) click happens to land on the
+   *  input's own calendar-icon hit region; anywhere else in the box just
+   *  focuses a segment for keyboard typing, which reads as "nothing
+   *  happened" when the whole pill is expected to always open the calendar
+   *  (owner report). showPicker (Baseline 2023 — Chrome/Edge 99+, Safari
+   *  16.4+, Firefox 101+) is declared on TypeScript's own HTMLInputElement
+   *  type but not guaranteed present at runtime on an older engine, hence
+   *  the explicit existence check rather than a bare call; wrapped in
+   *  try/catch too since it can throw (rate-limited, not a genuine user
+   *  gesture) — either way the input's own default click behavior still
+   *  applies, so there's nothing to recover. */
+  private _openDatePicker(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    if (typeof input.showPicker !== 'function') return;
+    try {
+      input.showPicker();
+    } catch {
+      // See doc comment above — no recovery needed.
+    }
+  }
+
+  private _onIntervalChange(event: Event, entityId: string): void {
+    const raw = (event.target as HTMLSelectElement).value;
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
     emitServiceCall(this, setNumberValueCall(entityId, value));
@@ -283,6 +353,7 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
           aria-label="Last changed date"
           max=${toIsoDate(new Date())}
           .value=${toIsoDate(lastChanged)}
+          @click=${(e: Event) => this._openDatePicker(e)}
           @change=${(e: Event) => this._onLastChangedInput(e)}
         />
       </span>
@@ -292,20 +363,24 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
   private _renderInterval(model: FurnaceFilterModel): TemplateResult | typeof nothing {
     const edit = model.intervalEdit;
     if (!edit) return nothing;
+    const current = edit.options.find((option) => option.selected);
     return html`<p class="row">
       Interval
-      <span class="pill">
-        <span class="pill-label">${formatIntervalUnit(edit.value, edit.unit)}</span>
-        <input
-          class="pill-native"
-          type="number"
+      <span class="pill select">
+        <span class="pill-label">${current?.label}</span>
+        <span class="caret">${icons.caretDown}</span>
+        <select
+          class="select-native"
           aria-label="Filter replacement interval"
-          min=${edit.min ?? nothing}
-          max=${edit.max ?? nothing}
-          step=${edit.step}
-          .value=${String(edit.value)}
-          @change=${(e: Event) => this._onIntervalInput(e, edit.entityId)}
-        />
+          @change=${(e: Event) => this._onIntervalChange(e, edit.entityId)}
+        >
+          ${edit.options.map(
+            (option) =>
+              html`<option value=${option.value} ?selected=${option.selected}>
+                ${option.label}
+              </option>`,
+          )}
+        </select>
       </span>
     </p>`;
   }
