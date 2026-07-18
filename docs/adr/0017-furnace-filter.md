@@ -138,3 +138,40 @@ it ever reached a user.
   the tab bar's leftmost slot simply having one fewer item — there is no
   longer a badge there, and no Furnace Filter tab either, since the section
   isn't reachable (ADR-0001).
+
+## Correction (post-ship): the icon under the title was dropped
+
+**Origin**: owner-reported overflow, with a real-device screenshot — the
+overdue readout's three lines plus the button crowded the tab bar on an
+actual dashboard render. The section originally opened with a large copy of
+`icons.filter` beneath the title (mirroring how a couple of the earlier Main
+Menu sections lead with a glyph); the owner's own diagnosis was direct:
+"we can get rid of the icon at the top under the title. that should free up
+some space." Removed — the icon already appears at its natural size in the
+tab bar itself, so the section didn't need a second, larger copy of the same
+glyph competing for the same vertical space as the actual content.
+
+## Correction (post-ship): `filter_interval_entity` is unit-aware
+
+**Origin**: owner-supplied entity data from Developer Tools for their own
+interval helper — `min: 1, max: 12, step: 1, unit_of_measurement: months,
+friendly_name: "Thermostat Furnace Filter Reminder Interval"` — with the
+diagnosis "i think youre interpreting the entity as days instead of months."
+Correct: `resolveInterval` originally read every `filter_interval_entity`
+reading as a raw day count, matching `filter_interval_days`'s own unit but
+with no way to tell that a *different* interval helper reports months (or
+weeks) instead — a real, common shape for a "how often" `number` helper,
+which naturally bounds itself to a small human range (1–12) in whatever unit
+reads best, not raw days.
+
+`intervalUnitFromEntity` now reads the entity's own `unit_of_measurement`
+attribute (`month(s)`/`mo`/`mo.`/`mos`, `week(s)`/`wk`/`wks`, case-insensitive
+substring/exact match; anything else — including unset — still defaults to
+days, so `filter_interval_days` and every pre-existing days-unit entity are
+unaffected). Rather than approximating months as a fixed 30-day multiple
+(which would drift by a day or two depending on which calendar months are
+spanned), `addInterval` adds months via `Date.setMonth`, calendar-correct;
+`FurnaceFilterModel.intervalDays` is now *derived* from the resulting
+`dueDate` (`daysBetween(lastChangedStart, dueDate)`) rather than being the
+source the due date is computed from — the field stays an honest day count
+regardless of which unit the underlying entity actually reports in.

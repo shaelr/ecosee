@@ -67,6 +67,49 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+type IntervalUnit = 'days' | 'weeks' | 'months';
+
+interface ResolvedInterval {
+  amount: number;
+  unit: IntervalUnit;
+}
+
+/** `addDays`'s counterpart for weeks/months — calendar-correct (not a fixed
+ *  ~30-day approximation), so a "3 months" interval lands on the same
+ *  day-of-month three months out rather than drifting by however many of the
+ *  spanned months are short or long. */
+function addInterval(date: Date, interval: ResolvedInterval): Date {
+  if (interval.unit === 'months') {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + interval.amount);
+    return next;
+  }
+  return addDays(date, interval.unit === 'weeks' ? interval.amount * 7 : interval.amount);
+}
+
+/** Whole days between two already-`dayStart`-aligned dates. `addInterval`
+ *  never introduces a time-of-day component, so this is exact bar a DST
+ *  crossing shifting the raw ms difference by an hour either side of a whole
+ *  day — `Math.round` (not `Math.floor`) absorbs that. */
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((to.getTime() - from.getTime()) / 86400000);
+}
+
+/** Read `filter_interval_entity`'s own `unit_of_measurement` to decide how to
+ *  interpret its numeric reading. Real-world interval helpers vary — a
+ *  reported "Furnace Filter Reminder Interval" `number` entity may track
+ *  months (`min: 1, max: 12, unit_of_measurement: "months"`), not days.
+ *  Unset/unrecognized defaults to days, matching `filter_interval_days`'s own
+ *  unit and every prior release's assumption. */
+function intervalUnitFromEntity(entity: { attributes: Record<string, unknown> }): IntervalUnit {
+  const raw = entity.attributes.unit_of_measurement;
+  const unit = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (unit.startsWith('month') || unit === 'mo' || unit === 'mos' || unit === 'mo.')
+    return 'months';
+  if (unit.startsWith('week') || unit === 'wk' || unit === 'wks') return 'weeks';
+  return 'days';
+}
+
 /** `"YYYY-MM-DD"` from local date components (not `toISOString`, which
  *  converts to UTC first — the same local-date convention Schedule's own
  *  `toLocalIso` uses, schedule.ts). */
@@ -77,16 +120,23 @@ function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** The interval, in days, from `filter_interval_entity` when it currently has
- *  a valid positive reading — `undefined`/unavailable/non-numeric/non-positive
- *  all fall through to `filter_interval_days` (or "no interval known") in
- *  `toFurnaceFilterModel`, mirroring `min_gap_entity`'s own fallback shape. */
-function intervalFromEntity(hass: HomeAssistant, entityId: string | undefined): number | null {
-  if (!entityId) return null;
-  const entity = hass.states[entityId];
-  if (!entity || UNAVAILABLE.has(entity.state)) return null;
-  const value = num(entity.state);
-  return value !== null && value > 0 ? value : null;
+/** The interval from `filter_interval_entity` (unit-aware, `intervalUnitFromEntity`)
+ *  when it currently has a valid positive reading, falling back to
+ *  `filter_interval_days` (always days) otherwise — `undefined`/unavailable/
+ *  non-numeric/non-positive all fall through, mirroring `min_gap_entity`'s own
+ *  fallback shape. `null` when neither resolves to anything. */
+function resolveInterval(hass: HomeAssistant, config: EcoseeCardConfig): ResolvedInterval | null {
+  const entityId = config.filter_interval_entity;
+  if (entityId) {
+    const entity = hass.states[entityId];
+    if (entity && !UNAVAILABLE.has(entity.state)) {
+      const value = num(entity.state);
+      if (value !== null && value > 0)
+        return { amount: value, unit: intervalUnitFromEntity(entity) };
+    }
+  }
+  const days = config.filter_interval_days;
+  return days !== undefined ? { amount: days, unit: 'days' } : null;
 }
 
 export interface FurnaceFilterModel {
@@ -95,7 +145,12 @@ export interface FurnaceFilterModel {
    *  hidden entirely (ADR-0001). */
   available: boolean;
   lastChanged: Date | null;
-  /** `null` when neither `filter_interval_entity` nor `filter_interval_days`
+  /** The resolved interval, always expressed in exact whole days regardless of
+   *  the source's own unit (`filter_interval_entity`'s `unit_of_measurement`
+   *  may be days, weeks, or months — see `resolveInterval`) — derived from
+   *  `dueDate` rather than the other way around, so a month-based interval
+   *  stays calendar-correct rather than a fixed ~30-day approximation. `null`
+   *  when neither `filter_interval_entity` nor `filter_interval_days`
    *  resolves — the due date / overdue state are then simply not shown. */
   intervalDays: number | null;
   dueDate: Date | null;
@@ -131,13 +186,13 @@ export function toFurnaceFilterModel(
   const lastChanged = parseFilterDate(entity.state);
   if (!lastChanged) return unavailable;
 
-  const intervalDays =
-    intervalFromEntity(hass, config.filter_interval_entity) ?? config.filter_interval_days ?? null;
-  const dueDate = intervalDays !== null ? addDays(dayStart(lastChanged), intervalDays) : null;
+  const interval = resolveInterval(hass, config);
+  const lastChangedStart = dayStart(lastChanged);
+  const dueDate = interval ? addInterval(lastChangedStart, interval) : null;
+  const intervalDays = dueDate ? daysBetween(lastChangedStart, dueDate) : null;
   const today = dayStart(new Date());
   const overdue = dueDate !== null && dueDate.getTime() < today.getTime();
-  const daysOverdue =
-    overdue && dueDate ? Math.round((today.getTime() - dueDate.getTime()) / 86400000) : 0;
+  const daysOverdue = overdue && dueDate ? daysBetween(dueDate, today) : 0;
   const canMarkChanged =
     Boolean(config.filter_reset_entity) || WRITABLE_DATE_DOMAINS.has(domainOf(entityId));
 

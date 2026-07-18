@@ -231,7 +231,7 @@ also in the visual editor; `standby` is YAML-only.
 | `equipment_glow`         | no       | Whether the colored edge glow (blue cooling / amber heating) is shown. Default `true`; set `false` to hide it on every screen.                                                                                                                                       |
 | `resume_program`         | no       | Adds a Resume Schedule control that replaces the setpoint ovals with a combined range pill during a hold — see below. **ecobee integration only.** Default off.                                                                                                      |
 | `filter_interval_days`   | no       | Days between furnace filter changes, used to compute the due date and overdue styling — see below. Ignored while `filter_interval_entity` has a reading.                                                                                                             |
-| `filter_interval_entity` | no       | A `number` entity carrying the replacement interval instead of a fixed `filter_interval_days` — see below.                                                                                                                                                           |
+| `filter_interval_entity` | no       | A `number` entity carrying the replacement interval instead of a fixed `filter_interval_days` — read as days unless its `unit_of_measurement` says weeks/months — see below.                                                                                         |
 | `filter_reset_entity`    | no       | A `button`/`script` entity the "I've changed my filter" button triggers instead of writing to `filter_last_changed_entity` directly — see below.                                                                                                                     |
 | `background_color`       | no       | Overrides the card's background everywhere — Home Screen, Standby Screen, and any open menu/picker: any CSS color (`#1a1a2e`, `rgba(...)`, a named color), or `transparent` for no background at all. Picker/chip text stays legible either way. Default near-black. |
 
@@ -371,7 +371,12 @@ filter_reset_entity: button.reset_furnace_filter # optional — see below
 The section shows the last-changed date and — once `filter_interval_days`
 (or `filter_interval_entity`, which takes priority whenever it has a valid
 reading) is set — the computed due date, switching to a warning style once
-overdue. A large **"I've changed my filter"** button at the bottom records
+overdue. `filter_interval_entity` is read according to its own
+`unit_of_measurement`: days by default, but `weeks` or `months` are also
+recognized (e.g. a "Furnace Filter Reminder Interval" `number` helper tracking
+months 1–12) — the due date lands calendar-correctly (the same day-of-month N
+months out), not a fixed ~30-day-per-month approximation. A large
+**"I've changed my filter"** button at the bottom records
 the change: if `filter_reset_entity` is set (a `button` or `script`, for a
 setup where `filter_last_changed_entity` is a read-only sensor computed
 elsewhere), tapping it presses/triggers that entity instead; otherwise it

@@ -138,6 +138,128 @@ describe('toFurnaceFilterModel — interval and due date', () => {
   });
 });
 
+describe('toFurnaceFilterModel — filter_interval_entity unit_of_measurement (months/weeks)', () => {
+  // Real-world shape reported by an owner: a `number` helper named "Furnace
+  // Filter Reminder Interval" with min 1 / max 12 / step 1 and
+  // unit_of_measurement "months" — previously misread as 90 raw days for a
+  // reading of "90", when it actually means 90 months.
+  it('reads a "months" unit calendar-correctly, not as a ~30-day approximation', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const lastChangedState = daysAgo(10);
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', lastChangedState),
+        entity('number.filter_interval', '3', { unit_of_measurement: 'months' }),
+      ]),
+      config,
+    );
+    const [y, m, d] = lastChangedState.split('-').map(Number);
+    const expectedDue = new Date(y, m - 1, d);
+    expectedDue.setMonth(expectedDue.getMonth() + 3);
+    expect(model.dueDate?.getTime()).toBe(expectedDue.getTime());
+    // Not the flat 90-day approximation three months would round to.
+    expect(model.intervalDays).not.toBe(90);
+  });
+
+  it('matches the exact real-world entity shape (months, friendly_name, min/max/step)', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.furnace_filter_reminder_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(400)),
+        entity('number.furnace_filter_reminder_interval', '6', {
+          min: 1,
+          max: 12,
+          step: 1,
+          mode: 'box',
+          unit_of_measurement: 'months',
+          friendly_name: 'Thermostat Furnace Filter Reminder Interval',
+        }),
+      ]),
+      config,
+    );
+    // 400 days ago + 6 months is comfortably overdue, however the months are
+    // converted — this asserts the overdue *conclusion*, not a specific count.
+    expect(model.overdue).toBe(true);
+  });
+
+  it('recognizes month unit variants case-insensitively (Months, MO)', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    for (const unit of ['Months', 'MO', 'mo.', 'mos']) {
+      const model = toFurnaceFilterModel(
+        hass([
+          entity('date.filter', daysAgo(10)),
+          entity('number.filter_interval', '2', { unit_of_measurement: unit }),
+        ]),
+        config,
+      );
+      const expected = new Date();
+      expected.setDate(expected.getDate() - 10);
+      expected.setHours(0, 0, 0, 0);
+      expected.setMonth(expected.getMonth() + 2);
+      expect(model.dueDate?.getTime()).toBe(expected.getTime());
+    }
+  });
+
+  it('reads a "weeks" unit as 7-day multiples', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(10)),
+        entity('number.filter_interval', '4', { unit_of_measurement: 'weeks' }),
+      ]),
+      config,
+    );
+    expect(model.intervalDays).toBe(28);
+  });
+
+  it('treats an unset or unrecognized unit as days, unchanged from before', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const noUnit = toFurnaceFilterModel(
+      hass([entity('date.filter', daysAgo(10)), entity('number.filter_interval', '45')]),
+      config,
+    );
+    expect(noUnit.intervalDays).toBe(45);
+    const oddUnit = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(10)),
+        entity('number.filter_interval', '45', { unit_of_measurement: '°F' }),
+      ]),
+      config,
+    );
+    expect(oddUnit.intervalDays).toBe(45);
+  });
+
+  it('a plain filter_interval_days config value is always read as days', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_days: 6,
+    };
+    const model = toFurnaceFilterModel(hass([entity('date.filter', daysAgo(10))]), config);
+    expect(model.intervalDays).toBe(6);
+  });
+});
+
 describe('toFurnaceFilterModel — canMarkChanged', () => {
   it('is true when filter_reset_entity is configured, regardless of filter_last_changed_entity’s domain', () => {
     const config = {

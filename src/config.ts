@@ -129,11 +129,15 @@ export interface EcoseeCardConfig {
    *  Absent (and no working entity) ⇒ the due date / overdue state simply
    *  aren't shown — the last-changed date and the button still are. */
   filter_interval_days?: number;
-  /** A `number`/`input_number`/`sensor` entity carrying the interval in days
-   *  instead of a fixed `filter_interval_days` — kept in sync with whatever
-   *  the integration itself tracks. Used instead of `filter_interval_days`
+  /** A `number`/`input_number`/`sensor` entity carrying the interval instead
+   *  of a fixed `filter_interval_days` — kept in sync with whatever the
+   *  integration itself tracks. Used instead of `filter_interval_days`
    *  whenever it currently has a valid numeric reading; falls back to
-   *  `filter_interval_days` (or "no interval known") otherwise. */
+   *  `filter_interval_days` (or "no interval known") otherwise. Read as days
+   *  unless the entity's own `unit_of_measurement` says otherwise (`weeks`/
+   *  `months` are also recognized, e.g. an interval helper set up in months
+   *  like "Furnace Filter Reminder Interval"); an unset/unrecognized unit is
+   *  assumed to already be days, matching `filter_interval_days`'s own unit. */
   filter_interval_entity?: string;
   /** A `button` or `script` entity to call for the "I've changed my filter"
    *  action, for a setup where `filter_last_changed_entity` is a read-only
