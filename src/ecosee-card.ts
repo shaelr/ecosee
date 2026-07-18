@@ -607,7 +607,19 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  (`updated`) as a cheap self-heal against a stale/too-small reading latched in
    *  before the dashboard's own layout had settled. Every one of these is a no-op
    *  once the reading is already correct (the unchanged-value guard below), so
-   *  calling it this often costs essentially nothing. */
+   *  calling it this often costs essentially nothing.
+   *
+   *  This is the fix for `.root` (this file's own CSS) coming out too small; it's
+   *  not the only way the Card can render undersized. `.root` itself can be
+   *  perfectly correctly sized (this fully resynced) while `<ecosee-home-screen>`/
+   *  `<ecosee-standby-screen>` still collapse, because — before their own fix — they
+   *  sized themselves by auto-fitting their shadow DOM's fixed-size `.screen`
+   *  rather than by directly filling their already-known-correct parent, the same
+   *  category of race one level down. See home-screen.ts's own `:host` doc
+   *  comment (`position: absolute; inset: 0`, matching `<ecosee-overlay>`, which
+   *  never had this bug) for that half of the story — confirmed via DevTools
+   *  against a real dashboard showing `.root` a correct 410×410 square next to a
+   *  `<ecosee-home-screen>` collapsed to 410×73. */
   private _syncDeviceScale(): void {
     const width = this.clientWidth;
     const styles = getComputedStyle(this);

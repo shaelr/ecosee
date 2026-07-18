@@ -64,8 +64,25 @@ export class EcoseeHomeScreen extends LitElement {
     // CSS below.
     shapeStyles,
     css`
+      /* position: absolute; inset: 0 — not display: block. A block host has no
+         explicit size of its own; it auto-sizes to fit its shadow content, which
+         means the browser must first finish laying out .screen below (a FIXED
+         460×460 box, but still a computation the host's own box depends on) before
+         it can report a height back up to <ecosee-card>'s .root. On a dashboard
+         slow to settle (several HACS custom cards lazy-loading definitions/
+         evaluating templates), a layout pass can land in between: .root (owned by
+         <ecosee-card>'s own stylesheet, sized directly off --ecosee-base-size) came
+         out correctly square, but this host's OWN auto-computed height collapsed to
+         a sliver instead of matching it — confirmed via DevTools against a real
+         dashboard (.root 410×410, <ecosee-home-screen> 410×73). <ecosee-overlay>
+         (overlay-shell.ts) never exhibits this because it already uses this exact
+         position: absolute; inset: 0 — it has no dependency on its own shadow
+         content's size at all, just its already-known-square parent's. Matching
+         that pattern here removes the auto-sizing relationship (and the race it
+         creates) entirely, rather than trying to make it resolve faster. */
       :host {
-        display: block;
+        position: absolute;
+        inset: 0;
       }
 
       /* Fixed layout canvas: the device is laid out ONCE at --ecosee-base-size and

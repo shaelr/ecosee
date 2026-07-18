@@ -87,8 +87,17 @@ export class EcoseeStandbyScreen extends LitElement {
     // border-radius, so only the superellipse shows).
     shapeStyles,
     css`
+      /* position: absolute; inset: 0 — not display: block. See home-screen.ts's own
+         doc comment on the identical rule: a block host auto-sizes to its shadow
+         content (.screen below), which on a slow-to-settle dashboard can land a
+         layout pass where <ecosee-card>'s own .root already resolved its correct
+         square size but this host's dependent auto-height hasn't caught up yet.
+         <ecosee-overlay> never had this bug because it already uses this exact
+         rule; matching it here removes the dependency (and the race) rather than
+         trying to make it resolve faster. */
       :host {
-        display: block;
+        position: absolute;
+        inset: 0;
       }
 
       /* Same fixed layout canvas as the Home Screen (issue #35 / #36): the device is
