@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 // Side-effect import: registers <ecosee-furnace-filter-overlay> via @customElement.
 import '../src/overlays/furnace-filter-overlay';
 import type { EcoseeFurnaceFilterOverlay } from '../src/overlays/furnace-filter-overlay';
@@ -43,12 +43,12 @@ function button(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement {
   return el.shadowRoot!.querySelector('.mark-changed') as HTMLButtonElement;
 }
 
-function dateLabel(el: EcoseeFurnaceFilterOverlay): HTMLElement | null {
-  return el.shadowRoot!.querySelector('.pill .pill-label');
+function datePillButton(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement | null {
+  return el.shadowRoot!.querySelector('.pill-button');
 }
 
 function dateInput(el: EcoseeFurnaceFilterOverlay): HTMLInputElement | null {
-  return el.shadowRoot!.querySelector('.pill-native');
+  return el.shadowRoot!.querySelector('.date-native');
 }
 
 function intervalSelect(el: EcoseeFurnaceFilterOverlay): HTMLSelectElement | null {
@@ -180,7 +180,7 @@ describe('Furnace Filter overlay — mark changed button', () => {
 describe('Furnace Filter overlay — editable "Last changed"', () => {
   it('renders plain text, no pill/button, when canEditLastChanged is false', async () => {
     const el = await mount(model({ canEditLastChanged: false }));
-    expect(dateLabel(el)).toBeNull();
+    expect(datePillButton(el)).toBeNull();
     expect(dateInput(el)).toBeNull();
     const row = [...el.shadowRoot!.querySelectorAll('.row')].find((r) =>
       r.textContent?.includes('Last changed'),
@@ -189,51 +189,49 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     expect(row.querySelector('.value')).not.toBeNull();
   });
 
-  it('renders a tappable pill showing the formatted date when canEditLastChanged is true', async () => {
+  it('renders a tappable pill button showing the formatted date when canEditLastChanged is true', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const label = dateLabel(el);
-    expect(label).not.toBeNull();
-    expect(label!.textContent?.trim()).toContain('Jan 1, 2025');
+    const btn = datePillButton(el);
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent?.trim()).toContain('Jan 1, 2025');
   });
 
-  // Regression guard: a version of this field routed the tap through a
-  // separate visible <button> whose click handler called showPicker() on a
-  // genuinely tiny/invisible hidden input, specifically to dodge a Chrome
-  // desktop bug where a *focused* date input renders its own
+  // Regression guard: an earlier version layered an invisible native
+  // <input type="date"> directly over the styled label ("real control
+  // captured by an invisible overlay" — the same trick fan-overlay.ts's
+  // runtime <select> uses). Chrome renders a *focused* date input's own
   // value/segment-highlight at full system styling while its native picker
-  // is open (no CSS suppressed it, confirmed by an owner screenshot). That
-  // sidestep broke iOS entirely: showPicker() is unimplemented for date/time
-  // inputs on iOS WebKit (WebKit bug 261703), so the button did nothing
-  // there. Reverted to a real, directly-tappable native input — the same
-  // trick fan-overlay.ts's runtime <select> and .select-native (below) use —
-  // trading the (real, watched-for) Chrome cosmetic risk for a control that
-  // actually works on iOS.
-  it('the date input is the real, directly-tappable control — not a button with a hidden input behind it', async () => {
+  // is open — no CSS on the input itself (transparent color, ::selection,
+  // ::-webkit-datetime-edit-*, even an opaque higher-stacked backing layer)
+  // could suppress it, confirmed by an owner screenshot after each attempt.
+  // The visible pill is now an ordinary <button> — never a form control
+  // Chrome could render natively — so there is nothing left for that
+  // behavior to apply to.
+  it('the visible pill is a real <button>, not a styled label over a native input', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    expect(el.shadowRoot!.querySelector('.pill-button')).toBeNull();
+    const btn = datePillButton(el);
+    expect(btn?.tagName).toBe('BUTTON');
+    // The actual date input is a separate, genuinely tiny/invisible element
+    // — never layered over the button's own visible text.
     const input = dateInput(el);
     expect(input).not.toBeNull();
-    expect(input!.tagName).toBe('INPUT');
-    expect(input!.type).toBe('date');
-    // Not hidden from assistive tech or keyboard users — it's the real,
-    // primary control now, exactly like .select-native below.
-    expect(input!.getAttribute('tabindex')).not.toBe('-1');
-    expect(input!.getAttribute('aria-hidden')).not.toBe('true');
-    expect(input!.getAttribute('aria-label')).toBeTruthy();
+    expect(input).not.toBe(btn);
+    expect(input!.getAttribute('tabindex')).toBe('-1');
+    expect(input!.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('seeds the date input with the current value', async () => {
+  it('seeds the hidden date input with the current value', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
     expect(dateInput(el)!.value).toBe('2025-01-01');
   });
 
-  it('caps the date input at today — no picking a future last-changed date', async () => {
+  it('caps the hidden date input at today — no picking a future last-changed date', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
@@ -273,20 +271,22 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     expect(fired).toHaveLength(0);
   });
 
-  // The whole point of reverting to a direct-tap native input (see the
-  // regression-guard test above): the real control itself is reachable and
-  // focusable directly — the exact mechanism iOS ties its native picker
-  // sheet to, unlike showPicker() which it doesn't implement for this input
-  // type at all. (happy-dom's synthetic .click() doesn't perform a real
-  // browser's implicit focus-on-click for form controls, so this asserts
-  // focusability directly rather than through a simulated click.)
-  it('the date input is directly focusable — nothing hides it behind an unreachable tabindex="-1"', async () => {
+  it('clicking the pill button calls the hidden input’s own showPicker()', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',
     });
-    const input = dateInput(el)!;
-    input.focus();
-    expect(el.shadowRoot!.activeElement).toBe(input);
+    const showPicker = vi.fn();
+    (dateInput(el) as unknown as { showPicker: () => void }).showPicker = showPicker;
+    datePillButton(el)!.click();
+    expect(showPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when showPicker is unsupported by the environment', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    expect((dateInput(el) as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
+    expect(() => datePillButton(el)!.click()).not.toThrow();
   });
 });
 

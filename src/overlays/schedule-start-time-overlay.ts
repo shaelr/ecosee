@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, query } from 'lit/decorators.js';
 import { snapToSlot } from '../schedule/schedule';
 
 /**
@@ -33,6 +33,12 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
    *  `removeBlock` would no-op) — hides the removal action rather than offering
    *  a control that can't do anything. */
   @property({ attribute: false }) canRemove = false;
+
+  /** The tiny, genuinely-invisible `<input type="time">` `.pill-button`'s click
+   *  handler triggers `showPicker()` on — see `.time-native`'s own CSS doc comment
+   *  and schedule-add-block-overlay.ts's identical split (itself mirroring
+   *  furnace-filter-overlay.ts's `.date-native` pattern for the same reason). */
+  @query('.time-native') private _timeInput?: HTMLInputElement;
 
   static override styles = css`
     :host {
@@ -79,19 +85,14 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       color: var(--ecosee-text-accent, #62cfe9);
     }
 
-    /* Cyan-outlined time field: a visible label rides on top while a
-       transparent native <input type=time> covers the whole field to capture
-       the tap — the same technique schedule-add-block-overlay.ts's Start/End
-       fields and the Comfort Setting/Interval dropdowns elsewhere use. A tap
-       anywhere on the field lands directly on the real input, giving it
-       genuine focus, which is what actually opens the picker on iOS (it ties
-       its native picker sheet to real focus, not to any particular API call).
-       A version of this field routed the tap through a separate visible
-       <button> whose click handler called the hidden input's showPicker()
-       instead — that worked on desktop Chrome/Firefox/Safari, but showPicker()
-       is unimplemented for date/time inputs on iOS WebKit (only file inputs
-       support it there — WebKit bug 261703, open since 2023), so the button
-       never opened anything on an iPhone. */
+    /* Cyan-outlined time field. Tapping it opens the platform's own time picker
+       via showPicker() (below) rather than relying on a native <input type=time>
+       styled in place — an earlier version of this pattern (used on Add to
+       Schedule's Start/End fields until it was replaced) found that an invisible
+       full-cover time input only focuses whatever internal segment happens to sit
+       under the pointer, with no visible chrome to show which segment that is,
+       reading as "tapping does nothing." A real button always has something to
+       tap. */
     .field {
       box-sizing: border-box;
       position: relative;
@@ -103,28 +104,23 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       border-radius: 100cqw;
       pointer-events: auto;
     }
-    .pill-label {
+    /* An ordinary opaque <button> carrying the field's own visual look — not a
+       styled label with an invisible native time input layered on top. Tapping
+       it calls .time-native's showPicker() (below) explicitly, opening the
+       browser's own time picker. Mirrors schedule-add-block-overlay.ts's
+       identical pill-button/time-native split. */
+    .pill-button {
+      appearance: none;
+      background: none;
+      border: none;
+      margin: 0;
+      padding: 0;
+      font: inherit;
       font-size: 6.5cqw;
       font-weight: 600;
       color: var(--ecosee-text-accent, #62cfe9);
-      pointer-events: none;
-    }
-    .field input {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background: none;
-      color: transparent;
-      font: inherit;
-      opacity: 0;
+      text-align: center;
       cursor: pointer;
-      pointer-events: auto;
     }
     /* Flush against the field's own border (no outline-offset) so a focused
        field reads as its border getting thicker, not a second detached ring
@@ -132,6 +128,22 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
     .field:focus-within {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       outline-offset: 0;
+    }
+    /* The actual <input type="time"> backing the button above: genuinely tiny
+       and invisible, never the tap target and never directly focused by a user
+       (tabindex="-1", aria-hidden="true"); .pill-button's click handler calls
+       its showPicker() explicitly. */
+    .time-native {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
     }
 
     .remove {
@@ -148,6 +160,25 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       pointer-events: auto;
     }
   `;
+
+  /** `.pill-button`'s click handler — explicitly opens the native time picker
+   *  on the hidden `.time-native` input, rather than relying on a tap landing
+   *  on a visible form control (there is none, by design — see `.pill-button`'s
+   *  own CSS doc comment). showPicker (Baseline 2023 — Chrome/Edge 99+, Safari
+   *  16.4+, Firefox 101+) is declared on TypeScript's own HTMLInputElement type
+   *  but not guaranteed present at runtime on an older engine, hence the
+   *  explicit existence check rather than a bare call; wrapped in try/catch too
+   *  since it can throw (rate-limited, not a genuine user gesture) — either way
+   *  there's simply nothing to open in that case. */
+  private _openTimePicker(): void {
+    const input = this._timeInput;
+    if (!input || typeof input.showPicker !== 'function') return;
+    try {
+      input.showPicker();
+    } catch {
+      // See doc comment above — no recovery needed.
+    }
+  }
 
   private _onTimeChange(event: Event): void {
     const value = (event.target as HTMLInputElement).value; // "HH:MM"
@@ -183,12 +214,21 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
         </p>
         <p class="question">What time should ${this.comfortSetting} start on ${this.dayLabel}?</p>
         <div class="field">
-          <span class="pill-label">${value}</span>
+          <button
+            type="button"
+            class="pill-button"
+            aria-label="Start time, ${value}"
+            @click=${this._openTimePicker}
+          >
+            ${value}
+          </button>
           <input
+            class="time-native"
             type="time"
             step="1800"
+            tabindex="-1"
+            aria-hidden="true"
             .value=${value}
-            aria-label="Start time"
             @change=${this._onTimeChange}
           />
         </div>
