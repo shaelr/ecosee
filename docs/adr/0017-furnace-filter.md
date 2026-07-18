@@ -341,3 +341,43 @@ throwing engine just falls back to the input's own default click behavior,
 same as before this correction. Keyboard-only Tab-focus (no click) never
 calls `showPicker()`, so accessible keyboard-driven typing into the date
 segments is untouched.
+
+## Correction (post-ship): cover the date input, don't try to color it away
+
+**Origin**: owner report, with a screenshot of the calendar picker actually
+open (confirming `showPicker()` above works) — but showing the native input's
+own value rendered in full system styling, a segment highlighted, laid
+directly over the pill's own cyan-outlined look.
+
+The original approach tried to make `.pill-native` invisible entirely via
+`color: transparent`, `::selection` overrides, and the `::-webkit-datetime-edit-*`
+sub-part selectors (all still in place). None of it holds once the picker is
+actually open: Chrome renders a focused date input's own value at full
+system styling specifically while its native picker UI is active, and this
+override reaches past `color` (confirmed — the segment highlight and, worse,
+the full value text both painted through). A `-webkit-text-fill-color:
+transparent` attempt (the mechanism behind autofill's forced text color
+ignoring page CSS) didn't resolve it either. This reads as deliberate browser
+behavior — keep the value legible while its own native UI is showing,
+overriding the page's styling — not a gap in this file's CSS coverage.
+
+Rather than continuing to fight the input's own rendering with more color
+properties, `.pill-backing` physically covers it: a dedicated, purely
+decorative sibling (`position: absolute; inset: 0`, matching `.pill-native`'s
+own footprint exactly) painted between the input and the label in stacking
+order, with an opaque `--ecosee-bg` background and `pointer-events: none` (so
+taps still reach `.pill-native` beneath it). This doesn't depend on any CSS
+property the input's own value-rendering might override — it's ordinary
+paint-order stacking, which nothing about "keep the native UI legible" changes.
+
+The one real constraint this ran into: `.pill-label` is the pill's *only*
+in-flow child once `.pill-native` is taken out of flow via `position:
+absolute` — `.pill`'s own `inline-flex` width is measured from it. Giving
+`.pill-label` `position: absolute` too (to get the same full-pill coverage
+directly on the label, without a separate element) removed it from flow as
+well, leaving `.pill` with nothing to size itself against — it collapsed to
+its padding alone, caught immediately by screenshot before shipping.
+`.pill-backing` carries no content of its own, so it can be absolutely
+positioned freely; `.pill-label` stays in normal flow, still sized from its
+own text, just lifted above `.pill-backing` (`z-index: 2` vs `1`) so it
+still reads on top.

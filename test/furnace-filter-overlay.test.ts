@@ -193,6 +193,26 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     expect(input!.value).toBe('2025-01-01');
   });
 
+  it('renders a full-coverage opaque backing layer behind the label, ahead of the native input', async () => {
+    // Regression guard: Chrome renders a date input's own value at full
+    // system styling while its calendar picker is open, ignoring this
+    // input's own color/::selection — .pill-backing physically covers the
+    // whole pill rather than relying on the input's own text staying
+    // invisible. It must stay a *separate* element from .pill-label (not
+    // just a background on the label itself) — .pill-label is the pill's
+    // only in-flow child once .pill-native is taken out of flow, so .pill's
+    // own width is measured from it; making .pill-label absolutely
+    // positioned too (to get full coverage) collapses the whole pill.
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const pill = el.shadowRoot!.querySelector('.pill')!;
+    const backing = pill.querySelector('.pill-backing');
+    const label = pill.querySelector('.pill-label');
+    expect(backing).not.toBeNull();
+    expect(backing).not.toBe(label);
+  });
+
   it('caps the native date input at today — no picking a future last-changed date', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',

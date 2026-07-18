@@ -163,9 +163,44 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       border-radius: 100cqw;
       font-weight: 600;
       pointer-events: auto;
+      /* Clips anything the native date input renders (its own text, a
+         picker-open highlight) to the pill's own rounded silhouette rather
+         than letting it square off past the corners. */
+      overflow: hidden;
     }
     .pill-label {
       pointer-events: none;
+    }
+    /* The date pill only: a dedicated opaque layer, .pill-backing, painted
+       directly ON TOP of .pill-native and spanning the pill's FULL content
+       box (inset: 0, matching .pill-native's own footprint exactly) — not
+       just colored transparent. Chrome renders a date input's own value at
+       full system styling while its calendar picker is open, overriding
+       this element's color and ::selection — a deliberate "stay legible
+       while the native UI is active" browser behavior, not something page
+       CSS can suppress on the input itself. Physically covering the whole
+       input sidesteps that entirely: it doesn't matter what the browser
+       insists on drawing underneath if nothing of it is left uncovered.
+       A separate element, not a background on .pill-label itself, because
+       .pill-label must stay in normal flow — it's the pill's only in-flow
+       child (.pill-native is absolutely positioned out of flow already), so
+       .pill's own inline-flex width is measured FROM it; giving it
+       position: absolute too (to span the full pill like .pill-backing
+       does) left .pill with nothing in flow to size against and collapsed
+       it to its padding alone. .pill-backing carries no content of its own,
+       so it's free to be absolutely positioned without that risk.
+       pointer-events: none on both still lets taps fall through to
+       .pill-native beneath, so the picker still opens. */
+    .pill-backing {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: var(--ecosee-bg, #0a0d10);
+      pointer-events: none;
+    }
+    .pill-label.cover {
+      position: relative;
+      z-index: 2;
     }
     .pill-native {
       position: absolute;
@@ -179,6 +214,16 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       -webkit-appearance: none;
       background: transparent;
       color: transparent;
+      /* Chrome/Safari sometimes render a form control's own text through
+         -webkit-text-fill-color rather than color — the same override
+         mechanism behind autofill's forced yellow-background text color
+         ignoring page CSS. A date input showing its native value at full
+         system styling while its own calendar picker is open (rather than
+         staying invisible under .pill-label) is the same class of "the
+         browser insists this stay legible while its native UI is active"
+         behavior already true of the segment-highlight below — this is a
+         second attempt at suppressing it, not a confirmed fix. */
+      -webkit-text-fill-color: transparent;
       font: inherit;
       cursor: pointer;
       /* Suppress the browser's own default focus ring on the native control
@@ -209,6 +254,20 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     .pill-native::selection {
       background: transparent;
       color: transparent;
+    }
+    /* The month/day/year sub-fields Chrome renders a date input's value
+       through each carry their own text rendering, independent of the host
+       input's own color/-webkit-text-fill-color — targeting them directly is
+       the last layer available before there's nothing left in the public
+       CSS surface to try. */
+    .pill-native::-webkit-datetime-edit,
+    .pill-native::-webkit-datetime-edit-fields-wrapper,
+    .pill-native::-webkit-datetime-edit-text,
+    .pill-native::-webkit-datetime-edit-month-field,
+    .pill-native::-webkit-datetime-edit-day-field,
+    .pill-native::-webkit-datetime-edit-year-field {
+      color: transparent;
+      -webkit-text-fill-color: transparent;
     }
     .pill:focus-within {
       /* Flush against the pill's own border (no outline-offset) so this
@@ -346,7 +405,8 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     return html`<p class="row">
       Last changed
       <span class="pill">
-        <span class="pill-label">${this._formatDate(lastChanged)}</span>
+        <span class="pill-backing" aria-hidden="true"></span>
+        <span class="pill-label cover">${this._formatDate(lastChanged)}</span>
         <input
           class="pill-native"
           type="date"
