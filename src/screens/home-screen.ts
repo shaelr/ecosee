@@ -11,7 +11,7 @@ import { formatTemp } from '../climate/home-view';
 import { systemModeGlyph } from '../climate/system-mode';
 import type { CardShape } from '../config';
 import { icons, weatherIcon } from '../icons';
-import { renderShape, shapeStyles } from '../styles/shape';
+import { renderShape, shapeStyles, equipmentClass } from '../styles/shape';
 
 /** Actions the Home Screen surfaces to the host card. `temperature` opens the
  *  Temperature Adjust overlay; `system-mode` / `weather` / `fan` / `menu` open later
@@ -96,7 +96,17 @@ export class EcoseeHomeScreen extends LitElement {
        padding here ballooned on wide windows and collapsed the content (the real
        issue #35 bug, in every browser). overflow: hidden keeps the box square; the
        squircle surface is drawn by the inline SVG (.shape) below — no background or
-       border-radius here, so the superellipse, its glow and any clip trace one curve. */
+       border-radius here, so the superellipse, its glow and any clip trace one curve.
+       This rule's own width/height are exactly what the "Home Screen sometimes
+       renders tiny" reports turned out to be losing the cascade against — this
+       element's class list used to include the bare equipment-status string
+       directly (render() interpolated view.equipment straight in), and "fan"
+       collided with the unrelated .fan selector below (the top-row
+       Fan-shortcut button's own sizing), which ALSO matched this element
+       whenever it carried a literal "fan" class, collapsing .screen down to
+       a 9.5cqw icon's worth of space. render() now applies equipmentClass's
+       "equip-" prefixed form instead (styles/shape.ts), which cannot collide
+       with any ordinary UI class. */
       .screen {
         container-type: inline-size;
         position: relative;
@@ -125,11 +135,11 @@ export class EcoseeHomeScreen extends LitElement {
         fill: none;
         stroke: currentColor;
       }
-      .screen.cooling .glow {
+      .screen.equip-cooling .glow {
         display: block;
         color: var(--ecosee-cool, #49b6ea);
       }
-      .screen.heating .glow {
+      .screen.equip-heating .glow {
         display: block;
         color: var(--ecosee-heat, #f3a13c);
       }
@@ -675,7 +685,7 @@ export class EcoseeHomeScreen extends LitElement {
     if (!view) return nothing;
 
     return html`
-      <div class="screen ${view.equipment ?? ''}" part="screen">
+      <div class="screen ${equipmentClass(view.equipment)}" part="screen">
         ${this._renderShape()}
         ${
           view.equipment

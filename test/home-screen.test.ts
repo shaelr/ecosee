@@ -556,3 +556,59 @@ describe('Home Screen foot cluster (air quality + UV index)', () => {
     expect(foot!.childElementCount).toBe(1);
   });
 });
+
+// Regression suite for the "Home Screen sometimes renders tiny" reports.
+// Root cause, found via an owner's own DevTools inspection: .screen's class
+// list used to include the bare equipment-status string directly
+// (`class="screen ${view.equipment ?? ''}"`), and 'fan' (one of the four
+// EquipmentStatus values) collided with the unrelated `.weather, .fan`
+// selector — the shared top-row icon-button sizing rule (9.5cqw square,
+// meant only for the small Fan-shortcut button) — which ALSO matched
+// .screen itself whenever the equipment status was "fan" (fan running, no
+// active heating/cooling), collapsing the entire 460px canvas down to icon
+// size. Fixed by routing the class through `equipmentClass` (styles/shape.ts),
+// which prefixes it ("equip-fan") so it can never collide with an ordinary
+// UI class again.
+describe('Home Screen — equipment-status class never collides with an unrelated UI class', () => {
+  function screenRoot(el: EcoseeHomeScreen): HTMLDivElement {
+    return el.shadowRoot!.querySelector('.screen') as HTMLDivElement;
+  }
+  function fanButton(el: EcoseeHomeScreen): HTMLButtonElement {
+    return el.shadowRoot!.querySelector('.fan') as HTMLButtonElement;
+  }
+
+  it('never carries the bare "fan" class on .screen — the exact collision that caused the bug', async () => {
+    const el = await mount(view({ equipment: 'fan' }));
+    expect(screenRoot(el).classList.contains('fan')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-fan')).toBe(true);
+  });
+
+  it('.screen keeps its own fixed-canvas size even while equipment is "fan" (the actual symptom)', async () => {
+    const el = await mount(view({ equipment: 'fan', fanAvailable: true }));
+    // happy-dom doesn't compute real layout/cqw, so this asserts the
+    // structural guarantee the bug broke: .screen and the top-row Fan
+    // button are never the same element, and only .screen carries the
+    // fixed-canvas class — not a shared "fan" class both would match.
+    const screen = screenRoot(el);
+    const fan = fanButton(el);
+    expect(screen).not.toBeNull();
+    expect(fan).not.toBeNull();
+    expect(screen).not.toBe(fan);
+    expect(screen.classList.contains('fan')).toBe(false);
+  });
+
+  it('never carries the bare "cooling"/"heating"/"idle" class either, for the same reason', async () => {
+    for (const equipment of ['cooling', 'heating', 'idle'] as const) {
+      const el = await mount(view({ equipment }));
+      expect(screenRoot(el).classList.contains(equipment)).toBe(false);
+      expect(screenRoot(el).classList.contains(`equip-${equipment}`)).toBe(true);
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('carries no equipment modifier class at all when equipment is null', async () => {
+    const el = await mount(view({ equipment: null }));
+    const classes = [...screenRoot(el).classList];
+    expect(classes).toEqual(['screen']);
+  });
+});

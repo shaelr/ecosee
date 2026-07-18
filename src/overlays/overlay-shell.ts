@@ -4,7 +4,7 @@ import type { EquipmentStatus } from '../climate/home-view';
 import type { CardShape } from '../config';
 import { icons } from '../icons';
 import type { TabBarModel, TabIcon, TabTarget } from '../menu/tab-bar';
-import { renderShape, shapeStyles } from '../styles/shape';
+import { renderShape, shapeStyles, equipmentClass } from '../styles/shape';
 import { emitOverlayDismiss } from './overlay-dismiss';
 
 /** Section-tab glyphs. The gear (Main Menu affordance) doubles as the System
@@ -101,7 +101,14 @@ export class EcoseeOverlay extends LitElement {
        it uses the Home Screen's full-strength glow (no standby dimming). Without this
        the Home Screen's own glow simply isn't there the moment any overlay opens (it
        isn't mounted then), so the "system is running" cue vanished while adjusting
-       the temperature. */
+       the temperature. The reveal class is equipmentClass's "equip-" prefixed
+       form (styles/shape.ts), not the bare status string — see
+       home-screen.ts's own .screen doc comment for why: a bare "fan" class
+       there collided with an unrelated .fan tab-bar-icon selector and
+       collapsed the whole canvas. This shell has no such collision today
+       (its tab bar uses .tab, not bare status-name classes), but carries
+       the same fix for consistency and so the same bug can't resurface
+       here later. */
       .shape .glow {
         display: none;
       }
@@ -109,11 +116,11 @@ export class EcoseeOverlay extends LitElement {
         fill: none;
         stroke: currentColor;
       }
-      .shell.cooling .glow {
+      .shell.equip-cooling .glow {
         display: block;
         color: var(--ecosee-cool, #49b6ea);
       }
-      .shell.heating .glow {
+      .shell.equip-heating .glow {
         display: block;
         color: var(--ecosee-heat, #f3a13c);
       }
@@ -255,7 +262,7 @@ export class EcoseeOverlay extends LitElement {
   }
 
   override render(): TemplateResult {
-    const classes = ['shell', this.tabs?.available ? 'tabbed' : '', this.equipment ?? '']
+    const classes = ['shell', this.tabs?.available ? 'tabbed' : '', equipmentClass(this.equipment)]
       .filter(Boolean)
       .join(' ');
     return html`

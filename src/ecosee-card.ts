@@ -610,7 +610,22 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  layer of insurance here (500ms/2000ms timeout backstops, a `_nav` trigger)
    *  had been added chasing that exact symptom before its real cause was found;
    *  it's gone because it mechanistically could never have fixed it — re-running
-   *  this function doesn't touch `<ecosee-home-screen>`'s own box at all. */
+   *  this function doesn't touch `<ecosee-home-screen>`'s own box at all.
+   *
+   *  Third root cause, found after the `:host` fix above still didn't fully
+   *  resolve continued reports: `home-screen.ts`'s own `.screen` — inside its
+   *  now-correctly-sized `:host` — was itself losing a CSS cascade fight.
+   *  `render()` used to interpolate the raw Equipment Status string directly
+   *  into `.screen`'s class list (`class="screen ${equipment ?? ''}"`), and
+   *  `'fan'` collided with the completely unrelated `.fan` top-row-button
+   *  selector (`.weather, .fan { width: 9.5cqw; height: 9.5cqw; }`) — which
+   *  then ALSO matched `.screen` itself whenever the equipment status was
+   *  "fan" (fan running, no active heating/cooling), collapsing the entire
+   *  460px canvas down to icon size. Confirmed the same way: an owner's own
+   *  DevTools inspection caught the exact rule winning the cascade. See
+   *  `styles/shape.ts`'s `equipmentClass` for the fix (an `equip-` prefixed
+   *  class that can't collide with an ordinary UI class) and
+   *  `home-screen.ts`'s own `.screen` doc comment for the full account. */
   private _syncDeviceScale(): void {
     const width = this.clientWidth;
     const styles = getComputedStyle(this);

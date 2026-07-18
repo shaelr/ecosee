@@ -87,7 +87,7 @@ describe('overlay shell — equipment glow (ADR-0011)', () => {
     await shell.updateComplete;
     const root = shell.shadowRoot!;
     expect(root.querySelector('svg.shape .glow')).not.toBeNull();
-    expect(root.querySelector('.shell.cooling')).not.toBeNull();
+    expect(root.querySelector('.shell.equip-cooling')).not.toBeNull();
     expect(root.querySelector('.sr-only')?.textContent).toBe('Cooling');
   });
 
@@ -96,7 +96,7 @@ describe('overlay shell — equipment glow (ADR-0011)', () => {
     shell.equipment = 'heating';
     await shell.updateComplete;
     const root = shell.shadowRoot!;
-    expect(root.querySelector('.shell.heating')).not.toBeNull();
+    expect(root.querySelector('.shell.equip-heating')).not.toBeNull();
     expect(root.querySelector('.sr-only')?.textContent).toBe('Heating');
   });
 
@@ -106,11 +106,27 @@ describe('overlay shell — equipment glow (ADR-0011)', () => {
     await shell.updateComplete;
     // 'idle' is not a reveal class (glow stays hidden) but is still announced, matching
     // the Home and Standby screens.
-    expect(shell.shadowRoot!.querySelector('.shell.cooling, .shell.heating')).toBeNull();
+    expect(
+      shell.shadowRoot!.querySelector('.shell.equip-cooling, .shell.equip-heating'),
+    ).toBeNull();
     expect(shell.shadowRoot!.querySelector('.sr-only')?.textContent).toBe('Idle');
 
     shell.equipment = null;
     await shell.updateComplete;
     expect(shell.shadowRoot!.querySelector('.sr-only')).toBeNull();
+  });
+
+  // Regression guard: the "Home Screen sometimes renders tiny" bug's root
+  // cause — a bare equipment-status class colliding with an unrelated
+  // same-named UI class elsewhere in the shadow root. This shell has no such
+  // collision today (its tab bar uses .tab, not bare status-name classes),
+  // but locks in that the raw status string is never used as a class on its
+  // own, so the same category of bug can't resurface here silently.
+  it('never carries the bare equipment-status string as its own class ("fan", "idle", etc.)', async () => {
+    const shell = await mountShell();
+    shell.equipment = 'fan';
+    await shell.updateComplete;
+    expect(shell.shadowRoot!.querySelector('.shell.fan')).toBeNull();
+    expect(shell.shadowRoot!.querySelector('.shell.equip-fan')).not.toBeNull();
   });
 });

@@ -10,7 +10,7 @@ import type { HomeView, EquipmentStatus } from '../../src/climate/home-view';
 // `<svg>` template into nested Lit `html` fragments, which Lit parses in the
 // XHTML namespace. The browser then treats `<g>`/`<path>`/`<clipPath>` as inert
 // unknown HTML inside the SVG and paints nothing. The reveal CSS keyed to the
-// `.screen.cooling` / `.screen.heating` class was fine all along.
+// `.screen.equip-cooling` / `.screen.equip-heating` class was fine all along.
 //
 // The jsdom/happy-dom guards only see the DOM tree, not paint, and three
 // Gecko-vs-Blink regressions (#35/#52, #74, #85) shipped that way. This suite

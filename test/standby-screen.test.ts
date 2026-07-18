@@ -124,31 +124,43 @@ describe('Standby Screen equipment edge glow (issue #90)', () => {
     expect(glowGroup(el)!.querySelectorAll('path')).toHaveLength(3);
   });
 
-  it('reveals the glow while cooling — the `.screen` root carries the cooling class', async () => {
+  it('reveals the glow while cooling — the `.screen` root carries the equip-cooling class', async () => {
     const el = await mount(view({ equipment: 'cooling' }));
-    expect(screenRoot(el).classList.contains('cooling')).toBe(true);
-    expect(screenRoot(el).classList.contains('heating')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-cooling')).toBe(true);
+    expect(screenRoot(el).classList.contains('equip-heating')).toBe(false);
     expect(srLabel(el)?.textContent?.trim()).toBe('Cooling');
   });
 
-  it('reveals the glow while heating — the `.screen` root carries the heating class', async () => {
+  it('reveals the glow while heating — the `.screen` root carries the equip-heating class', async () => {
     const el = await mount(view({ equipment: 'heating' }));
-    expect(screenRoot(el).classList.contains('heating')).toBe(true);
-    expect(screenRoot(el).classList.contains('cooling')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-heating')).toBe(true);
+    expect(screenRoot(el).classList.contains('equip-cooling')).toBe(false);
     expect(srLabel(el)?.textContent?.trim()).toBe('Heating');
   });
 
-  it('shows NO glow reveal while idle (no cooling/heating class — intentional, not a bug)', async () => {
+  it('shows NO glow reveal while idle (no equip-cooling/equip-heating class — intentional, not a bug)', async () => {
     const el = await mount(view({ equipment: 'idle' }));
-    expect(screenRoot(el).classList.contains('cooling')).toBe(false);
-    expect(screenRoot(el).classList.contains('heating')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-cooling')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-heating')).toBe(false);
   });
 
   it('shows NO glow reveal when equipment status is absent', async () => {
     const el = await mount(view({ equipment: null }));
-    expect(screenRoot(el).classList.contains('cooling')).toBe(false);
-    expect(screenRoot(el).classList.contains('heating')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-cooling')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-heating')).toBe(false);
     expect(srLabel(el)).toBeNull();
+  });
+
+  // Regression guard: the "Home Screen sometimes renders tiny" bug's root
+  // cause — a bare equipment-status class colliding with an unrelated
+  // same-named UI class elsewhere in the shadow root. This screen has no such
+  // collision today, but locks in that the raw status string is never used
+  // as a class on its own, so the same category of bug can't resurface here
+  // silently.
+  it('never carries the bare equipment-status string as its own class ("fan", "idle", etc.)', async () => {
+    const el = await mount(view({ equipment: 'fan' }));
+    expect(screenRoot(el).classList.contains('fan')).toBe(false);
+    expect(screenRoot(el).classList.contains('equip-fan')).toBe(true);
   });
 });
 

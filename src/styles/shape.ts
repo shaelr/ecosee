@@ -1,5 +1,6 @@
 import { css, html, svg, nothing, type CSSResult, type TemplateResult } from 'lit';
 import type { CardShape } from '../config';
+import type { EquipmentStatus } from '../climate/home-view';
 
 /**
  * The device's outer silhouette, shared by every surface (issue #76). One
@@ -96,13 +97,35 @@ export const shapeStyles: CSSResult = css`
   }
 `;
 
+/** Turn an Equipment Status into the modifier class a surface's own root
+ *  element carries to key its glow reveal CSS off — `.screen.equip-cooling
+ *  .glow`, `.shell.equip-heating .glow`, etc. — used by `home-screen.ts`,
+ *  `standby-screen.ts`, and `overlay-shell.ts` alike (the three surfaces
+ *  that opt into the glow). `equip-` prefixed rather than the bare status
+ *  name: a bare `class="screen ${equipment ?? ''}"` let the status string
+ *  double as an arbitrary CSS class, and `'fan'` (one of the four
+ *  `EquipmentStatus` values) collided with home-screen.ts's own unrelated
+ *  `.fan` selector — the shared top-row icon-button sizing rule
+ *  (`.weather, .fan { width: 9.5cqw; height: 9.5cqw; }`), meant only for
+ *  the small Fan-shortcut button, ALSO matched the screen's own root
+ *  whenever the equipment status was "fan" (fan running with no active
+ *  heating/cooling), collapsing the entire 460px canvas down to icon size.
+ *  Root cause of the "Home Screen sometimes renders tiny" reports —
+ *  confirmed via an owner's own DevTools inspection showing the rule
+ *  winning the cascade. `null`/`undefined` (no expressible status) returns
+ *  `''`, same as before this existed. */
+export function equipmentClass(equipment: EquipmentStatus | null | undefined): string {
+  return equipment ? `equip-${equipment}` : '';
+}
+
 /** Options for {@link renderShape}. */
 export interface ShapeOptions {
   /**
    * Draw the equipment edge glow group (three stacked strokes of the same curve,
    * clipped to the outline). Hidden by default and revealed/colored by the
-   * `.screen.cooling` / `.screen.heating` (or `.shell.*`) class the calling
-   * surface owns; the caller also gates this on the config `equipment_glow`
+   * `.screen.equip-cooling` / `.screen.equip-heating` (or `.shell.*`) class
+   * the calling surface owns — see {@link equipmentClass} for how that class
+   * is built; the caller also gates this on the config `equipment_glow`
    * toggle (absent ⇒ shown, unchanged from before that key existed).
    */
   glow?: boolean;

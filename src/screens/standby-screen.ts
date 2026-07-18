@@ -4,7 +4,7 @@ import type { EquipmentStatus } from '../climate/home-view';
 import { formatTemp } from '../climate/home-view';
 import type { CardShape } from '../config';
 import { weatherIcon } from '../icons';
-import { renderShape, shapeStyles } from '../styles/shape';
+import { renderShape, shapeStyles, equipmentClass } from '../styles/shape';
 
 /**
  * The already-degraded data the Standby Screen renders. A sibling of `HomeView`
@@ -134,7 +134,13 @@ export class EcoseeStandbyScreen extends LitElement {
        reveal rule, dimming the glow into the standby display's low-brightness idle
        palette (the device dims the whole screen in standby). Expressed as opacity —
        not a new shape variant — so the shared glow markup and currentColor chain are
-       untouched. Idle has no reveal rule by design, so it stays glow-less. */
+       untouched. Idle has no reveal rule by design, so it stays glow-less.
+       The reveal class is equipmentClass's "equip-" prefixed form
+       (styles/shape.ts), not the bare status string — see home-screen.ts's
+       own .screen doc comment for why: a bare "fan" class there collided
+       with an unrelated .fan selector and collapsed the whole canvas. This
+       screen has no such collision today, but carries the same fix for
+       consistency and so the same class of bug can't resurface here later. */
       .shape .glow {
         display: none;
       }
@@ -142,12 +148,12 @@ export class EcoseeStandbyScreen extends LitElement {
         fill: none;
         stroke: currentColor;
       }
-      .screen.cooling .glow {
+      .screen.equip-cooling .glow {
         display: block;
         color: var(--ecosee-cool, #49b6ea);
         opacity: var(--ecosee-standby-glow-opacity, 0.6);
       }
-      .screen.heating .glow {
+      .screen.equip-heating .glow {
         display: block;
         color: var(--ecosee-heat, #f3a13c);
         opacity: var(--ecosee-standby-glow-opacity, 0.6);
@@ -240,7 +246,7 @@ export class EcoseeStandbyScreen extends LitElement {
   override render(): TemplateResult {
     const view = this.view;
     return html`
-      <div class="screen ${view?.equipment ?? ''}" part="screen">
+      <div class="screen ${equipmentClass(view?.equipment)}" part="screen">
         ${renderShape({ glow: this.equipmentGlow ?? true, shape: this.cornerStyle ?? 'squircle' })}
         ${
           view?.equipment
