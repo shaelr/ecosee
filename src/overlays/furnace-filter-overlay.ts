@@ -170,15 +170,43 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       border: none;
       appearance: none;
       -webkit-appearance: none;
-      background: none;
+      background: transparent;
       color: transparent;
       font: inherit;
-      opacity: 0;
+      cursor: pointer;
+      /* Suppress the browser's own default focus ring on the native control
+         itself — .pill:focus-within below draws the one visible focus cue,
+         now that removing opacity: 0 (next comment) lets the native ring
+         actually paint instead of being hidden along with everything else. */
+      outline: none;
+    }
+    /* No opacity: 0 — some mobile browsers (notably iOS Safari) treat a
+       near-zero-opacity form control as invisible enough to suppress its own
+       native picker/keyboard from opening on tap, even though the element
+       still receives focus (the double-outline/dead-tap bug this replaced).
+       Fully transparent color/background achieves the same invisible LOOK
+       without opacity, so the platform still treats it as a real, interactive
+       control. The calendar-icon affordance date inputs render internally is
+       hidden the same way rather than left to clash with the pill. */
+    .pill-native::-webkit-calendar-picker-indicator {
+      background: transparent;
       cursor: pointer;
     }
+    /* A date input's individual segment (month/day/year) shows a highlighted
+       "currently selected" state while focused/edited via keyboard or tap —
+       rendered through ::selection, which color: transparent on the input
+       itself does NOT reach (selected-text rendering is a separate paint
+       pass with its own default background/foreground). Left alone, tapping
+       or tabbing to the pill briefly reveals a solid highlighted box with
+       real digits in it, defeating the whole invisible-input trick. */
+    .pill-native::selection {
+      background: transparent;
+      color: transparent;
+    }
     .pill:focus-within {
+      /* Flush against the pill's own border (no outline-offset) so this
+         reads as the border getting thicker, not a second detached ring. */
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
-      outline-offset: 0.6cqw;
     }
 
     /* Large call-to-action button (ecobee app's own "I've changed my filter"

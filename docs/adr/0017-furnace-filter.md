@@ -248,3 +248,42 @@ vertical budget; `.content`'s gap/margin were trimmed further regardless
 (6u→5u gap, 4.5u→3u top margin, row font-size 5.2cqw→4.8cqw) to keep a
 comfortable cushion above the tab bar rather than running it right to the
 edge.
+
+## Correction (post-ship): the pills didn't actually respond to a tap
+
+**Origin**: owner report on a real device — tapping either pill did nothing,
+and focusing one drew a visible double ring instead of a single thicker one.
+
+**Double ring**: `.pill:focus-within`'s `outline-offset: 0.6cqw` pushed the
+focus outline outside the pill's own border with a visible gap between them
+— two concentric rings rather than one thicker line. Removed the offset
+(defaults to `0`, flush against the border).
+
+**Dead tap**: `.pill-native` used `opacity: 0` to stay invisible, the same
+trick `fan-overlay.ts`'s `.select-native` runtime dropdown already uses
+successfully — but a native `<input type="date">`/`<input type="number">`
+isn't a `<select>`, and mobile WebKit in particular is documented to treat a
+near-zero-opacity date/number input as invisible enough that it won't open
+its own picker/keyboard on tap, even though the element still receives
+focus. Switched to `background: transparent; color: transparent;` (invisible
+by having nothing to paint, not by an opacity multiplier) plus explicit
+`outline: none` (the native focus ring would otherwise become visible again
+now that opacity isn't hiding it) and
+`::-webkit-calendar-picker-indicator { background: transparent; }` (the
+date input's own calendar-icon affordance, which `color`/`background` on the
+host element don't reach).
+
+One residual, accepted gap: a date input's actively-edited segment
+(month/day/year) renders its own highlighted "selected" box using the
+browser's internal UA styling for that state — not the standard
+`::selection` pseudo-element (tried; had no effect), and not something
+public CSS can suppress. It only shows during direct keyboard/segment
+editing (Tab-focus + typing), not the primary tap-to-open-the-picker flow,
+and browsers deliberately don't expose a way to fully hide it — the same
+security reasoning that made `opacity: 0` risky in the first place also
+rules out making a date input's active-editing state fully invisible.
+Verification of the tap-opens-the-real-picker behavior itself was also
+necessarily limited: headless Chromium (this project's only available
+browser automation target) doesn't render native OS-level picker overlays
+at all, so the fix here is grounded in documented cross-browser behavior
+rather than a captured screenshot of the picker actually opening.
