@@ -281,6 +281,33 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 
+  // iOS WebKit doesn't implement showPicker() for date/time inputs at all
+  // (WebKit bug 261703) — it's a silent no-op there. A WebKit engineer's own
+  // suggested workaround is to call .focus() instead, which iOS ties its
+  // native picker sheet to regardless of what triggered the focus. Calling
+  // both means desktop engines get showPicker()'s "always opens, regardless
+  // of where in the pill the tap landed" behavior (ADR-0017) while iOS still
+  // gets a working picker via .focus() even though its own showPicker() does
+  // nothing.
+  it('clicking the pill button also focuses the hidden input directly (the iOS workaround)', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const input = dateInput(el)!;
+    datePillButton(el)!.click();
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  });
+
+  it('still focuses the input even when showPicker is unsupported by the environment', async () => {
+    const el = await mount(model({ canEditLastChanged: true }), {
+      lastChangedEntity: 'date.filter',
+    });
+    const input = dateInput(el)!;
+    expect((input as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
+    datePillButton(el)!.click();
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  });
+
   it('does not throw when showPicker is unsupported by the environment', async () => {
     const el = await mount(model({ canEditLastChanged: true }), {
       lastChangedEntity: 'date.filter',

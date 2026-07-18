@@ -72,6 +72,33 @@ describe('Schedule Add Block overlay — Start/End time fields', () => {
     expect(endSpy).toHaveBeenCalledTimes(1);
   });
 
+  // iOS WebKit doesn't implement showPicker() for date/time inputs at all
+  // (WebKit bug 261703) — it's a silent no-op there. A WebKit engineer's own
+  // suggested workaround is to call .focus() instead, which iOS ties its
+  // native picker sheet to regardless of what triggered the focus. Calling
+  // both means desktop engines get showPicker()'s "always opens, regardless
+  // of where in the pill the tap landed" behavior (ADR-0017) while iOS still
+  // gets a working picker via .focus() even though its own showPicker() does
+  // nothing.
+  it('clicking a pill button also focuses its own hidden input directly (the iOS workaround)', async () => {
+    const el = await mount();
+    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
+    (fieldRow(el, 1).querySelector('.pill-button') as HTMLButtonElement).click();
+    expect(el.shadowRoot!.activeElement).toBe(startInput);
+
+    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
+    (fieldRow(el, 2).querySelector('.pill-button') as HTMLButtonElement).click();
+    expect(el.shadowRoot!.activeElement).toBe(endInput);
+  });
+
+  it('still focuses the input even when showPicker is unsupported by the environment', async () => {
+    const el = await mount();
+    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
+    expect((startInput as unknown as { showPicker?: unknown }).showPicker).toBeUndefined();
+    (fieldRow(el, 1).querySelector('.pill-button') as HTMLButtonElement).click();
+    expect(el.shadowRoot!.activeElement).toBe(startInput);
+  });
+
   it('does not throw when showPicker is unavailable on the input (older engine)', async () => {
     const el = await mount();
     const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;

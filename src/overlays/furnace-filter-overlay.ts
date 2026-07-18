@@ -336,15 +336,25 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
    *  on the hidden `.date-native` input, rather than relying on a native tap
    *  landing on a form control at all (there is no visible form control to
    *  tap here, by design — see `.pill-button`'s own CSS doc comment).
-   *  showPicker (Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox
-   *  101+) is declared on TypeScript's own HTMLInputElement type but not
-   *  guaranteed present at runtime on an older engine, hence the explicit
-   *  existence check rather than a bare call; wrapped in try/catch too
-   *  since it can throw (rate-limited, not a genuine user gesture) — either
-   *  way there's simply nothing to open in that case. */
+   *
+   *  Two calls, for two different engines: `.focus()` unconditionally first
+   *  — iOS WebKit doesn't implement `showPicker()` for date/time inputs at
+   *  all (WebKit bug 261703, open since 2023; only file inputs support it
+   *  there) and is a silent no-op there, but ties its native picker sheet to
+   *  the input receiving real focus, from *any* source, not just a raw tap —
+   *  a WebKit engineer's own suggested workaround for the bug. Then
+   *  `showPicker()` itself, feature-detected (`typeof input.showPicker ===
+   *  'function'`, Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox
+   *  101+) and wrapped in try/catch (the spec allows it to throw when
+   *  rate-limited or called outside a genuine user gesture) — it forces the
+   *  calendar open unconditionally on engines that support it, where
+   *  `.focus()` alone would not (see ADR-0017's "showPicker() forces the
+   *  calendar open on every tap" correction). */
   private _openDatePicker(): void {
     const input = this._dateInput;
-    if (!input || typeof input.showPicker !== 'function') return;
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker !== 'function') return;
     try {
       input.showPicker();
     } catch {

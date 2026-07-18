@@ -433,3 +433,50 @@ click time — deferred pending confirmation this reproduces on a real device
 and not just headless Chromium testing, since it's a real jump in
 complexity (a DOM node Lit doesn't own or reactively re-render) for what
 may end up being a headless-testing-only artifact.
+
+## Correction (real-device testing): `.focus()` alongside `showPicker()` — iOS doesn't implement the latter for date/time
+
+**Origin**: real iOS device testing (the Home Assistant iOS app's embedded
+WKWebView) reported the Last Changed date field's calendar not opening at
+all on tap. The same architecture applied to Schedule's Start/End time
+fields (`schedule-add-block-overlay.ts`) and the Start Time picker
+(`schedule-start-time-overlay.ts`, ported to match after the owner liked
+the style) showed the identical symptom, while every field still using a
+directly-tappable native control (`.select-native`'s Interval pill, the Fan
+screen's runtime dropdown, Add to Schedule's Comfort Setting) opened fine.
+
+A first attempt at a fix reverted the button+hidden-input split entirely,
+back to a direct-tap native input laid transparently over the pill (this
+correction's own commit was later reverted once its cost became clear —
+see below). Root cause, confirmed via WebKit's own issue tracker: `showPicker()`
+is simply unimplemented for `date`/`time` inputs on iOS WebKit — WebKit bug
+261703, open since 2023, per a WebKit engineer's own comment: "only the
+file input's `showPicker()` works on iOS." The call doesn't throw (it's
+spec-present, passes feature detection, and the existing `try`/`catch`
+never fired) — it's a silent no-op.
+
+**Why the direct-tap revert was the wrong fix**: it undid three separate,
+hard-won corrections above just to solve this — the `opacity: 0`-suppresses-
+the-picker-on-mobile-WebKit finding, the "a full-cover invisible input
+reliably lands clicks in type-a-segment mode instead of opening the
+calendar" finding, and the Chrome bleed-through bug this section's own
+button rewrite exists to dodge (confirmed, in that same correction, to
+still occur even when `showPicker()` was called from the input's *own*
+click handler — the bleed-through isn't specific to a raw tap landing
+directly on the input, so making the input the raw tap target again buys
+iOS nothing on the Chrome side while giving back everything on the desktop
+side).
+
+**The actual fix**, per the same WebKit engineer's own suggested workaround
+for bug 261703: call `.focus()` on the hidden input, not just `showPicker()`.
+iOS ties its native picker sheet to the input receiving *real focus*, from
+*any* source — not specifically a raw tap, and not specifically
+`showPicker()`. A `.focus()` call from the *button's* click handler (the
+existing architecture, unchanged) counts. `_openDatePicker()`/
+`_openTimePicker()` now call `input.focus()` unconditionally first, then
+attempt `input.showPicker()` as before (feature-detected, try/catch) — iOS
+gets a working picker via the focus call (its own `showPicker()` still
+does nothing, harmlessly), desktop keeps the exact button+hidden-input
+architecture — and all its accumulated fixes — unchanged, with `showPicker()`
+still forcing the picker open regardless of tap position as the "showPicker()
+forces the calendar open on every tap" correction above established.
