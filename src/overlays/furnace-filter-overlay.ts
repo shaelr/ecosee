@@ -1,7 +1,6 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { markFilterChangedCall, type FurnaceFilterModel } from '../climate/furnace-filter';
-import { icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 
 /**
@@ -78,12 +77,6 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       justify-content: center;
       gap: calc(6 * var(--ecosee-u, 4.6px));
       margin-top: calc(4.5 * var(--ecosee-u, 4.6px));
-    }
-
-    .icon {
-      width: 16cqw;
-      height: 16cqw;
-      color: var(--ecosee-accent, #62cfe9);
     }
 
     .readout {
@@ -165,7 +158,6 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       <div class="filter">
         <h2 class="title">Furnace Filter</h2>
         <div class="content">
-          <span class="icon" aria-hidden="true">${icons.filter}</span>
           <div class="readout">
             ${
               model.lastChanged
