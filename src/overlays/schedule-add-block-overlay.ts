@@ -1,5 +1,5 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, property, state, query } from 'lit/decorators.js';
 import type { ComfortSettingOption } from '../climate/comfort-setting';
 import { icons } from '../icons';
 
@@ -31,6 +31,12 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
   @state() private _comfortSetting = '';
   @state() private _startMinutes = 8 * 60; // 08:00, a reasonable default window…
   @state() private _endMinutes = 10 * 60; // …through 10:00.
+
+  /** The tiny, genuinely-invisible `<input type="time">` elements `.pill-button`
+   *  clicks trigger `showPicker()` on — see `.time-native`'s own CSS doc comment
+   *  and furnace-filter-overlay.ts's identical `.date-native` pattern. */
+  @query('.start-native') private _startInput?: HTMLInputElement;
+  @query('.end-native') private _endInput?: HTMLInputElement;
 
   static override styles = css`
     :host {
@@ -90,11 +96,12 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-text, #d4eff9);
     }
 
-    /* Cyan-outlined value pill; a transparent native control (select or time
-       input) is layered over it to capture taps/input while the visible label +
-       caret ride on top — the same technique fan-overlay.ts's runtime dropdown
-       uses. Opts back into pointer events (the shell makes slotted content
-       transparent so empty areas dismiss). */
+    /* Cyan-outlined value pill. Comfort Setting keeps a transparent native
+       <select> layered over it to capture taps (fan-overlay.ts's runtime
+       dropdown uses the same technique — a <select> opens its native list
+       from a tap anywhere in its box, so an invisible full-cover overlay
+       works reliably there). Opts back into pointer events (the shell makes
+       slotted content transparent so empty areas dismiss). */
     .pill {
       position: relative;
       box-sizing: border-box;
@@ -121,8 +128,7 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-accent, #62cfe9);
       pointer-events: none;
     }
-    .pill select,
-    .pill input {
+    .pill select {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -139,13 +145,55 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       cursor: pointer;
       pointer-events: auto;
     }
+    /* Flush against the pill's own border (no outline-offset) so a focused
+       pill reads as its border getting thicker, not a second detached ring
+       floating outside it (the double-outline this replaced). */
     .pill:focus-within {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
-      outline-offset: 0.6cqw;
+      outline-offset: 0;
     }
     .select-native option {
       color: var(--ecosee-text, #d4eff9);
       background: var(--ecosee-bg, #0a0d10);
+    }
+
+    /* Start/End: an ordinary opaque <button> carrying the pill's own visual
+       look, not a styled label with an invisible native time input layered
+       on top — unlike a <select>, a tap anywhere on a time input's box only
+       focuses whatever internal segment (hour/minute) happens to sit under
+       the pointer, with no visible native chrome to show which segment that
+       is once the input itself is invisible. A real button sidesteps that:
+       tapping it calls .time-native's showPicker() (below) explicitly,
+       opening the browser's own time picker. Mirrors furnace-filter-overlay.ts's
+       identical pill-button/date-native split for the same reason. */
+    .pill-button {
+      appearance: none;
+      background: none;
+      border: none;
+      margin: 0;
+      padding: 0;
+      font: inherit;
+      font-size: 5cqw;
+      font-weight: 600;
+      color: var(--ecosee-text-accent, #62cfe9);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    /* The actual <input type="time"> backing the button above: genuinely tiny
+       and invisible, never the tap target and never directly focused by a
+       user (tabindex="-1", aria-hidden="true"); .pill-button's click handler
+       calls its showPicker() explicitly. */
+    .time-native {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
     }
 
     .error {
@@ -198,6 +246,25 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
 
   private _onComfortChange(event: Event): void {
     this._comfortSetting = (event.target as HTMLSelectElement).value;
+  }
+
+  /** `.pill-button`'s click handler for Start/End — explicitly opens the
+   *  native time picker on the hidden `.time-native` input, rather than
+   *  relying on a tap landing on a visible form control (there is none, by
+   *  design — see `.pill-button`'s own CSS doc comment). showPicker
+   *  (Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox 101+) is
+   *  declared on TypeScript's own HTMLInputElement type but not guaranteed
+   *  present at runtime on an older engine, hence the explicit existence
+   *  check rather than a bare call; wrapped in try/catch too since it can
+   *  throw (rate-limited, not a genuine user gesture) — either way there's
+   *  simply nothing to open in that case. */
+  private _openTimePicker(input?: HTMLInputElement): void {
+    if (!input || typeof input.showPicker !== 'function') return;
+    try {
+      input.showPicker();
+    } catch {
+      // See doc comment above — no recovery needed.
+    }
   }
 
   private _onStartChange(event: Event): void {
@@ -253,12 +320,21 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
           <div class="field-row">
             <span class="field-label">Start</span>
             <span class="pill">
-              <span class="pill-label">${this._timeString(this._startMinutes)}</span>
+              <button
+                type="button"
+                class="pill-button"
+                aria-label="Start time, ${this._timeString(this._startMinutes)}"
+                @click=${() => this._openTimePicker(this._startInput)}
+              >
+                ${this._timeString(this._startMinutes)}
+              </button>
               <input
+                class="time-native start-native"
                 type="time"
                 step="1800"
+                tabindex="-1"
+                aria-hidden="true"
                 .value=${this._timeString(this._startMinutes)}
-                aria-label="Start time"
                 @change=${this._onStartChange}
               />
             </span>
@@ -266,12 +342,21 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
           <div class="field-row">
             <span class="field-label">End</span>
             <span class="pill">
-              <span class="pill-label">${this._timeString(this._endMinutes)}</span>
+              <button
+                type="button"
+                class="pill-button"
+                aria-label="End time, ${this._timeString(this._endMinutes)}"
+                @click=${() => this._openTimePicker(this._endInput)}
+              >
+                ${this._timeString(this._endMinutes)}
+              </button>
               <input
+                class="time-native end-native"
                 type="time"
                 step="1800"
+                tabindex="-1"
+                aria-hidden="true"
                 .value=${this._timeString(this._endMinutes)}
-                aria-label="End time"
                 @change=${this._onEndChange}
               />
             </span>
