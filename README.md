@@ -385,6 +385,19 @@ domain supports it (`date`, `datetime`, `input_datetime` — a plain `sensor`
 can't be written to, so the button stays disabled unless `filter_reset_entity`
 is also set).
 
+The last-changed date and, when `filter_interval_entity` is configured, the
+interval are each also shown as a small tappable pill — tap the date to open
+your device's own date picker and set an arbitrary date (useful for
+correcting a wrong reading or backfilling history, not just marking
+"today"); tap the interval to change it directly, bounded to whatever
+range that `number` entity itself accepts. The last-changed pill only
+appears when `filter_last_changed_entity`'s own domain is directly writable
+(`date`, `datetime`, `input_datetime` — a plain `sensor` has no arbitrary
+date to set, only whatever the button/script triggered by
+`filter_reset_entity` does); the interval pill only appears when
+`filter_interval_entity` is set, since a static `filter_interval_days` has
+no entity to write to.
+
 This section replaces the tab bar's old temperature badge, which used to sit
 in the same leftmost slot and returned to the thermostat when tapped — now
 redundant with the shell's own ✕ in the top-left corner, which returns to the

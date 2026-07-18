@@ -154,7 +154,12 @@ filter-change confirmation screen. Backed by `filter_last_changed_entity` (a
 `date`/`datetime`/`input_datetime`/`sensor`), an optional
 `filter_interval_days`/`filter_interval_entity` pair, and an optional
 `filter_reset_entity` (`button`/`script`) the button triggers instead of
-writing the last-changed entity directly.
+writing the last-changed entity directly. The last-changed date and (when
+backed by a live entity) the interval are each also editable in place, as a
+small tappable pill next to their row — a native date/number picker layered
+invisibly over the pill, the same real-native-control-under-a-styled-pill
+trick the Fan screen's runtime dropdown uses — for correcting a wrong reading
+or setting up history by hand, not just marking "today."
 _Avoid_: filter screen (ambiguous with a data filter), maintenance screen.
 
 **Comfort Setting**:

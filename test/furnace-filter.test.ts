@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { toFurnaceFilterModel, markFilterChangedCall } from '../src/climate/furnace-filter';
+import {
+  toFurnaceFilterModel,
+  markFilterChangedCall,
+  setLastChangedDateCall,
+  formatIntervalUnit,
+} from '../src/climate/furnace-filter';
 import type { EcoseeCardConfig } from '../src/config';
 import type { HassEntityBase, HomeAssistant } from '../src/types/hass';
 
@@ -334,5 +339,113 @@ describe('markFilterChangedCall', () => {
 
   it('prefers filter_reset_entity even when filter_last_changed_entity is also directly writable', () => {
     expect(markFilterChangedCall('date.filter', 'button.reset_filter')?.domain).toBe('button');
+  });
+});
+
+describe('setLastChangedDateCall — manual date editing', () => {
+  it('writes an arbitrary picked date onto a date.* entity', () => {
+    const picked = new Date(2026, 0, 15);
+    const call = setLastChangedDateCall('date.filter', picked);
+    expect(call).toEqual({
+      domain: 'date',
+      service: 'set_value',
+      data: { entity_id: 'date.filter', date: '2026-01-15' },
+    });
+  });
+
+  it('writes an arbitrary picked date onto an input_datetime.* entity', () => {
+    const picked = new Date(2025, 11, 3);
+    const call = setLastChangedDateCall('input_datetime.filter', picked);
+    expect(call).toEqual({
+      domain: 'input_datetime',
+      service: 'set_datetime',
+      data: { entity_id: 'input_datetime.filter', date: '2025-12-03' },
+    });
+  });
+
+  it('returns null for a read-only sensor — never falls back to a reset entity', () => {
+    expect(setLastChangedDateCall('sensor.filter', new Date())).toBeNull();
+  });
+});
+
+describe('toFurnaceFilterModel — canEditLastChanged / intervalEdit', () => {
+  it('canEditLastChanged is true for a directly-writable entity domain, independent of filter_reset_entity', () => {
+    const config = { ...BASE_CONFIG, filter_last_changed_entity: 'date.filter' };
+    const model = toFurnaceFilterModel(hass([entity('date.filter', daysAgo(1))]), config);
+    expect(model.canEditLastChanged).toBe(true);
+  });
+
+  it('canEditLastChanged is false for a read-only sensor even with a reset entity configured', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'sensor.filter',
+      filter_reset_entity: 'button.reset_filter',
+    };
+    const model = toFurnaceFilterModel(hass([entity('sensor.filter', daysAgo(1))]), config);
+    // canMarkChanged is still true (the button works), but manual date editing isn't possible.
+    expect(model.canMarkChanged).toBe(true);
+    expect(model.canEditLastChanged).toBe(false);
+  });
+
+  it('intervalEdit is null when no filter_interval_entity is configured, even with filter_interval_days set', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_days: 90,
+    };
+    const model = toFurnaceFilterModel(hass([entity('date.filter', daysAgo(1))]), config);
+    expect(model.intervalEdit).toBeNull();
+  });
+
+  it('intervalEdit carries the raw entity value, resolved unit, and min/max/step', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([
+        entity('date.filter', daysAgo(1)),
+        entity('number.filter_interval', '6', {
+          min: 1,
+          max: 12,
+          step: 1,
+          unit_of_measurement: 'months',
+        }),
+      ]),
+      config,
+    );
+    expect(model.intervalEdit).toEqual({
+      entityId: 'number.filter_interval',
+      value: 6,
+      unit: 'months',
+      min: 1,
+      max: 12,
+      step: 1,
+    });
+  });
+
+  it('intervalEdit is null when filter_interval_entity is unavailable', () => {
+    const config = {
+      ...BASE_CONFIG,
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    };
+    const model = toFurnaceFilterModel(
+      hass([entity('date.filter', daysAgo(1)), entity('number.filter_interval', 'unavailable')]),
+      config,
+    );
+    expect(model.intervalEdit).toBeNull();
+  });
+});
+
+describe('formatIntervalUnit', () => {
+  it('pluralizes correctly for each recognized unit', () => {
+    expect(formatIntervalUnit(1, 'months')).toBe('1 month');
+    expect(formatIntervalUnit(3, 'months')).toBe('3 months');
+    expect(formatIntervalUnit(1, 'weeks')).toBe('1 week');
+    expect(formatIntervalUnit(2, 'weeks')).toBe('2 weeks');
+    expect(formatIntervalUnit(1, 'days')).toBe('1 day');
+    expect(formatIntervalUnit(90, 'days')).toBe('90 days');
   });
 });

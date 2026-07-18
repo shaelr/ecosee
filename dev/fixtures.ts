@@ -365,17 +365,35 @@ const unavailableWithAirQuality: Fixture = {
 
 // ADR-0017: the Furnace Filter Main Menu section, in its two visually distinct
 // states — within-interval, and overdue (the readout/note switch to the Heat
-// amber). Both write-back paths (`filter_reset_entity` set vs. writing
-// `filter_last_changed_entity` directly) are already covered by
-// furnace-filter.test.ts / furnace-filter-overlay.test.ts; these two exist for
-// eyeballing the layout and the overdue color switch, not the logic.
+// amber). Both use a live `filter_interval_entity` (the owner's own real
+// entity shape: a `number` helper ranged 1-12 with unit_of_measurement
+// "months") rather than a static `filter_interval_days`, so both the
+// last-changed date pill AND the interval pill render editable — the
+// fullest, most layout-constrained version of the section. Both write-back
+// paths (`filter_reset_entity` set vs. writing `filter_last_changed_entity`
+// directly) are already covered by furnace-filter.test.ts /
+// furnace-filter-overlay.test.ts; these two exist for eyeballing the layout
+// and the overdue color switch, not the logic.
+const FURNACE_FILTER_INTERVAL_ENTITY = {
+  entity_id: 'number.furnace_filter_reminder_interval',
+  state: '3',
+  attributes: {
+    min: 1,
+    max: 12,
+    step: 1,
+    mode: 'box',
+    unit_of_measurement: 'months',
+    friendly_name: 'Thermostat Furnace Filter Reminder Interval',
+  },
+};
+
 const furnaceFilterOk: Fixture = {
   label: 'Furnace Filter (on schedule)',
   config: {
     type: 'custom:ecosee-card',
     entity: 'climate.living_room',
     filter_last_changed_entity: 'date.furnace_filter_changed',
-    filter_interval_days: 90,
+    filter_interval_entity: 'number.furnace_filter_reminder_interval',
   },
   hass: makeHass({
     climate: {
@@ -398,6 +416,7 @@ const furnaceFilterOk: Fixture = {
         state: '2026-06-01',
         attributes: { friendly_name: 'Furnace Filter Changed' },
       },
+      FURNACE_FILTER_INTERVAL_ENTITY,
     ],
   }),
 };
@@ -408,7 +427,7 @@ const furnaceFilterOverdue: Fixture = {
     type: 'custom:ecosee-card',
     entity: 'climate.living_room',
     filter_last_changed_entity: 'date.furnace_filter_changed',
-    filter_interval_days: 90,
+    filter_interval_entity: 'number.furnace_filter_reminder_interval',
     filter_reset_entity: 'button.reset_furnace_filter',
   },
   hass: makeHass({
@@ -432,6 +451,7 @@ const furnaceFilterOverdue: Fixture = {
         state: '2026-02-01',
         attributes: { friendly_name: 'Furnace Filter Changed' },
       },
+      FURNACE_FILTER_INTERVAL_ENTITY,
       {
         entity_id: 'button.reset_furnace_filter',
         state: 'unknown',

@@ -175,3 +175,76 @@ spanned), `addInterval` adds months via `Date.setMonth`, calendar-correct;
 `dueDate` (`daysBetween(lastChangedStart, dueDate)`) rather than being the
 source the due date is computed from — the field stays an honest day count
 regardless of which unit the underlying entity actually reports in.
+
+## Correction (post-ship): the last-changed date and interval are editable in place
+
+**Origin**: owner correction — "i think you mis interpreted what i wanted on
+the filter menu page. you should be able to set the date last changed
+manually, as well as set the interval timing (from the entity)." The section
+as originally shipped only ever *displayed* the last-changed date and the
+computed due date; the only write path was the "I've changed my filter"
+button (always "today"). The owner wanted the last-changed date itself
+settable to an arbitrary date, and the interval settable directly, without
+leaving the section.
+
+### Interaction: a tappable pill, native picker underneath
+
+Neither this codebase nor Home Assistant's own frontend gives the Card a
+calendar-grid or number-scrubber component to compose (the editor's
+`ha-form` selectors are a *config-time* GUI, not something the Card's own
+runtime can mount) — and building one from scratch would be a large, risky
+addition for what is, realistically, an occasional correction rather than a
+frequent interaction. `fan-overlay.ts`'s minimum-runtime dropdown had
+already solved the equivalent problem for a `<select>`: a styled, static
+label sits on top for the visual, and a fully transparent *real* native
+control (`.select-native`) is layered exactly over it, `pointer-events: auto`,
+capturing the tap and opening the platform's own picker UI. The Furnace
+Filter section reuses the identical trick for two more native input types:
+`<input type="date">` for the last-changed pill and `<input type="number">`
+(bounded to the entity's own `min`/`max`/`step`) for the interval pill — free
+native picker UI, zero new picker components, and a `@change` handler that
+builds and emits the same `ServiceCall` shape every other editing Overlay
+already uses.
+
+### Two independent editability gates, not one
+
+- **Last changed** (`FurnaceFilterModel.canEditLastChanged`): true only when
+  `filter_last_changed_entity`'s own domain is directly writable
+  (`input_datetime`/`date`/`datetime` — `WRITABLE_DATE_DOMAINS`, reused from
+  `markFilterChangedCall`'s own gate). Deliberately narrower than the
+  existing `canMarkChanged` (which also considers `filter_reset_entity`) —
+  a reset entity is an opaque `button`/`script` trigger with no parameter
+  slot for "set it to *this* date," it can only ever mean "now." A
+  read-only `sensor` computed elsewhere therefore keeps the "I've changed my
+  filter" button (via the reset entity) but the date itself renders as plain
+  text, not a pill — there is nothing this Card can write an arbitrary date
+  onto.
+- **Interval** (`FurnaceFilterModel.intervalEdit`, `null` when absent): only
+  present when `filter_interval_entity` is configured and currently resolves
+  to a numeric reading. A static `filter_interval_days` has no entity behind
+  it to write to, so it stays exactly what it was — a number baked into the
+  Card's config, not something the Card can edit at runtime — and the
+  Interval row doesn't render at all in that case (no pill promising an edit
+  that can't happen).
+
+`FilterIntervalEdit` intentionally carries the interval in the entity's own
+native unit/value (e.g. `{ value: 3, unit: 'months' }`), not the
+already-day-converted `intervalDays` — editing "3 months" should read and
+write "3," not a derived ~90. The write reuses `comfort-setpoint.ts`'s
+already-exported `setNumberValueCall` verbatim (the exact same
+`number.set_value` call Comfort Setpoints itself uses) rather than
+duplicating a second copy of that one-line call builder.
+
+### Fitting the extra row
+
+Two more potentially-shown rows (Last Changed's pill, a new Interval row)
+on top of an already-tight canvas (the prior "icon removed" correction above
+was itself a fit fix) meant re-checking the worst case: last-changed pill +
+interval pill + "Was due" + "Overdue by N days" + button, five rows deep.
+Verified via the `dev/` harness at the fixed base size with the owner's own
+real entity shape (`min: 1, max: 12, unit_of_measurement: "months"`) — it
+fits with room to spare after the icon-removal correction freed enough
+vertical budget; `.content`'s gap/margin were trimmed further regardless
+(6u→5u gap, 4.5u→3u top margin, row font-size 5.2cqw→4.8cqw) to keep a
+comfortable cushion above the tab bar rather than running it right to the
+edge.

@@ -42,7 +42,7 @@ function domainOf(entityId: string): string {
  *  the section simply not being available, not a crash or a fake date). */
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function parseFilterDate(state: string): Date | null {
+export function parseFilterDate(state: string): Date | null {
   if (!state) return null;
   // A bare "YYYY-MM-DD" (date/input_datetime's date-only form) names a wall-
   // clock calendar date, not an instant — but `new Date("YYYY-MM-DD")` parses
@@ -112,8 +112,10 @@ function intervalUnitFromEntity(entity: { attributes: Record<string, unknown> })
 
 /** `"YYYY-MM-DD"` from local date components (not `toISOString`, which
  *  converts to UTC first — the same local-date convention Schedule's own
- *  `toLocalIso` uses, schedule.ts). */
-function toIsoDate(date: Date): string {
+ *  `toLocalIso` uses, schedule.ts). Exported: the overlay's native
+ *  `<input type="date">` (HTML's own date-input value format, always
+ *  "YYYY-MM-DD" regardless of locale) is seeded from this. */
+export function toIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
@@ -137,6 +139,53 @@ function resolveInterval(hass: HomeAssistant, config: EcoseeCardConfig): Resolve
   }
   const days = config.filter_interval_days;
   return days !== undefined ? { amount: days, unit: 'days' } : null;
+}
+
+/** The interval, editable from the section itself — only present when
+ *  `filter_interval_entity` is actually configured and currently resolves (a
+ *  plain `filter_interval_days` has no entity to write to, so there's nothing
+ *  to edit in that case; the section still shows the computed due date, just
+ *  without an edit affordance on it). Carries the entity's own `min`/`max`/
+ *  `step` capability attributes (confirmed against HA core's `number/const.py`
+ *  — the same attributes `comfort-setpoint.ts`'s own field reader uses) so the
+ *  overlay's native number input can be bounded to what the entity itself
+ *  accepts, and the raw value/unit as the entity itself reports them (not the
+ *  day-converted `intervalDays` above) — editing "3 months" should read and
+ *  write "3", not a derived day count. */
+export interface FilterIntervalEdit {
+  entityId: string;
+  value: number;
+  unit: IntervalUnit;
+  min: number | null;
+  max: number | null;
+  step: number;
+}
+
+function buildIntervalEdit(
+  hass: HomeAssistant,
+  entityId: string | undefined,
+): FilterIntervalEdit | null {
+  if (!entityId) return null;
+  const entity = hass.states[entityId];
+  if (!entity || UNAVAILABLE.has(entity.state)) return null;
+  const value = num(entity.state);
+  if (value === null) return null;
+  return {
+    entityId,
+    value,
+    unit: intervalUnitFromEntity(entity),
+    min: num(entity.attributes.min),
+    max: num(entity.attributes.max),
+    step: num(entity.attributes.step) ?? 1,
+  };
+}
+
+/** `"3 months"` / `"1 month"` — the entity's own resolved unit
+ *  (`intervalUnitFromEntity`), pluralized. All three recognized units are
+ *  regular plurals, so a bare `-s` trim covers the singular case. */
+export function formatIntervalUnit(amount: number, unit: IntervalUnit): string {
+  const singular = unit.slice(0, -1);
+  return `${amount} ${amount === 1 ? singular : unit}`;
 }
 
 export interface FurnaceFilterModel {
@@ -164,6 +213,16 @@ export interface FurnaceFilterModel {
    *  on a directly-writable domain. False leaves the button disabled rather
    *  than silently doing nothing on tap. */
   canMarkChanged: boolean;
+  /** Whether `filter_last_changed_entity` itself can be set to an arbitrary
+   *  (not just today's) date directly from the section — its own domain is
+   *  `input_datetime`/`date`/`datetime`. Narrower than `canMarkChanged`: a
+   *  `filter_reset_entity` can only ever set "today" (it's an opaque
+   *  button/script call, not a settable value), so it does not enable this. */
+  canEditLastChanged: boolean;
+  /** The live-editable interval, or `null` when there's nothing to edit
+   *  (no `filter_interval_entity` configured, or it's currently unavailable/
+   *  non-numeric) — see `FilterIntervalEdit`. */
+  intervalEdit: FilterIntervalEdit | null;
 }
 
 export function toFurnaceFilterModel(
@@ -178,6 +237,8 @@ export function toFurnaceFilterModel(
     overdue: false,
     daysOverdue: 0,
     canMarkChanged: false,
+    canEditLastChanged: false,
+    intervalEdit: null,
   };
   const entityId = config.filter_last_changed_entity;
   if (!entityId) return unavailable;
@@ -193,8 +254,8 @@ export function toFurnaceFilterModel(
   const today = dayStart(new Date());
   const overdue = dueDate !== null && dueDate.getTime() < today.getTime();
   const daysOverdue = overdue && dueDate ? daysBetween(dueDate, today) : 0;
-  const canMarkChanged =
-    Boolean(config.filter_reset_entity) || WRITABLE_DATE_DOMAINS.has(domainOf(entityId));
+  const canEditLastChanged = WRITABLE_DATE_DOMAINS.has(domainOf(entityId));
+  const canMarkChanged = Boolean(config.filter_reset_entity) || canEditLastChanged;
 
   return {
     available: true,
@@ -204,7 +265,41 @@ export function toFurnaceFilterModel(
     overdue,
     daysOverdue,
     canMarkChanged,
+    canEditLastChanged,
+    intervalEdit: buildIntervalEdit(hass, config.filter_interval_entity),
   };
+}
+
+/** Write `date` onto `entityId` directly, dispatched by its own domain — the
+ *  shared implementation behind both `markFilterChangedCall` ("today") and
+ *  `setLastChangedDateCall` (an arbitrary picked date). `null` when the
+ *  entity's domain isn't one of the three directly-writable ones (matches
+ *  `canEditLastChanged`/`WRITABLE_DATE_DOMAINS` above — a plain `sensor` has
+ *  no service to call here). */
+function writeLastChangedCall(entityId: string, date: Date): ServiceCall | null {
+  const domain = domainOf(entityId);
+  if (domain === 'input_datetime') {
+    return {
+      domain: 'input_datetime',
+      service: 'set_datetime',
+      data: { entity_id: entityId, date: toIsoDate(date) },
+    };
+  }
+  if (domain === 'date') {
+    return {
+      domain: 'date',
+      service: 'set_value',
+      data: { entity_id: entityId, date: toIsoDate(date) },
+    };
+  }
+  if (domain === 'datetime') {
+    return {
+      domain: 'datetime',
+      service: 'set_value',
+      data: { entity_id: entityId, datetime: date.toISOString() },
+    };
+  }
+  return null;
 }
 
 /** Build the "I've changed my filter" write. Takes the two config entity ids
@@ -214,9 +309,9 @@ export function toFurnaceFilterModel(
  *  `resetEntity` (a `button`/`script`) wins whenever configured — for a setup
  *  where `lastChangedEntity` is a read-only `sensor` computed elsewhere and
  *  needs an explicit trigger, not a direct write. Otherwise writes today's
- *  date straight onto `lastChangedEntity`, if its own domain supports it.
- *  `null` when neither path is available — nothing to call (the button is
- *  disabled in that case, `canMarkChanged` above). */
+ *  date straight onto `lastChangedEntity` via `writeLastChangedCall`. `null`
+ *  when neither path is available — nothing to call (the button is disabled
+ *  in that case, `canMarkChanged` above). */
 export function markFilterChangedCall(
   lastChangedEntity: string | undefined,
   resetEntity: string | undefined,
@@ -231,31 +326,16 @@ export function markFilterChangedCall(
     }
     return null;
   }
+  if (!lastChangedEntity) return null;
+  return writeLastChangedCall(lastChangedEntity, new Date());
+}
 
-  const target = lastChangedEntity;
-  if (!target) return null;
-  const domain = domainOf(target);
-  const today = new Date();
-  if (domain === 'input_datetime') {
-    return {
-      domain: 'input_datetime',
-      service: 'set_datetime',
-      data: { entity_id: target, date: toIsoDate(today) },
-    };
-  }
-  if (domain === 'date') {
-    return {
-      domain: 'date',
-      service: 'set_value',
-      data: { entity_id: target, date: toIsoDate(today) },
-    };
-  }
-  if (domain === 'datetime') {
-    return {
-      domain: 'datetime',
-      service: 'set_value',
-      data: { entity_id: target, datetime: today.toISOString() },
-    };
-  }
-  return null;
+/** Build the write for manually editing `filter_last_changed_entity` to an
+ *  arbitrary date (the section's own date-picker pill, `canEditLastChanged`)
+ *  — unlike `markFilterChangedCall`, this never falls back to
+ *  `filter_reset_entity`, since a reset entity is an opaque button/script
+ *  trigger with no way to hand it a specific date. `null` when the entity's
+ *  domain isn't directly writable. */
+export function setLastChangedDateCall(entityId: string, date: Date): ServiceCall | null {
+  return writeLastChangedCall(entityId, date);
 }
