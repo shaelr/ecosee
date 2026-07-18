@@ -1,15 +1,19 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { EcoseeScheduleAddBlockOverlay } from '../src/overlays/schedule-add-block-overlay';
 import type { ComfortSettingOption } from '../src/climate/comfort-setting';
 
-// The "+" flow reached from the Schedule sub-screen (ADR-0014). Start/End use a
-// real <button> + tiny hidden <input type="time"> triggered via showPicker() —
-// the same split furnace-filter-overlay.ts's Last Changed date field uses and for
-// the same reason: a tap on an invisible full-cover time input only focuses
-// whatever internal segment happens to sit under the pointer, with no visible
-// native chrome to show which segment that is, which reads to a user as "clicking
-// doesn't do anything." A real button always has something to tap.
+// The "+" flow reached from the Schedule sub-screen (ADR-0014). Start/End (and
+// Comfort Setting) each layer a transparent native control directly over a
+// visible label to capture taps — the same trick fan-overlay.ts's runtime
+// <select> uses. A tap lands on the real form control, giving it genuine focus,
+// which matters beyond hit testing: iOS only opens its native picker sheet for
+// a date/time input (or wheel for a select) when the control itself receives
+// real focus from a user gesture. A version of Start/End instead routed the tap
+// through a separate visible <button> whose click handler called a hidden
+// input's showPicker() — that worked on desktop but showPicker() is
+// unimplemented for date/time inputs on iOS WebKit (WebKit bug 261703), so the
+// button did nothing there; reverted back to the direct-tap pattern.
 
 const COMFORT_SETTINGS: ComfortSettingOption[] = [
   { preset: 'home', label: 'Home', icon: 'home', selected: true },
@@ -37,112 +41,85 @@ function fieldRow(el: EcoseeScheduleAddBlockOverlay, index: number): Element {
   return el.shadowRoot!.querySelectorAll('.field-row')[index]!;
 }
 
+function startInput(el: EcoseeScheduleAddBlockOverlay): HTMLInputElement {
+  return fieldRow(el, 1).querySelector('input') as HTMLInputElement;
+}
+
+function endInput(el: EcoseeScheduleAddBlockOverlay): HTMLInputElement {
+  return fieldRow(el, 2).querySelector('input') as HTMLInputElement;
+}
+
 describe('Schedule Add Block overlay — Start/End time fields', () => {
-  it('shows the default 08:00–10:00 window on the pill buttons', async () => {
+  it('shows the default 08:00–10:00 window on the pill labels', async () => {
     const el = await mount();
-    expect(fieldRow(el, 1).querySelector('.pill-button')?.textContent?.trim()).toBe('08:00');
-    expect(fieldRow(el, 2).querySelector('.pill-button')?.textContent?.trim()).toBe('10:00');
+    expect(fieldRow(el, 1).querySelector('.pill-label')?.textContent?.trim()).toBe('08:00');
+    expect(fieldRow(el, 2).querySelector('.pill-label')?.textContent?.trim()).toBe('10:00');
   });
 
-  it('clicking the Start pill button calls showPicker() on its own hidden time input, not the End field’s', async () => {
+  // Regression guard: a version of this field routed taps through a separate
+  // visible <button> that called showPicker() on a hidden input — broken on
+  // iOS (see module doc). The real input is now the direct tap target itself.
+  it('the time input is the real, directly-tappable control — not a button with a hidden input behind it', async () => {
     const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
-    const startSpy = vi.fn();
-    const endSpy = vi.fn();
-    // happy-dom doesn't implement showPicker(); stub it so the click handler's
-    // existence check (`typeof input.showPicker === 'function'`) passes.
-    startInput.showPicker = startSpy;
-    endInput.showPicker = endSpy;
-
-    (fieldRow(el, 1).querySelector('.pill-button') as HTMLButtonElement).click();
-
-    expect(startSpy).toHaveBeenCalledTimes(1);
-    expect(endSpy).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('.pill-button')).toBeNull();
+    const start = startInput(el);
+    expect(start.tagName).toBe('INPUT');
+    expect(start.type).toBe('time');
+    expect(start.getAttribute('tabindex')).not.toBe('-1');
+    expect(start.getAttribute('aria-hidden')).not.toBe('true');
+    expect(start.getAttribute('aria-label')).toBe('Start time');
   });
 
-  it('clicking the End pill button calls showPicker() on the End field’s own hidden input', async () => {
+  // happy-dom's synthetic .click() doesn't perform a real browser's implicit
+  // focus-on-click for form controls, so this asserts focusability directly.
+  it('the Start and End inputs are each directly focusable', async () => {
     const el = await mount();
-    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
-    const endSpy = vi.fn();
-    endInput.showPicker = endSpy;
+    const start = startInput(el);
+    start.focus();
+    expect(el.shadowRoot!.activeElement).toBe(start);
 
-    (fieldRow(el, 2).querySelector('.pill-button') as HTMLButtonElement).click();
-
-    expect(endSpy).toHaveBeenCalledTimes(1);
+    const end = endInput(el);
+    end.focus();
+    expect(el.shadowRoot!.activeElement).toBe(end);
   });
 
-  it('does not throw when showPicker is unavailable on the input (older engine)', async () => {
+  it('updates the Start pill label once the input fires change', async () => {
     const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    // Simulate an engine without showPicker() (it's Baseline 2023, not universal) —
-    // happy-dom doesn't implement it either, but assign explicitly for clarity.
-    (startInput as unknown as { showPicker: unknown }).showPicker = undefined;
-
-    expect(() =>
-      (fieldRow(el, 1).querySelector('.pill-button') as HTMLButtonElement).click(),
-    ).not.toThrow();
-  });
-
-  it('does not throw when showPicker rejects the call (e.g. not a user gesture)', async () => {
-    const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    startInput.showPicker = () => {
-      throw new Error('not a user gesture');
-    };
-
-    expect(() =>
-      (fieldRow(el, 1).querySelector('.pill-button') as HTMLButtonElement).click(),
-    ).not.toThrow();
-  });
-
-  it('updates the Start pill button’s label once the hidden input fires change', async () => {
-    const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    startInput.value = '09:30';
-    startInput.dispatchEvent(new Event('change'));
+    const input = startInput(el);
+    input.value = '09:30';
+    input.dispatchEvent(new Event('change'));
     await el.updateComplete;
 
-    expect(fieldRow(el, 1).querySelector('.pill-button')?.textContent?.trim()).toBe('09:30');
+    expect(fieldRow(el, 1).querySelector('.pill-label')?.textContent?.trim()).toBe('09:30');
   });
 
-  it('updates the End pill button’s label once the hidden input fires change', async () => {
+  it('updates the End pill label once the input fires change', async () => {
     const el = await mount();
-    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
-    endInput.value = '14:00';
-    endInput.dispatchEvent(new Event('change'));
+    const input = endInput(el);
+    input.value = '14:00';
+    input.dispatchEvent(new Event('change'));
     await el.updateComplete;
 
-    expect(fieldRow(el, 2).querySelector('.pill-button')?.textContent?.trim()).toBe('14:00');
+    expect(fieldRow(el, 2).querySelector('.pill-label')?.textContent?.trim()).toBe('14:00');
   });
 
-  it('ignores a malformed value from the hidden input rather than corrupting state', async () => {
+  it('ignores a malformed value from the input rather than corrupting state', async () => {
     const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    startInput.value = 'not-a-time';
-    startInput.dispatchEvent(new Event('change'));
+    const input = startInput(el);
+    input.value = 'not-a-time';
+    input.dispatchEvent(new Event('change'));
     await el.updateComplete;
 
-    expect(fieldRow(el, 1).querySelector('.pill-button')?.textContent?.trim()).toBe('08:00');
-  });
-
-  it('the hidden time inputs are never a direct tab stop or announced individually (tabindex="-1", aria-hidden)', async () => {
-    const el = await mount();
-    const startInput = fieldRow(el, 1).querySelector('.start-native') as HTMLInputElement;
-    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
-    expect(startInput.getAttribute('tabindex')).toBe('-1');
-    expect(startInput.getAttribute('aria-hidden')).toBe('true');
-    expect(endInput.getAttribute('tabindex')).toBe('-1');
-    expect(endInput.getAttribute('aria-hidden')).toBe('true');
+    expect(fieldRow(el, 1).querySelector('.pill-label')?.textContent?.trim()).toBe('08:00');
   });
 });
 
 describe('Schedule Add Block overlay — validation and confirm', () => {
   it('disables Add to Schedule and shows an error once End is not after Start', async () => {
     const el = await mount();
-    const endInput = fieldRow(el, 2).querySelector('.end-native') as HTMLInputElement;
-    endInput.value = '07:00'; // before the 08:00 default Start
-    endInput.dispatchEvent(new Event('change'));
+    const input = endInput(el);
+    input.value = '07:00'; // before the 08:00 default Start
+    input.dispatchEvent(new Event('change'));
     await el.updateComplete;
 
     const confirmButton = el.shadowRoot!.querySelector('.confirm') as HTMLButtonElement;
