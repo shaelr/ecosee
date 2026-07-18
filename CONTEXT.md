@@ -142,7 +142,11 @@ System/settings tab, kept rightmost). A tab shows only when its section is
 reachable for the bound entity (graceful degradation, ADR-0001). The leftmost slot
 used to hold a temperature badge that returned to the thermostat (Home); it was
 replaced by the Furnace Filter tab (ADR-0017) as redundant with the shell's own ✕,
-which already returns to the same place.
+which already returns to the same place. Because the shell's own ✕ already returns
+to Home, an outside (backdrop) tap on empty space within a Tab-Bar-bearing section
+is a no-op rather than also dismissing — an accidental tap while browsing a section
+shouldn't undo the navigation; only the ✕ does. Pickers, Temperature, and Weather
+carry no Tab Bar and keep the original outside-tap-to-dismiss behavior.
 _Avoid_: navbar, footer, toolbar.
 
 **Furnace Filter Screen**:

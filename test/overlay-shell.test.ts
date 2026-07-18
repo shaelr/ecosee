@@ -2,15 +2,17 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '../src/overlays/overlay-shell';
 import { EcoseeOverlay } from '../src/overlays/overlay-shell';
+import type { TabBarModel } from '../src/menu/tab-bar';
 
 // The shell owns dismissal (✕ / outside-tap). These assert the two dismiss triggers
 // fire the shared event, plus the CSS contract that makes an *empty-area* tap reach
 // the backdrop (issue #40): the .content wrapper must be pointer-transparent so a tap
 // on non-control space falls through to .backdrop instead of being swallowed.
 
-async function mountShell(): Promise<EcoseeOverlay> {
+async function mountShell(tabs?: TabBarModel): Promise<EcoseeOverlay> {
   const shell = document.createElement('ecosee-overlay') as EcoseeOverlay;
   shell.innerHTML = '<div>content</div>';
+  if (tabs) shell.tabs = tabs;
   document.body.appendChild(shell);
   await shell.updateComplete;
   return shell;
@@ -21,7 +23,7 @@ afterEach(() => {
 });
 
 describe('overlay shell — dismissal', () => {
-  it('emits ecosee-overlay-dismiss when the backdrop (outside area) is clicked', async () => {
+  it('emits ecosee-overlay-dismiss when the backdrop (outside area) is clicked, with no tab bar (a picker/Temperature Adjust/Weather)', async () => {
     const shell = await mountShell();
     let dismisses = 0;
     shell.addEventListener('ecosee-overlay-dismiss', () => (dismisses += 1));
@@ -30,12 +32,52 @@ describe('overlay shell — dismissal', () => {
     expect(dismisses).toBe(1);
   });
 
-  it('emits ecosee-overlay-dismiss when the ✕ is clicked', async () => {
+  it('emits ecosee-overlay-dismiss when the ✕ is clicked, with no tab bar', async () => {
     const shell = await mountShell();
     let dismisses = 0;
     shell.addEventListener('ecosee-overlay-dismiss', () => (dismisses += 1));
 
     (shell.shadowRoot!.querySelector('.close') as HTMLElement).click();
+    expect(dismisses).toBe(1);
+  });
+
+  // Owner report: an accidental tap on empty space while browsing a Main Menu
+  // section (System/Sensors/Fan/Schedule/Setpoints/Furnace Filter — the ones
+  // carrying a tab bar) shouldn't return all the way to Home; only the ✕
+  // should. Pickers/Temperature Adjust/Weather carry no tab bar and keep the
+  // original outside-tap-to-dismiss behavior (covered above).
+  it('does NOT dismiss on a backdrop tap while a Main Menu section’s tab bar is showing', async () => {
+    const tabs: TabBarModel = {
+      available: true,
+      items: [{ target: 'sensors', icon: 'sensor', label: 'Sensors', active: true }],
+    };
+    const shell = await mountShell(tabs);
+    let dismisses = 0;
+    shell.addEventListener('ecosee-overlay-dismiss', () => (dismisses += 1));
+
+    (shell.shadowRoot!.querySelector('.backdrop') as HTMLElement).click();
+    expect(dismisses).toBe(0);
+  });
+
+  it('still dismisses via the ✕ while a Main Menu section’s tab bar is showing', async () => {
+    const tabs: TabBarModel = {
+      available: true,
+      items: [{ target: 'sensors', icon: 'sensor', label: 'Sensors', active: true }],
+    };
+    const shell = await mountShell(tabs);
+    let dismisses = 0;
+    shell.addEventListener('ecosee-overlay-dismiss', () => (dismisses += 1));
+
+    (shell.shadowRoot!.querySelector('.close') as HTMLElement).click();
+    expect(dismisses).toBe(1);
+  });
+
+  it('a backdrop tap dismisses again once tabs.available goes back to false (e.g. no reachable section)', async () => {
+    const shell = await mountShell({ available: false, items: [] });
+    let dismisses = 0;
+    shell.addEventListener('ecosee-overlay-dismiss', () => (dismisses += 1));
+
+    (shell.shadowRoot!.querySelector('.backdrop') as HTMLElement).click();
     expect(dismisses).toBe(1);
   });
 });

@@ -21,10 +21,14 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
 /**
  * `<ecosee-overlay>` — the overlay shell. A content-agnostic squircle that mounts
  * over the Home Screen (the same silhouette + `--ecosee-bg` fill, so it covers the
- * Home Screen exactly), carries the ✕ close affordance, and dismisses on ✕ or an
- * outside (backdrop) tap. Active Overlay content is slotted in. This is the
- * infrastructure every later Overlay (System Mode, Fan, Sensors, Weather) reuses —
- * the Temperature Adjust overlay is just its first occupant.
+ * Home Screen exactly), carries the ✕ close affordance, and dismisses on ✕ always,
+ * plus an outside (backdrop) tap for pickers/Temperature Adjust/Weather — but NOT
+ * for a Main Menu section (System/Sensors/Fan/Schedule/Setpoints/Furnace Filter,
+ * `tabs?.available`), where only the ✕ dismisses (owner report: an accidental tap
+ * on empty menu space shouldn't return all the way to Home). See `_dismissBackdrop`.
+ * Active Overlay content is slotted in. This is the infrastructure every later
+ * Overlay (System Mode, Fan, Sensors, Weather) reuses — the Temperature Adjust
+ * overlay is just its first occupant.
  *
  * The shell can share the Home Screen's own `--ecosee-bg` — including a config
  * `background_color: transparent` — because `<ecosee-card>` only ever mounts this
@@ -40,8 +44,9 @@ const TAB_ICONS: Record<TabIcon, typeof icons.menu> = {
  * Outside-tap contract: the slotted content fills the whole shell, so a dedicated
  * `.backdrop` layer sits *behind* it and slotted content is `pointer-events: none`
  * by default. Empty areas of the content therefore fall through to the backdrop
- * (→ dismiss), while each Overlay opts its interactive controls back in with
- * `pointer-events: auto`. The ✕ sits above both.
+ * (→ `_dismissBackdrop`, a no-op on a Main Menu section — see above), while each
+ * Overlay opts its interactive controls back in with `pointer-events: auto`. The
+ * ✕ sits above both and always dismisses.
  *
  * Emits `ecosee-overlay-dismiss` (bubbling, composed) when the user asks to leave.
  */
@@ -251,6 +256,19 @@ export class EcoseeOverlay extends LitElement {
     emitOverlayDismiss(this);
   };
 
+  /** The backdrop's own click handler — unlike `_dismiss` (the ✕'s, which
+   *  always fires), this is a no-op whenever a Main Menu section's tab bar
+   *  is showing (owner report: an accidental tap on empty space while
+   *  browsing System/Sensors/Fan/Schedule/Setpoints/Furnace Filter shouldn't
+   *  kick you all the way back to Home — only the ✕ should). Pickers,
+   *  Temperature Adjust, and Weather carry no tab bar (`tabs?.available` is
+   *  false for them), so they keep the original outside-tap-to-dismiss
+   *  behavior unchanged. */
+  private _dismissBackdrop = (): void => {
+    if (this.tabs?.available) return;
+    this._dismiss();
+  };
+
   /** Announce a tab tap; the card routes it by opening that section (`_open(kind,
    *  'home')`, ADR-0017 — every target is a section since the old thermostat-badge
    *  target was removed). Bubbling + composed so it clears the shadow boundary and
@@ -273,7 +291,7 @@ export class EcoseeOverlay extends LitElement {
             ? html`<span class="sr-only">${this._equipLabel(this.equipment)}</span>`
             : nothing
         }
-        <div class="backdrop" @click=${this._dismiss}></div>
+        <div class="backdrop" @click=${this._dismissBackdrop}></div>
         <button class="close" aria-label="Close" @click=${this._dismiss}>${icons.close}</button>
         <div class="content"><slot></slot></div>
         ${this._renderTabBar()}
