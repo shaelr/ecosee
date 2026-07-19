@@ -86,6 +86,14 @@ export class EcoseeComfortSettingOverlay extends LitElement {
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 6cqw;
       pointer-events: auto;
+      /* Hide the OS scrollbar track — still scrollable by touch/wheel/drag
+         either way, just without browser chrome bleeding through the
+         device's own squircle silhouette (time-picker-overlay.ts's own
+         columns use the identical treatment). */
+      scrollbar-width: none;
+    }
+    .list::-webkit-scrollbar {
+      display: none;
     }
 
     .option {
