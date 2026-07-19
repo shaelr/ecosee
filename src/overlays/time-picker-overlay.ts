@@ -1,8 +1,46 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
-import { customElement, property, state, queryAll } from 'lit/decorators.js';
+import { customElement, property, state, query } from 'lit/decorators.js';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 30];
+
+/** How many back-to-back copies of a column's values to render so it can
+ *  loop: scrolling past the last copy silently jumps back one loop's worth
+ *  (`_onListScroll`), landing on identical content, so the wrap is
+ *  imperceptible. 5 keeps the visible window comfortably inside copies 2–4
+ *  (`CENTER_COPY`), so a user has to scroll roughly two full loops in one
+ *  direction before ever approaching a real edge. */
+const LOOP_COPIES = 5;
+const CENTER_COPY = Math.floor(LOOP_COPIES / 2);
+
+function repeated(values: readonly number[]): number[] {
+  return Array.from({ length: values.length * LOOP_COPIES }, (_, i) => values[i % values.length]!);
+}
+
+const HOUR_ROWS = repeated(HOURS);
+const MINUTE_ROWS = repeated(MINUTES);
+
+/** Pure decision logic behind the loop: given a list's current `scrollTop`
+ *  and its total `scrollHeight` (`copies` back-to-back identical copies of
+ *  the same content), returns the `scrollTop` to jump to once the user has
+ *  scrolled into the first or last copy, or `scrollTop` unchanged otherwise.
+ *  Split out from the DOM event handler (`_onListScroll`) so the actual
+ *  wrap math can be unit-tested directly, without a real browser layout
+ *  engine to produce meaningful `scrollHeight`/`clientHeight` values —
+ *  the same DOM-measure/pure-decision split `styles/font-probe.ts` uses. A
+ *  non-positive `scrollHeight` (no real layout, e.g. an untested/detached
+ *  element) is a no-op rather than a division by zero. */
+export function loopScrollTop(
+  scrollTop: number,
+  scrollHeight: number,
+  copies = LOOP_COPIES,
+): number {
+  const loopHeight = scrollHeight / copies;
+  if (loopHeight <= 0) return scrollTop;
+  if (scrollTop < loopHeight * 0.5) return scrollTop + loopHeight;
+  if (scrollTop > loopHeight * (copies - 0.5)) return scrollTop - loopHeight;
+  return scrollTop;
+}
 
 /**
  * `<ecosee-time-picker-overlay>` — ecosee's own time picker (ADR-0018), replacing
@@ -13,6 +51,19 @@ const MINUTES = [0, 30];
  * Confirm button: two independent selections can't cleanly auto-confirm on a
  * single tap the way a one-column picker (System Mode, Comfort Setting) can,
  * since picking only the hour or only the minute isn't yet a complete value.
+ *
+ * Both columns loop (owner request, following up on the ADR-0018 pickers
+ * shipping): scrolling past the last hour wraps to the first and vice versa,
+ * like a wheel. A plain `overflow: auto` list has no native "loop" behavior,
+ * so each column renders its values repeated `LOOP_COPIES` times back to
+ * back and `_onListScroll` silently resets `scrollTop` by one loop's worth
+ * whenever the user scrolls into the first or last copy — since every copy
+ * is identical content, the reset is imperceptible, and the visible window
+ * stays put while the underlying scroll position "teleports" back toward
+ * the middle. This is the standard infinite-carousel trick, not a real
+ * infinite list — `LOOP_COPIES` just needs to be large enough that a single
+ * scroll gesture can't outrun the reset, which 5 comfortably covers for a
+ * touch/wheel-driven picker.
  *
  * Purely presentational: it owns no schedule-editing logic itself and emits
  * `ecosee-time-picker-confirm` for the host to apply. There is no cancel
@@ -27,10 +78,8 @@ export class EcoseeTimePickerOverlay extends LitElement {
   @state() private _hour = 0;
   @state() private _minute = 0;
 
-  /** Both columns' currently-selected row, so the picker can scroll to the
-   *  seeded value once on first render rather than always opening at the top
-   *  of a 24-row hour list. */
-  @queryAll('.option.selected') private _selectedOptions!: NodeListOf<HTMLElement>;
+  @query('.list-hour') private _hourList?: HTMLElement;
+  @query('.list-minute') private _minuteList?: HTMLElement;
 
   static override styles = css`
     :host {
@@ -117,7 +166,9 @@ export class EcoseeTimePickerOverlay extends LitElement {
       outline-offset: -1.5cqw;
     }
     /* Selected row: filled cyan with dark text, matching every other picker's
-       selected-row treatment (system-mode-overlay.ts, comfort-setting-overlay.ts). */
+       selected-row treatment (system-mode-overlay.ts, comfort-setting-overlay.ts).
+       Every one of the LOOP_COPIES repeats of the current value gets this class
+       — harmless, since the loop keeps at most one of them in view at a time. */
     .option.selected {
       background: var(--ecosee-accent, #62cfe9);
       color: var(--ecosee-chip-ink, #0a0d10);
@@ -150,15 +201,33 @@ export class EcoseeTimePickerOverlay extends LitElement {
     this._minute = this.minutes % 60;
   }
 
-  /** Scrolls both columns to their seeded value once, so the picker opens
-   *  centered on the current time rather than always at the top of a 24-row
-   *  hour list. Only on first render — a later tap re-renders the selected
-   *  row too, but re-scrolling the user's view mid-interaction would be
-   *  unwanted. */
+  /** Centers both columns on their seeded value, in the middle copy
+   *  (`CENTER_COPY`) of the repeated list — not just "somewhere the value
+   *  appears" — so there's equal room to scroll in either direction before
+   *  `_onListScroll` ever needs to wrap. Only on first render; a later
+   *  selection re-renders the highlighted row but must not re-scroll the
+   *  user's own in-progress scroll position. */
   protected override firstUpdated(): void {
-    for (const option of this._selectedOptions) {
-      option.scrollIntoView({ block: 'center' });
-    }
+    this._centerOn(this._hourList, HOURS, this._hour);
+    this._centerOn(this._minuteList, MINUTES, this._minute);
+  }
+
+  private _centerOn(list: HTMLElement | undefined, values: readonly number[], value: number): void {
+    if (!list) return;
+    const index = values.indexOf(value);
+    if (index === -1) return;
+    const rowHeight = list.scrollHeight / (values.length * LOOP_COPIES);
+    const targetRow = CENTER_COPY * values.length + index;
+    list.scrollTop = rowHeight * targetRow - (list.clientHeight - rowHeight) / 2;
+  }
+
+  /** The loop itself: hands the list's current scroll position to
+   *  `loopScrollTop` (the pure decision logic) and applies whatever it
+   *  returns. Runs on every `scroll` event rather than only once the user
+   *  stops, so a long fling can't outrun it mid-gesture. */
+  private _onListScroll(event: Event): void {
+    const list = event.currentTarget as HTMLElement;
+    list.scrollTop = loopScrollTop(list.scrollTop, list.scrollHeight);
   }
 
   private _selectHour(hour: number): void {
@@ -186,8 +255,13 @@ export class EcoseeTimePickerOverlay extends LitElement {
         <div class="columns">
           <div class="column">
             <span class="column-label">Hour</span>
-            <div class="list" role="listbox" aria-label="Hour">
-              ${HOURS.map(
+            <div
+              class="list list-hour"
+              role="listbox"
+              aria-label="Hour"
+              @scroll=${this._onListScroll}
+            >
+              ${HOUR_ROWS.map(
                 (hour) => html`
                   <button
                     type="button"
@@ -204,8 +278,13 @@ export class EcoseeTimePickerOverlay extends LitElement {
           </div>
           <div class="column">
             <span class="column-label">Minute</span>
-            <div class="list" role="listbox" aria-label="Minute">
-              ${MINUTES.map(
+            <div
+              class="list list-minute"
+              role="listbox"
+              aria-label="Minute"
+              @scroll=${this._onListScroll}
+            >
+              ${MINUTE_ROWS.map(
                 (minute) => html`
                   <button
                     type="button"
