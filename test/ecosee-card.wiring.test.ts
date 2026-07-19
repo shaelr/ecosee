@@ -783,3 +783,211 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     void calls; // the exact write payload is schedule.test.ts's concern; this test is about nav depth.
   });
 });
+
+// The remaining native <select> menus (owner request, following ADR-0018's
+// date/time pickers): Furnace Filter's Interval and Fan's Minimum Runtime are
+// self-contained pickers like System Mode/Comfort Setting (they own their
+// write and pop one level via ecosee-overlay-dismiss); Add to Schedule's
+// Comfort Setting is not (it updates the card's own buffered
+// _addBlockComfortSetting instead, mirroring the time-picker's
+// add-block-start/add-block-end branches).
+describe('ecosee-card wiring — remaining pushed pickers', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+  afterEach(() => vi.useRealTimers());
+
+  it('Furnace Filter: opens the Interval picker, applies the write, and pops one level back to Furnace Filter', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat', { hvac_modes: ['off', 'heat', 'cool'] }),
+        { entity_id: 'date.filter', state: '2025-01-01', attributes: {} },
+        {
+          entity_id: 'number.filter_interval',
+          state: '6',
+          attributes: { min: 1, max: 12, step: 1, unit_of_measurement: 'months' },
+        },
+      ],
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      filter_last_changed_entity: 'date.filter',
+      filter_interval_entity: 'number.filter_interval',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    fireTabSelect(card, 'filter');
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(true);
+
+    const filterOverlay = card.shadowRoot!.querySelector(
+      'ecosee-furnace-filter-overlay',
+    ) as LitElement;
+    await filterOverlay.updateComplete;
+    const intervalButton = filterOverlay.shadowRoot!.querySelector(
+      '.pill.select .pill-button',
+    ) as HTMLButtonElement;
+    intervalButton.click();
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-filter-interval-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(false);
+
+    const picker = card.shadowRoot!.querySelector('ecosee-filter-interval-overlay') as LitElement;
+    await picker.updateComplete;
+    const nine = [...picker.shadowRoot!.querySelectorAll('.option')].find(
+      (o) => o.textContent?.trim() === '9 months',
+    ) as HTMLButtonElement;
+    nine.click();
+    await card.updateComplete;
+
+    expect(calls).toEqual([
+      {
+        domain: 'number',
+        service: 'set_value',
+        data: { entity_id: 'number.filter_interval', value: 9 },
+        returnResponse: undefined,
+      },
+    ]);
+    // Still up during the confirm beat…
+    expect(overlayPresent(card, 'ecosee-filter-interval-overlay')).toBe(true);
+    // …then pops one level back to Furnace Filter.
+    vi.advanceTimersByTime(PICKER_CONFIRM_MS);
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-filter-interval-overlay')).toBe(false);
+  });
+
+  it('Fan: opens the Minimum Runtime picker, applies the write, and pops one level back to Fan', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat', { fan_modes: ['on', 'auto'], fan_mode: 'auto' }),
+        {
+          entity_id: 'number.min',
+          state: '0',
+          attributes: { min: 0, max: 55, step: 5, unit_of_measurement: 'min' },
+        },
+      ],
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      fan_min_on_time_entity: 'number.min',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'fan');
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-fan-overlay')).toBe(true);
+
+    const fanOverlay = card.shadowRoot!.querySelector('ecosee-fan-overlay') as LitElement;
+    await fanOverlay.updateComplete;
+    (fanOverlay.shadowRoot!.querySelector('.select-pill') as HTMLButtonElement).click();
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-fan-runtime-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-fan-overlay')).toBe(false);
+
+    const picker = card.shadowRoot!.querySelector('ecosee-fan-runtime-overlay') as LitElement;
+    await picker.updateComplete;
+    const fifteen = [...picker.shadowRoot!.querySelectorAll('.option')].find(
+      (o) => o.textContent?.trim() === '15 min / hr',
+    ) as HTMLButtonElement;
+    fifteen.click();
+    await card.updateComplete;
+
+    expect(calls).toEqual([
+      {
+        domain: 'number',
+        service: 'set_value',
+        data: { entity_id: 'number.min', value: 15 },
+        returnResponse: undefined,
+      },
+    ]);
+    vi.advanceTimersByTime(PICKER_CONFIRM_MS);
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-fan-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-fan-runtime-overlay')).toBe(false);
+  });
+
+  it('Add to Schedule: opens the Comfort Setting picker, applies the value locally, and pops one level back (no entity write yet)', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat_cool', {
+          hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+          preset_modes: ['home', 'away'],
+          preset_mode: 'home',
+        }),
+        { entity_id: 'calendar.sched', state: 'off', attributes: {} },
+      ],
+      response: { response: { 'calendar.sched': { events: [] } } },
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      schedule_entity: 'calendar.sched',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    fireTabSelect(card, 'schedule');
+    await card.updateComplete;
+    card
+      .shadowRoot!.querySelector('ecosee-overlay')!
+      .dispatchEvent(
+        new CustomEvent('ecosee-schedule-add-block-open', { bubbles: true, composed: true }),
+      );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
+
+    const addBlock = card.shadowRoot!.querySelector(
+      'ecosee-schedule-add-block-overlay',
+    ) as LitElement;
+    await addBlock.updateComplete;
+    const comfortButton = addBlock
+      .shadowRoot!.querySelectorAll('.field-row')[0]!
+      .querySelector('.pill-button') as HTMLButtonElement;
+    expect(comfortButton.textContent?.trim()).toBe('Home'); // the entity's own current preset, seeded
+    comfortButton.click();
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-add-block-comfort-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(false);
+
+    const callsBeforeConfirm = calls.length;
+    const picker = card.shadowRoot!.querySelector('ecosee-add-block-comfort-overlay') as LitElement;
+    await picker.updateComplete;
+    const away = [...picker.shadowRoot!.querySelectorAll('.option')].find(
+      (o) => o.textContent?.trim() === 'Away',
+    ) as HTMLButtonElement;
+    away.click();
+    await card.updateComplete;
+
+    // Not submitted by picking a Comfort Setting — no entity write yet.
+    expect(calls).toHaveLength(callsBeforeConfirm);
+    vi.advanceTimersByTime(PICKER_CONFIRM_MS);
+    await card.updateComplete;
+    // One level popped: back to Add to Schedule.
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-add-block-comfort-overlay')).toBe(false);
+    // The pick survived the round trip through the picker, reflected on the
+    // field's pill — proof the card's own buffered _addBlockComfortSetting,
+    // not local component state, is what the field shows now.
+    const comfortButtonAfter = card
+      .shadowRoot!.querySelector('ecosee-schedule-add-block-overlay')!
+      .shadowRoot!.querySelectorAll('.field-row')[0]!
+      .querySelector('.pill-button');
+    expect(comfortButtonAfter?.textContent?.trim()).toBe('Away');
+  });
+});

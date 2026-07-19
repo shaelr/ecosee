@@ -47,13 +47,8 @@ function datePillButton(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement | nul
   return el.shadowRoot!.querySelector('.pill-button');
 }
 
-function intervalSelect(el: EcoseeFurnaceFilterOverlay): HTMLSelectElement | null {
-  return el.shadowRoot!.querySelector('.select-native');
-}
-
-function fireChange(input: HTMLInputElement | HTMLSelectElement, value: string): void {
-  input.value = value;
-  input.dispatchEvent(new Event('change', { bubbles: true }));
+function intervalButton(el: EcoseeFurnaceFilterOverlay): HTMLButtonElement | null {
+  return el.shadowRoot!.querySelector('.pill.select .pill-button');
 }
 
 /** A representative `FilterIntervalEdit` — a months-ranged 1–12 dropdown,
@@ -226,45 +221,45 @@ describe('Furnace Filter overlay — editable "Last changed"', () => {
   });
 });
 
-describe('Furnace Filter overlay — editable "Interval" (dropdown menu)', () => {
+describe('Furnace Filter overlay — editable "Interval" (pushed picker)', () => {
   it('omits the Interval row entirely when intervalEdit is null', async () => {
     const el = await mount(model({ intervalEdit: null }));
-    expect(intervalSelect(el)).toBeNull();
+    expect(intervalButton(el)).toBeNull();
     const rows = [...el.shadowRoot!.querySelectorAll('.row')].map((r) => r.textContent);
     expect(rows.some((t) => t?.includes('Interval'))).toBe(false);
   });
 
-  it('renders a dropdown pill labeled with the current value, listing every option', async () => {
+  it('renders a pill labeled with the current value', async () => {
     const el = await mount(model({ intervalEdit: intervalEditFixture(6) }));
     const row = [...el.shadowRoot!.querySelectorAll('.row')].find((r) =>
       r.textContent?.includes('Interval'),
     )!;
     expect(row.querySelector('.pill-label')?.textContent).toBe('6 months');
-    const select = intervalSelect(el)!;
-    expect([...select.options].map((o) => o.value)).toEqual(
-      Array.from({ length: 12 }, (_, i) => String(i + 1)),
-    );
-    expect([...select.options].map((o) => o.textContent?.trim())).toContain('1 month');
-    // Checked on the individual <option>'s own attribute rather than the
-    // parent <select>'s .value — happy-dom doesn't recompute .value from a
-    // programmatically-set `selected` attribute the way a real browser does.
-    const selectedOption = [...select.options].find((o) => o.hasAttribute('selected'));
-    expect(selectedOption?.value).toBe('6');
+    expect(intervalButton(el)).not.toBeNull();
   });
 
-  it('emits ecosee-service-call via number.set_value on change, in the entity’s own unit', async () => {
+  // ADR-0018: this field no longer owns any native form control at all —
+  // ecosee's own list-picker Overlay (filter-interval-overlay.ts) replaced
+  // the browser's native <select>.
+  it('tapping the pill emits ecosee-filter-interval-open, asking the host to push the picker', async () => {
+    const el = await mount(model({ intervalEdit: intervalEditFixture(6) }));
+    let fired = 0;
+    el.addEventListener('ecosee-filter-interval-open', () => (fired += 1));
+
+    intervalButton(el)!.click();
+
+    expect(fired).toBe(1);
+  });
+
+  it('owns no write logic of its own for this field — no ecosee-service-call from tapping the pill', async () => {
     const el = await mount(model({ intervalEdit: intervalEditFixture(6) }));
     const fired: ServiceCall[] = [];
     el.addEventListener('ecosee-service-call', (e) =>
       fired.push((e as CustomEvent<{ call: ServiceCall }>).detail.call),
     );
-    fireChange(intervalSelect(el)!, '9');
-    expect(fired).toEqual([
-      {
-        domain: 'number',
-        service: 'set_value',
-        data: { entity_id: 'number.filter_interval', value: 9 },
-      },
-    ]);
+
+    intervalButton(el)!.click();
+
+    expect(fired).toHaveLength(0);
   });
 });

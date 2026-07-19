@@ -3,6 +3,9 @@ import { EcoseeComfortSettingOverlay } from '../src/overlays/comfort-setting-ove
 import { EcoseeTemperatureOverlay } from '../src/overlays/temperature-overlay';
 import { EcoseeFanOverlay } from '../src/overlays/fan-overlay';
 import { EcoseeSystemModeOverlay } from '../src/overlays/system-mode-overlay';
+import { EcoseeFilterIntervalOverlay } from '../src/overlays/filter-interval-overlay';
+import { EcoseeFanRuntimeOverlay } from '../src/overlays/fan-runtime-overlay';
+import { EcoseeAddBlockComfortOverlay } from '../src/overlays/add-block-comfort-overlay';
 
 // Regression guard for the --ecosee-bg / --ecosee-chip-ink split (config
 // background_color): a selected, accent-filled row/chip/segment's text must stay
@@ -34,8 +37,18 @@ describe('selected-chip text uses --ecosee-chip-ink, not --ecosee-bg', () => {
     expect(css).toMatch(/\.chip\.heat\.selected\s*\{[^}]*color:\s*var\(\s*--ecosee-chip-ink/);
   });
 
-  it('the native Fan minimum-runtime dropdown background still tracks --ecosee-bg (a real background, not chip text)', () => {
-    const css = EcoseeFanOverlay.styles.cssText;
-    expect(css).toMatch(/\.select-native option\s*\{[^}]*background:\s*var\(\s*--ecosee-bg/);
+  it('Filter Interval picker: .option.selected', () => {
+    const css = EcoseeFilterIntervalOverlay.styles.cssText;
+    expect(css).toMatch(/\.option\.selected\s*\{[^}]*color:\s*var\(\s*--ecosee-chip-ink/);
+  });
+
+  it('Fan Runtime picker: .option.selected', () => {
+    const css = EcoseeFanRuntimeOverlay.styles.cssText;
+    expect(css).toMatch(/\.option\.selected\s*\{[^}]*color:\s*var\(\s*--ecosee-chip-ink/);
+  });
+
+  it('Add Block Comfort picker: .option.selected', () => {
+    const css = EcoseeAddBlockComfortOverlay.styles.cssText;
+    expect(css).toMatch(/\.option\.selected\s*\{[^}]*color:\s*var\(\s*--ecosee-chip-ink/);
   });
 });

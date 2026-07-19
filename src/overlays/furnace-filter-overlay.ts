@@ -1,7 +1,6 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { markFilterChangedCall, type FurnaceFilterModel } from '../climate/furnace-filter';
-import { setNumberValueCall } from '../climate/comfort-setpoint';
 import { icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 
@@ -32,17 +31,19 @@ import { emitServiceCall } from './service-call-event';
  *   desktop rendering quirk, an unimplemented iOS WebKit API) that motivated
  *   moving off the native picker entirely, rather than continuing to patch
  *   around them.
- * - **Interval** renders as a dropdown-menu pill when `intervalEdit` is
+ * - **Interval** renders as a dropdown-styled pill when `intervalEdit` is
  *   present (a live `filter_interval_entity`, not a static
- *   `filter_interval_days`) — a native `<select>` of the entity's own
- *   discrete `min`..`max` (by `step`) values, the same pattern (and the same
- *   underlying `.select-native` trick) as the Fan screen's own
- *   minimum-runtime selector, rather than a free-form numeric input (owner
+ *   `filter_interval_days`), rather than a free-form numeric input (owner
  *   request: "can the interval be a menu style like the fan duration").
- *   Writes through the already-exported `setNumberValueCall`
- *   (comfort-setpoint.ts) — the exact same `number.set_value` write Comfort
- *   Setpoints uses, reused rather than duplicated. Absent when there's no
- *   live entity to write to.
+ *   Tapping it emits `ecosee-filter-interval-open` — the host pushes
+ *   ecosee's own list-picker Overlay (`filter-interval-overlay.ts`) on top,
+ *   which owns the write itself (`setNumberValueCall`, comfort-setpoint.ts —
+ *   the same `number.set_value` write Comfort Setpoints uses) and closes
+ *   back here on confirm, mirroring System Mode/Comfort Setting's own
+ *   already-established pushed-picker shape (owner request, following
+ *   ADR-0018's date/time pickers: apply the same custom-styled treatment to
+ *   the remaining native `<select>` menus). Absent when there's no live
+ *   entity to write to.
  *
  * Otherwise unchanged from before: no lasting edit state, every write emits
  * the shared `ecosee-service-call` and the section re-renders once `hass`
@@ -157,11 +158,15 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     .pill-label {
       pointer-events: none;
     }
-    /* Last changed: an ordinary opaque <button> carrying the pill's own
-       visual look. Tapping it just emits ecosee-date-picker-open (below) —
-       there is no native form control involved at all anymore, since ecosee's
-       own calendar Overlay (date-picker-overlay.ts, ADR-0018) replaced the
-       browser's native date picker entirely. */
+    /* An ordinary opaque <button> carrying the pill's own visual look.
+       Tapping it just emits an open event (ecosee-date-picker-open /
+       ecosee-filter-interval-open) — there is no native form control
+       involved anywhere in this component anymore, since ecosee's own
+       Overlays (date-picker-overlay.ts, filter-interval-overlay.ts,
+       ADR-0018) replaced every browser-native picker/dropdown this section
+       used to rely on. inline-flex + gap (not the outer .pill's own gap) so
+       Interval's label+caret pair space correctly now that they're both
+       inside the button rather than direct .pill children. */
     .pill-button {
       appearance: none;
       background: none;
@@ -172,6 +177,8 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       font-weight: inherit;
       color: inherit;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
     }
     .pill-button:focus-visible {
       /* Flush against the pill's own border (no outline-offset) so this
@@ -182,10 +189,10 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     }
 
     /* The Interval pill's caret, marking it as a menu (fan-overlay.ts's own
-       minimum-runtime dropdown carries the identical caret for the same
-       reason — a value pill with no caret reads as a static value, one with
-       a caret reads as "tap for a list"). */
-    .pill.select {
+       minimum-runtime pill carries the identical caret for the same reason
+       — a value pill with no caret reads as a static value, one with a
+       caret reads as "tap for a list"). */
+    .pill.select .pill-button {
       gap: 1.8cqw;
     }
     .caret {
@@ -194,30 +201,6 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
       flex: none;
       color: var(--ecosee-accent, #62cfe9);
       pointer-events: none;
-    }
-    /* Interval is still a native <select> (unlike Last Changed, which no
-       longer uses any native form control) — the same opacity:0 overlay
-       trick fan-overlay.ts's own .select-native has used successfully since
-       that dropdown shipped. */
-    .select-native {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background: none;
-      color: transparent;
-      font: inherit;
-      opacity: 0;
-      cursor: pointer;
-    }
-    .select-native option {
-      color: var(--ecosee-text, #d4eff9);
-      background: var(--ecosee-bg, #0a0d10);
     }
 
     /* Large call-to-action button (ecobee app's own "I've changed my filter"
@@ -268,11 +251,13 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     );
   }
 
-  private _onIntervalChange(event: Event, entityId: string): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    const value = Number(raw);
-    if (!Number.isFinite(value)) return;
-    emitServiceCall(this, setNumberValueCall(entityId, value));
+  /** `.pill-button`'s click handler for Interval — asks the host to push
+   *  ecosee's own list-picker Overlay on top (`filter-interval-overlay.ts`);
+   *  that picker owns the write itself and closes back here on confirm. */
+  private _openIntervalPicker(): void {
+    this.dispatchEvent(
+      new CustomEvent('ecosee-filter-interval-open', { bubbles: true, composed: true }),
+    );
   }
 
   private _formatDate(date: Date): string {
@@ -307,20 +292,15 @@ export class EcoseeFurnaceFilterOverlay extends LitElement {
     return html`<p class="row">
       Interval
       <span class="pill select">
-        <span class="pill-label">${current?.label}</span>
-        <span class="caret">${icons.caretDown}</span>
-        <select
-          class="select-native"
-          aria-label="Filter replacement interval"
-          @change=${(e: Event) => this._onIntervalChange(e, edit.entityId)}
+        <button
+          type="button"
+          class="pill-button"
+          aria-label="Filter replacement interval, ${current?.label}"
+          @click=${this._openIntervalPicker}
         >
-          ${edit.options.map(
-            (option) =>
-              html`<option value=${option.value} ?selected=${option.selected}>
-                ${option.label}
-              </option>`,
-          )}
-        </select>
+          <span class="pill-label">${current?.label}</span>
+          <span class="caret">${icons.caretDown}</span>
+        </button>
       </span>
     </p>`;
   }

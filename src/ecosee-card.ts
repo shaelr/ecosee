@@ -70,6 +70,9 @@ import './overlays/comfort-setpoint-overlay';
 import './overlays/furnace-filter-overlay';
 import './overlays/date-picker-overlay';
 import './overlays/time-picker-overlay';
+import './overlays/filter-interval-overlay';
+import './overlays/fan-runtime-overlay';
+import './overlays/add-block-comfort-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
@@ -86,7 +89,14 @@ import './editor/ecosee-card-editor';
  *  `<input type="time">`), reached the same way — pushed on top of whichever
  *  screen owns the field being edited (`filter` for the date picker;
  *  `schedule-add-block` or `schedule-start-time` for the time picker, tracked by
- *  `_timePickerTarget`). */
+ *  `_timePickerTarget`). `filter-interval`/`fan-runtime`/`add-block-comfort` are
+ *  three more custom list pickers replacing the app's remaining native
+ *  `<select>` menus (same follow-up request as the date/time pickers) — the
+ *  first two are self-contained single-value pickers reached exactly like
+ *  `system-mode`/`comfort-setting` (write and auto-close, no card-level confirm
+ *  routing needed); `add-block-comfort` is reached like `schedule-add-block`'s
+ *  own Start/End fields (its confirm updates card-owned state, not an entity,
+ *  since Add to Schedule hasn't been submitted yet). */
 type OverlayKind =
   | 'temperature'
   | 'system-mode'
@@ -103,7 +113,10 @@ type OverlayKind =
   | 'setpoint-adjust'
   | 'filter'
   | 'date-picker'
-  | 'time-picker';
+  | 'time-picker'
+  | 'filter-interval'
+  | 'fan-runtime'
+  | 'add-block-comfort';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -479,6 +492,39 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           ></ecosee-time-picker-overlay>`;
         }
         return nothing;
+      },
+    },
+    'filter-interval': {
+      available: (hass, config) => toFurnaceFilterModel(hass, config).intervalEdit !== null,
+      render: (hass, config) => html`
+        <ecosee-filter-interval-overlay
+          .model=${toFurnaceFilterModel(hass, config).intervalEdit}
+        ></ecosee-filter-interval-overlay>
+      `,
+    },
+    'fan-runtime': {
+      available: (hass, config) => toFanModel(hass, config).minRuntime !== null,
+      render: (hass, config) => html`
+        <ecosee-fan-runtime-overlay
+          .model=${toFanModel(hass, config).minRuntime}
+        ></ecosee-fan-runtime-overlay>
+      `,
+    },
+    'add-block-comfort': {
+      available: (hass, config) => this._overlays['schedule-add-block'].available(hass, config),
+      render: (hass, config) => {
+        const base = toComfortSettingModel(hass, config);
+        return html`
+          <ecosee-add-block-comfort-overlay
+            .model=${{
+              ...base,
+              options: base.options.map((option) => ({
+                ...option,
+                selected: option.preset === this._addBlockComfortSetting,
+              })),
+            }}
+          ></ecosee-add-block-comfort-overlay>
+        `;
       },
     },
   };
@@ -903,13 +949,16 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         @ecosee-schedule-add-block-open=${this._onScheduleAddBlockOpen}
         @ecosee-schedule-copy-open=${this._onScheduleCopyOpen}
         @ecosee-schedule-add-block-confirm=${this._onScheduleAddBlockConfirm}
-        @ecosee-schedule-add-block-comfort-change=${this._onScheduleAddBlockComfortChange}
         @ecosee-schedule-copy-confirm=${this._onScheduleCopyConfirm}
         @ecosee-comfort-setpoint-select=${this._onComfortSetpointSelect}
         @ecosee-date-picker-open=${this._onDatePickerOpen}
         @ecosee-date-picker-confirm=${this._onDatePickerConfirm}
         @ecosee-time-picker-open=${this._onTimePickerOpen}
         @ecosee-time-picker-confirm=${this._onTimePickerConfirm}
+        @ecosee-filter-interval-open=${this._onFilterIntervalOpen}
+        @ecosee-fan-runtime-open=${this._onFanRuntimeOpen}
+        @ecosee-add-block-comfort-open=${this._onAddBlockComfortOpen}
+        @ecosee-add-block-comfort-confirm=${this._onAddBlockComfortConfirm}
         @pointerdown=${this._onOverlayActivity}
         @pointermove=${this._onOverlayActivity}
         @keydown=${this._onOverlayActivity}
@@ -1108,16 +1157,6 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     this._open('schedule-add-block', 'push');
   };
 
-  /** Comfort Setting's own `<select>` still lives entirely on
-   *  `schedule-add-block-overlay.ts` (no picker involved — see that
-   *  component's own class doc comment), but the *value* is now card-owned
-   *  state like Start/End, so its change routes up here the same way. */
-  private _onScheduleAddBlockComfortChange = (
-    event: CustomEvent<{ comfortSetting: string }>,
-  ): void => {
-    this._addBlockComfortSetting = event.detail.comfortSetting;
-  };
-
   /** Open the "Copy schedule to another day" picker. */
   private _onScheduleCopyOpen = (): void => {
     this._open('schedule-copy', 'push');
@@ -1256,6 +1295,39 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         moveBlockStart(entityId, blocks, index, day, event.detail.minutes),
       );
     }
+  };
+
+  /** Open Furnace Filter's Interval picker (hub-and-picker, mirroring
+   *  `_onDatePickerOpen`). Self-contained like System Mode/Comfort Setting —
+   *  the picker writes and closes itself; no card-level confirm routing
+   *  needed. */
+  private _onFilterIntervalOpen = (): void => {
+    this._open('filter-interval', 'push');
+  };
+
+  /** Open the Fan screen's minimum-runtime picker (hub-and-picker). Also
+   *  self-contained — see `_onFilterIntervalOpen`. */
+  private _onFanRuntimeOpen = (): void => {
+    this._open('fan-runtime', 'push');
+  };
+
+  /** Open Add to Schedule's Comfort Setting picker (hub-and-picker). Unlike
+   *  Interval/Runtime above, this one is *not* self-contained: picking a
+   *  Comfort Setting here must not write to the entity (the new block isn't
+   *  submitted yet), so its confirm is routed back through the card instead
+   *  — see `_onAddBlockComfortConfirm`. */
+  private _onAddBlockComfortOpen = (): void => {
+    this._open('add-block-comfort', 'push');
+  };
+
+  /** Apply the Comfort Setting picker's confirmation for the in-progress Add
+   *  to Schedule block: update the card's own buffered
+   *  `_addBlockComfortSetting` (no entity write — mirrors
+   *  `_onTimePickerConfirm`'s `'add-block-start'`/`'add-block-end'`
+   *  branches exactly) and pop one level, back to Add to Schedule. */
+  private _onAddBlockComfortConfirm = (event: CustomEvent<{ comfortSetting: string }>): void => {
+    this._addBlockComfortSetting = event.detail.comfortSetting;
+    this._closeOverlay();
   };
 
   /** Route a Comfort Setpoints card pill to its Setpoint Adjust picker

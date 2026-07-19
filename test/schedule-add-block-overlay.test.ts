@@ -106,18 +106,28 @@ describe('Schedule Add Block overlay — Comfort Setting field', () => {
     expect(row.querySelector('.pill-label')?.textContent).toBe('Away');
   });
 
-  it('emits ecosee-schedule-add-block-comfort-change on select, not a local state mutation', async () => {
+  // ADR-0018: Comfort Setting is now a pushed picker
+  // (add-block-comfort-overlay.ts), not a native <select> inline on this
+  // screen — tapping the pill just asks the host to push it.
+  it('clicking the Comfort Setting pill emits ecosee-add-block-comfort-open', async () => {
     const el = await mount({ comfortSetting: 'home' });
-    let detail: { comfortSetting: string } | undefined;
-    el.addEventListener('ecosee-schedule-add-block-comfort-change', (event) => {
-      detail = (event as CustomEvent).detail;
-    });
+    let fired = 0;
+    el.addEventListener('ecosee-add-block-comfort-open', () => (fired += 1));
 
-    const select = el.shadowRoot!.querySelector('.select-native') as HTMLSelectElement;
-    select.value = 'away';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    (fieldRow(el, 0).querySelector('.pill-button') as HTMLButtonElement).click();
 
-    expect(detail).toEqual({ comfortSetting: 'away' });
+    expect(fired).toBe(1);
+  });
+
+  it('owns no write logic or local state mutation of its own — no other event fires from tapping the pill', async () => {
+    const el = await mount({ comfortSetting: 'home' });
+    let otherEvents = 0;
+    el.addEventListener('ecosee-add-block-comfort-confirm', () => (otherEvents += 1));
+    el.addEventListener('ecosee-service-call', () => (otherEvents += 1));
+
+    (fieldRow(el, 0).querySelector('.pill-button') as HTMLButtonElement).click();
+
+    expect(otherEvents).toBe(0);
   });
 });
 

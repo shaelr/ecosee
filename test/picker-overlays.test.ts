@@ -222,8 +222,10 @@ describe('Fan picker — mode selects-and-closes, runtime applies without closin
     expect(rec.dismisses).toBe(1);
   });
 
-  it('applies a minimum-runtime change without closing the screen', async () => {
-    // A configured fan_min_on_time number entity gives the runtime dropdown its data.
+  // ADR-0018: the runtime dropdown is now a pushed picker
+  // (fan-runtime-overlay.ts), not a native <select> inline on this screen —
+  // tapping the pill just asks the host to push it.
+  it('tapping the runtime pill emits ecosee-fan-runtime-open, asking the host to push the picker', async () => {
     const runtimeConfig: EcoseeCardConfig = { ...config, fan_min_on_time_entity: 'number.min' };
     const { hass } = fakeHass({
       entities: [
@@ -236,21 +238,22 @@ describe('Fan picker — mode selects-and-closes, runtime applies without closin
       ],
     });
     const model = toFanModel(hass, runtimeConfig);
-    const runtime = model.minRuntime;
-    expect(runtime).not.toBeNull();
+    expect(model.minRuntime).not.toBeNull();
 
     const el = document.createElement('ecosee-fan-overlay') as LitElement & { model: unknown };
     el.model = model;
     const rec = recordEvents(el);
+    let fired = 0;
+    el.addEventListener('ecosee-fan-runtime-open', () => (fired += 1));
     await mount(el);
 
-    const select = el.shadowRoot!.querySelector('.select-native') as HTMLSelectElement;
-    select.value = String(runtime!.options.find((o) => !o.selected)!.value);
-    select.dispatchEvent(new Event('change'));
+    const pill = el.shadowRoot!.querySelector('.select-pill') as HTMLButtonElement;
+    pill.click();
 
-    expect(rec.calls).toHaveLength(1); // the write went out
+    expect(fired).toBe(1);
+    expect(rec.calls).toHaveLength(0); // no write — the screen itself owns none of this anymore
     vi.advanceTimersByTime(PICKER_CONFIRM_MS * 4);
-    expect(rec.dismisses).toBe(0); // …but the screen stayed open
+    expect(rec.dismisses).toBe(0); // …and stays mounted underneath the pushed picker
   });
 
   // Multi-speed layout (issue #44): the device's two modes keep the horizontal pill,

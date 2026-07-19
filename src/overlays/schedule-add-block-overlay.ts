@@ -100,11 +100,13 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-text, #d4eff9);
     }
 
-    /* Cyan-outlined value pill. Comfort Setting keeps a transparent native
-       <select> layered over it to capture taps (fan-overlay.ts's runtime
-       dropdown uses the same technique — a <select> opens its native list
-       from a tap anywhere in its box, so an invisible full-cover overlay
-       works reliably there). Opts back into pointer events (the shell makes
+    /* Cyan-outlined value pill. Every field here is now an ordinary opaque
+       button (.pill-button, below) that pushes an ecosee-styled Overlay —
+       Comfort Setting pushes its own list-picker (add-block-comfort-overlay.ts),
+       Start/End push the shared two-column time-picker (time-picker-overlay.ts,
+       ADR-0018). There is no native form control anywhere in this component
+       anymore (owner request, following ADR-0018: replace the remaining
+       native select menus). Opts back into pointer events (the shell makes
        slotted content transparent so empty areas dismiss). */
     .pill {
       position: relative;
@@ -132,23 +134,6 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-accent, #62cfe9);
       pointer-events: none;
     }
-    .pill select {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background: none;
-      color: transparent;
-      font: inherit;
-      opacity: 0;
-      cursor: pointer;
-      pointer-events: auto;
-    }
     /* Flush against the pill's own border (no outline-offset) so a focused
        pill reads as its border getting thicker, not a second detached ring
        floating outside it (the double-outline this replaced). */
@@ -156,16 +141,11 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       outline-offset: 0;
     }
-    .select-native option {
-      color: var(--ecosee-text, #d4eff9);
-      background: var(--ecosee-bg, #0a0d10);
-    }
 
-    /* Start/End: an ordinary opaque <button> carrying the pill's own visual
-       look. Tapping it just emits ecosee-time-picker-open (below) — there is
-       no native time input involved at all anymore, since ecosee's own
-       two-column time-picker Overlay (time-picker-overlay.ts, ADR-0018)
-       replaced the browser's native time picker entirely. */
+    /* Every field's tap target. Comfort Setting's label+caret ride inside the
+       button itself, so it needs the gap .pill used to give its direct
+       children when a native <select> lived there; Start/End's plain text
+       label doesn't need it, but the gap is harmless with a single child. */
     .pill-button {
       appearance: none;
       background: none;
@@ -178,6 +158,9 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-text-accent, #62cfe9);
       cursor: pointer;
       pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 2cqw;
     }
 
     .error {
@@ -213,14 +196,15 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   }
 
-  private _onComfortChange(event: Event): void {
-    const comfortSetting = (event.target as HTMLSelectElement).value;
+  /** `.pill-button`'s click handler for Comfort Setting — asks the host to
+   *  push ecosee's own list-picker Overlay on top
+   *  (`add-block-comfort-overlay.ts`); the result flows back into
+   *  `comfortSetting` at the host level once the picker confirms (see the
+   *  class doc comment for why this component can't just hold that state
+   *  itself). */
+  private _openComfortPicker(): void {
     this.dispatchEvent(
-      new CustomEvent('ecosee-schedule-add-block-comfort-change', {
-        detail: { comfortSetting },
-        bubbles: true,
-        composed: true,
-      }),
+      new CustomEvent('ecosee-add-block-comfort-open', { bubbles: true, composed: true }),
     );
   }
 
@@ -265,18 +249,15 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
           <div class="field-row">
             <span class="field-label">Comfort Setting</span>
             <span class="pill">
-              <span class="pill-label">${current?.label ?? this.comfortSetting}</span>
-              <span class="caret">${icons.caretDown}</span>
-              <select
-                class="select-native"
-                aria-label="Comfort Setting"
-                .value=${this.comfortSetting}
-                @change=${this._onComfortChange}
+              <button
+                type="button"
+                class="pill-button"
+                aria-label="Comfort Setting, ${current?.label ?? this.comfortSetting}"
+                @click=${this._openComfortPicker}
               >
-                ${this.comfortSettings.map(
-                  (option) => html`<option value=${option.preset}>${option.label}</option>`,
-                )}
-              </select>
+                <span class="pill-label">${current?.label ?? this.comfortSetting}</span>
+                <span class="caret">${icons.caretDown}</span>
+              </button>
             </span>
           </div>
           <div class="field-row">
@@ -325,6 +306,5 @@ declare global {
       startMinutes: number;
       endMinutes: number;
     }>;
-    'ecosee-schedule-add-block-comfort-change': CustomEvent<{ comfortSetting: string }>;
   }
 }

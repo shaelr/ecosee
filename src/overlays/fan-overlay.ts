@@ -2,7 +2,6 @@ import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import {
   setFanModeCall,
-  setFanMinOnTimeCall,
   type FanModel,
   type FanOption,
   type MinRuntimeModel,
@@ -16,8 +15,8 @@ import { reschedulePickerClose } from './overlay-dismiss';
  * <ecosee-overlay>). Laid out as the device is (see docs/reference/fan-mode.jpeg):
  * a "Fan Mode" title, then the On / Auto segmented pill toggle, then — when a
  * `fan_min_on_time` number entity is configured — the minimum-runtime helper copy
- * and its dropdown selector ("0 min / hr"). The active fan mode's segment is filled
- * cyan with dark text (the squircle "selected" motif); the rest are cyan on black.
+ * and its pill. The active fan mode's segment is filled cyan with dark text (the
+ * squircle "selected" motif); the rest are cyan on black.
  *
  * Like the System Mode picker (and unlike the Temperature Adjust overlay), this
  * owns no lasting edit state: each choice is a single discrete write. Selecting a
@@ -25,11 +24,19 @@ import { reschedulePickerClose } from './overlay-dismiss';
  * shared `ecosee-service-call` with the `climate.set_fan_mode` call, then auto-closes
  * after a brief confirm beat (issue #39) — a correction tap during the beat re-points
  * the pick and restarts it, and tapping the already-active mode commits nothing but
- * still closes. The minimum-runtime dropdown is a secondary setting on the same
- * screen: choosing a runtime emits the same event with the `number.set_value` call
- * but keeps the screen open (so you can set runtime *and* a fan mode in one visit;
- * closing on a native-select change would also be jarring). A runtime change is
- * ignored once a fan-mode pick has started the closing beat.
+ * still closes.
+ *
+ * The minimum-runtime pill is a secondary setting on the same screen: tapping it
+ * emits `ecosee-fan-runtime-open` — the host pushes ecosee's own list-picker
+ * Overlay (`fan-runtime-overlay.ts`) on top, which owns the `number.set_value`
+ * write itself and closes back here on confirm (owner request, following
+ * ADR-0018's date/time pickers: apply the same custom-styled treatment to the
+ * remaining native `<select>` menus). This Fan screen itself stays mounted the
+ * whole time — the picker closing pops back to it, not past it — so "set a
+ * runtime and a fan mode in one visit" still works exactly as before; there was
+ * previously a documented concern that closing this whole screen on a runtime
+ * change would feel jarring, which no longer applies now that only the pushed
+ * picker closes.
  */
 @customElement('ecosee-fan-overlay')
 export class EcoseeFanOverlay extends LitElement {
@@ -192,13 +199,14 @@ export class EcoseeFanOverlay extends LitElement {
       opacity: 0.85;
     }
 
-    /* Cyan-outlined dropdown pill (fan-mode.jpeg). The visible label + ⌄ caret are
-       driven by the model, with a transparent native <select> layered over the pill
-       to capture taps and open the platform list. Sourcing the label from the model
-       (rather than the select's own value) keeps the current runtime reflected on
-       first open, sidestepping the <select> value-binding order in Lit. */
+    /* Cyan-outlined pill (fan-mode.jpeg), now an ordinary opaque <button> —
+       tapping it just emits ecosee-fan-runtime-open (below). There is no
+       native form control involved anymore; ecosee's own list-picker Overlay
+       (fan-runtime-overlay.ts) replaced the browser's native dropdown. */
     .select-pill {
-      position: relative;
+      appearance: none;
+      background: none;
+      margin: 0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -207,8 +215,17 @@ export class EcoseeFanOverlay extends LitElement {
       border: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 100cqw;
       color: var(--ecosee-text-accent, #62cfe9);
+      font: inherit;
       font-size: 5.3cqw;
       font-weight: 500;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .select-pill:focus-visible {
+      /* Flush against the pill's own border (no outline-offset) so this
+         reads as the border getting thicker, not a second detached ring. */
+      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
+      border-radius: inherit;
     }
     .select-label {
       pointer-events: none;
@@ -219,34 +236,6 @@ export class EcoseeFanOverlay extends LitElement {
       flex: none;
       color: var(--ecosee-accent, #62cfe9);
       pointer-events: none;
-    }
-    .select-native {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: none;
-      appearance: none;
-      -webkit-appearance: none;
-      background: none;
-      color: transparent;
-      font: inherit;
-      opacity: 0;
-      cursor: pointer;
-      /* The shell makes slotted content pointer-transparent; this control opts back
-         in (the decorative label/caret above stay transparent → empty taps dismiss). */
-      pointer-events: auto;
-    }
-    .select-pill:focus-within {
-      outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
-      outline-offset: 0.6cqw;
-    }
-    /* Best-effort skin for the native dropdown list (platform support varies). */
-    .select-native option {
-      color: var(--ecosee-text, #d4eff9);
-      background: var(--ecosee-bg, #0a0d10);
     }
   `;
 
@@ -265,11 +254,13 @@ export class EcoseeFanOverlay extends LitElement {
     this._closeTimer = reschedulePickerClose(this, this._closeTimer); // confirm beat, then close
   }
 
-  private _onRuntimeChange(event: Event, runtime: MinRuntimeModel): void {
-    if (this._pending !== null) return; // a fan-mode pick is settling — ignore
-    const value = Number((event.target as HTMLSelectElement).value);
-    if (!Number.isFinite(value) || value === runtime.value) return;
-    emitServiceCall(this, setFanMinOnTimeCall(value, runtime.entityId));
+  /** `.select-pill`'s click handler for the runtime pill — asks the host to
+   *  push ecosee's own list-picker Overlay on top (`fan-runtime-overlay.ts`);
+   *  that picker owns the write itself and closes back here on confirm. */
+  private _openRuntimePicker(): void {
+    this.dispatchEvent(
+      new CustomEvent('ecosee-fan-runtime-open', { bubbles: true, composed: true }),
+    );
   }
 
   override render(): TemplateResult | typeof nothing {
@@ -315,22 +306,15 @@ export class EcoseeFanOverlay extends LitElement {
         <p class="hint">
           You can change your fan's minimum hourly runtime by tapping the setting below.
         </p>
-        <div class="select-pill">
+        <button
+          type="button"
+          class="select-pill"
+          aria-label="Minimum fan runtime, ${current?.label}"
+          @click=${this._openRuntimePicker}
+        >
           <span class="select-label">${current?.label}</span>
           <span class="caret">${icons.caretDown}</span>
-          <select
-            class="select-native"
-            aria-label="Minimum fan runtime"
-            @change=${(event: Event) => this._onRuntimeChange(event, runtime)}
-          >
-            ${runtime.options.map(
-              (option) =>
-                html`<option value=${option.value} ?selected=${option.selected}>
-                  ${option.label}
-                </option>`,
-            )}
-          </select>
-        </div>
+        </button>
       </div>
     `;
   }
