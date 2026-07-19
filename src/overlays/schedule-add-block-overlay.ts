@@ -1,5 +1,5 @@
 import { LitElement, html, css, type TemplateResult } from 'lit';
-import { customElement, property, state, query } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import type { ComfortSettingOption } from '../climate/comfort-setting';
 import { icons } from '../icons';
 
@@ -14,29 +14,33 @@ import { icons } from '../icons';
  * A new block is deliberately same-day only (no wrapping past midnight) —
  * matching the two plain time fields below, and keeping this flow to a single
  * screen rather than needing a day picker of its own on top of Schedule's.
- * Purely presentational: it owns no schedule-editing logic itself and emits
- * `ecosee-schedule-add-block-confirm` for the host to apply.
+ *
+ * A fully controlled component (ADR-0018): `comfortSetting`/`startMinutes`/
+ * `endMinutes` are `@property`s, not local `@state`, owned by the host
+ * (`ecosee-card.ts`) instead of this component. This isn't cosmetic — tapping
+ * Start or End pushes ecosee's own time-picker Overlay on top of *this*
+ * screen, and only the top-of-stack Overlay is ever mounted, so this
+ * component itself unmounts while that picker is open. Local `@state` would
+ * be lost the moment the user picked a time and came back; state the host
+ * already owns for the whole nav stack survives the round trip unaffected.
+ * Purely presentational otherwise: it owns no schedule-editing logic itself
+ * and emits `ecosee-schedule-add-block-confirm` for the host to apply.
  */
 @customElement('ecosee-schedule-add-block-overlay')
 export class EcoseeScheduleAddBlockOverlay extends LitElement {
   /** The bound entity's Comfort Settings, reused as-is from the Comfort Setting
-   *  picker's own model (`selected` is ignored here — a new block starts with
-   *  no comfort setting chosen yet, the first option winning by default, the
-   *  same way an unset native `<select>` falls back to its first `<option>`). */
+   *  picker's own model (`selected` is ignored here — the host seeds
+   *  `comfortSetting` from the entity's first listed option instead, the same
+   *  way an unset native `<select>` falls back to its first `<option>`). */
   @property({ attribute: false }) comfortSettings: ComfortSettingOption[] = [];
   /** The selected day's full name, e.g. "Thursday" — mirrors the Start Time
    *  picker's own day-scoped phrasing. */
   @property({ attribute: false }) dayLabel = '';
-
-  @state() private _comfortSetting = '';
-  @state() private _startMinutes = 8 * 60; // 08:00, a reasonable default window…
-  @state() private _endMinutes = 10 * 60; // …through 10:00.
-
-  /** The tiny, genuinely-invisible `<input type="time">` elements `.pill-button`
-   *  clicks trigger `showPicker()` on — see `.time-native`'s own CSS doc comment
-   *  and furnace-filter-overlay.ts's identical `.date-native` pattern. */
-  @query('.start-native') private _startInput?: HTMLInputElement;
-  @query('.end-native') private _endInput?: HTMLInputElement;
+  /** The in-progress new block's own Comfort Setting/Start/End — owned and
+   *  seeded by the host (see the class doc comment for why). */
+  @property({ attribute: false }) comfortSetting = '';
+  @property({ attribute: false }) startMinutes = 8 * 60; // 08:00, a reasonable default window…
+  @property({ attribute: false }) endMinutes = 10 * 60; // …through 10:00.
 
   static override styles = css`
     :host {
@@ -158,14 +162,10 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
     }
 
     /* Start/End: an ordinary opaque <button> carrying the pill's own visual
-       look, not a styled label with an invisible native time input layered
-       on top — unlike a <select>, a tap anywhere on a time input's box only
-       focuses whatever internal segment (hour/minute) happens to sit under
-       the pointer, with no visible native chrome to show which segment that
-       is once the input itself is invisible. A real button sidesteps that:
-       tapping it calls .time-native's showPicker() (below) explicitly,
-       opening the browser's own time picker. Mirrors furnace-filter-overlay.ts's
-       identical pill-button/date-native split for the same reason. */
+       look. Tapping it just emits ecosee-time-picker-open (below) — there is
+       no native time input involved at all anymore, since ecosee's own
+       two-column time-picker Overlay (time-picker-overlay.ts, ADR-0018)
+       replaced the browser's native time picker entirely. */
     .pill-button {
       appearance: none;
       background: none;
@@ -178,22 +178,6 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
       color: var(--ecosee-text-accent, #62cfe9);
       cursor: pointer;
       pointer-events: auto;
-    }
-    /* The actual <input type="time"> backing the button above: genuinely tiny
-       and invisible, never the tap target and never directly focused by a
-       user (tabindex="-1", aria-hidden="true"); .pill-button's click handler
-       calls its showPicker() explicitly. */
-    .time-native {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-      padding: 0;
-      border: none;
-      opacity: 0;
-      pointer-events: none;
     }
 
     .error {
@@ -223,78 +207,46 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
     }
   `;
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    // Default the selector to the entity's first listed Comfort Setting once
-    // the model actually arrives (it's a property, not yet set at construction).
-    if (!this._comfortSetting && this.comfortSettings.length > 0) {
-      this._comfortSetting = this.comfortSettings[0].preset;
-    }
-  }
-
   private _timeString(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   }
 
-  private _parseTime(value: string): number | null {
-    const match = /^(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return null;
-    return Number(match[1]) * 60 + Number(match[2]);
-  }
-
   private _onComfortChange(event: Event): void {
-    this._comfortSetting = (event.target as HTMLSelectElement).value;
+    const comfortSetting = (event.target as HTMLSelectElement).value;
+    this.dispatchEvent(
+      new CustomEvent('ecosee-schedule-add-block-comfort-change', {
+        detail: { comfortSetting },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
-  /** `.pill-button`'s click handler for Start/End — explicitly opens the
-   *  native time picker on the hidden `.time-native` input, rather than
-   *  relying on a tap landing on a visible form control (there is none, by
-   *  design — see `.pill-button`'s own CSS doc comment).
-   *
-   *  Two calls, for two different engines: `.focus()` unconditionally first
-   *  — iOS WebKit doesn't implement `showPicker()` for date/time inputs at
-   *  all (WebKit bug 261703, open since 2023; only file inputs support it
-   *  there) and is a silent no-op there, but ties its native picker sheet to
-   *  the input receiving real focus, from *any* source, not just a raw tap —
-   *  a WebKit engineer's own suggested workaround for the bug. Then
-   *  showPicker() itself, feature-detected (`typeof input.showPicker ===
-   *  'function'`, Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox
-   *  101+) and wrapped in try/catch (the spec allows it to throw when
-   *  rate-limited or called outside a genuine user gesture) — it forces the
-   *  picker open unconditionally on engines that support it, where
-   *  `.focus()` alone would not (see furnace-filter-overlay.ts's identical
-   *  split and ADR-0017's corrections for the desktop history this mirrors). */
-  private _openTimePicker(input?: HTMLInputElement): void {
-    if (!input) return;
-    input.focus();
-    if (typeof input.showPicker !== 'function') return;
-    try {
-      input.showPicker();
-    } catch {
-      // See doc comment above — no recovery needed.
-    }
-  }
-
-  private _onStartChange(event: Event): void {
-    const minutes = this._parseTime((event.target as HTMLInputElement).value);
-    if (minutes !== null) this._startMinutes = minutes;
-  }
-
-  private _onEndChange(event: Event): void {
-    const minutes = this._parseTime((event.target as HTMLInputElement).value);
-    if (minutes !== null) this._endMinutes = minutes;
+  /** `.pill-button`'s click handler for Start/End — asks the host to push
+   *  ecosee's own time-picker Overlay on top (ADR-0018); the result flows
+   *  back into `startMinutes`/`endMinutes` at the host level once the picker
+   *  confirms (see the class doc comment for why this component can't just
+   *  hold that state itself). */
+  private _openTimePicker(target: 'add-block-start' | 'add-block-end'): void {
+    this.dispatchEvent(
+      new CustomEvent('ecosee-time-picker-open', {
+        detail: { target },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _confirm(): void {
-    if (this._endMinutes <= this._startMinutes || !this._comfortSetting) return;
+    if (this.endMinutes <= this.startMinutes || !this.comfortSetting) return;
     this.dispatchEvent(
       new CustomEvent('ecosee-schedule-add-block-confirm', {
         detail: {
-          comfortSetting: this._comfortSetting,
-          startMinutes: this._startMinutes,
-          endMinutes: this._endMinutes,
+          comfortSetting: this.comfortSetting,
+          startMinutes: this.startMinutes,
+          endMinutes: this.endMinutes,
         },
         bubbles: true,
         composed: true,
@@ -303,8 +255,8 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
   }
 
   override render(): TemplateResult {
-    const invalid = this._endMinutes <= this._startMinutes;
-    const current = this.comfortSettings.find((option) => option.preset === this._comfortSetting);
+    const invalid = this.endMinutes <= this.startMinutes;
+    const current = this.comfortSettings.find((option) => option.preset === this.comfortSetting);
     return html`
       <div class="picker">
         <h2 class="title">Add to Schedule</h2>
@@ -313,12 +265,12 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
           <div class="field-row">
             <span class="field-label">Comfort Setting</span>
             <span class="pill">
-              <span class="pill-label">${current?.label ?? this._comfortSetting}</span>
+              <span class="pill-label">${current?.label ?? this.comfortSetting}</span>
               <span class="caret">${icons.caretDown}</span>
               <select
                 class="select-native"
                 aria-label="Comfort Setting"
-                .value=${this._comfortSetting}
+                .value=${this.comfortSetting}
                 @change=${this._onComfortChange}
               >
                 ${this.comfortSettings.map(
@@ -333,20 +285,11 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
               <button
                 type="button"
                 class="pill-button"
-                aria-label="Start time, ${this._timeString(this._startMinutes)}"
-                @click=${() => this._openTimePicker(this._startInput)}
+                aria-label="Start time, ${this._timeString(this.startMinutes)}"
+                @click=${() => this._openTimePicker('add-block-start')}
               >
-                ${this._timeString(this._startMinutes)}
+                ${this._timeString(this.startMinutes)}
               </button>
-              <input
-                class="time-native start-native"
-                type="time"
-                step="1800"
-                tabindex="-1"
-                aria-hidden="true"
-                .value=${this._timeString(this._startMinutes)}
-                @change=${this._onStartChange}
-              />
             </span>
           </div>
           <div class="field-row">
@@ -355,20 +298,11 @@ export class EcoseeScheduleAddBlockOverlay extends LitElement {
               <button
                 type="button"
                 class="pill-button"
-                aria-label="End time, ${this._timeString(this._endMinutes)}"
-                @click=${() => this._openTimePicker(this._endInput)}
+                aria-label="End time, ${this._timeString(this.endMinutes)}"
+                @click=${() => this._openTimePicker('add-block-end')}
               >
-                ${this._timeString(this._endMinutes)}
+                ${this._timeString(this.endMinutes)}
               </button>
-              <input
-                class="time-native end-native"
-                type="time"
-                step="1800"
-                tabindex="-1"
-                aria-hidden="true"
-                .value=${this._timeString(this._endMinutes)}
-                @change=${this._onEndChange}
-              />
             </span>
           </div>
         </div>
@@ -391,5 +325,6 @@ declare global {
       startMinutes: number;
       endMinutes: number;
     }>;
+    'ecosee-schedule-add-block-comfort-change': CustomEvent<{ comfortSetting: string }>;
   }
 }

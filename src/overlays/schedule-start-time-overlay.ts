@@ -1,6 +1,5 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
-import { snapToSlot } from '../schedule/schedule';
+import { customElement, property } from 'lit/decorators.js';
 
 /**
  * `<ecosee-schedule-start-time-overlay>` — the Start Time picker reached by
@@ -9,15 +8,16 @@ import { snapToSlot } from '../schedule/schedule';
  * reference): a short explainer, "What time should <Comfort Setting> start on
  * <Day>?", a time field, and a "Remove from schedule" action.
  *
- * Like the other discrete-choice pickers (System Mode, Comfort Setting, Fan), a
- * time change is a single write that returns to the Schedule sub-screen — the
- * host pops the nav stack itself once the write (and the day's re-fetch) lands,
- * rather than this element auto-closing on a timer, since the write is a real
- * network round trip rather than an instant local commit.
+ * Tapping the time field pushes ecosee's own time-picker Overlay on top
+ * (`time-picker-overlay.ts`, ADR-0018); the host applies the write and pops
+ * both levels back to Schedule once that picker confirms — the host owns the
+ * nav-stack pop itself, rather than this element (or the nested picker)
+ * auto-closing on a timer, since the write is a real network round trip
+ * rather than an instant local commit.
  *
  * Purely presentational: it owns no schedule-editing logic itself (schedule.ts's
  * `moveBlockStart` / `removeBlock` do the actual repaint-footprint math) and
- * emits `ecosee-schedule-time-confirm` / `ecosee-schedule-block-remove` for the
+ * emits `ecosee-time-picker-open` / `ecosee-schedule-block-remove` for the
  * host to apply.
  */
 @customElement('ecosee-schedule-start-time-overlay')
@@ -33,12 +33,6 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
    *  `removeBlock` would no-op) — hides the removal action rather than offering
    *  a control that can't do anything. */
   @property({ attribute: false }) canRemove = false;
-
-  /** The tiny, genuinely-invisible `<input type="time">` `.pill-button`'s click
-   *  handler triggers `showPicker()` on — see `.time-native`'s own CSS doc comment
-   *  and schedule-add-block-overlay.ts's identical split (itself mirroring
-   *  furnace-filter-overlay.ts's `.date-native` pattern for the same reason). */
-  @query('.time-native') private _timeInput?: HTMLInputElement;
 
   static override styles = css`
     :host {
@@ -85,14 +79,9 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       color: var(--ecosee-text-accent, #62cfe9);
     }
 
-    /* Cyan-outlined time field. Tapping it opens the platform's own time picker
-       via showPicker() (below) rather than relying on a native <input type=time>
-       styled in place — an earlier version of this pattern (used on Add to
-       Schedule's Start/End fields until it was replaced) found that an invisible
-       full-cover time input only focuses whatever internal segment happens to sit
-       under the pointer, with no visible chrome to show which segment that is,
-       reading as "tapping does nothing." A real button always has something to
-       tap. */
+    /* Cyan-outlined time field. Tapping it pushes ecosee's own time-picker
+       Overlay (time-picker-overlay.ts, ADR-0018) — there is no native time
+       input involved at all anymore. */
     .field {
       box-sizing: border-box;
       position: relative;
@@ -104,11 +93,6 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       border-radius: 100cqw;
       pointer-events: auto;
     }
-    /* An ordinary opaque <button> carrying the field's own visual look — not a
-       styled label with an invisible native time input layered on top. Tapping
-       it calls .time-native's showPicker() (below) explicitly, opening the
-       browser's own time picker. Mirrors schedule-add-block-overlay.ts's
-       identical pill-button/time-native split. */
     .pill-button {
       appearance: none;
       background: none;
@@ -129,22 +113,6 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
       outline: 0.5cqw solid var(--ecosee-accent, #62cfe9);
       outline-offset: 0;
     }
-    /* The actual <input type="time"> backing the button above: genuinely tiny
-       and invisible, never the tap target and never directly focused by a user
-       (tabindex="-1", aria-hidden="true"); .pill-button's click handler calls
-       its showPicker() explicitly. */
-    .time-native {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-      padding: 0;
-      border: none;
-      opacity: 0;
-      pointer-events: none;
-    }
 
     .remove {
       appearance: none;
@@ -161,45 +129,13 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
     }
   `;
 
-  /** `.pill-button`'s click handler — explicitly opens the native time picker
-   *  on the hidden `.time-native` input, rather than relying on a tap landing
-   *  on a visible form control (there is none, by design — see `.pill-button`'s
-   *  own CSS doc comment).
-   *
-   *  Two calls, for two different engines: `.focus()` unconditionally first
-   *  — iOS WebKit doesn't implement `showPicker()` for date/time inputs at
-   *  all (WebKit bug 261703, open since 2023; only file inputs support it
-   *  there) and is a silent no-op there, but ties its native picker sheet to
-   *  the input receiving real focus, from *any* source, not just a raw tap —
-   *  a WebKit engineer's own suggested workaround for the bug. Then
-   *  showPicker() itself, feature-detected (`typeof input.showPicker ===
-   *  'function'`, Baseline 2023 — Chrome/Edge 99+, Safari 16.4+, Firefox
-   *  101+) and wrapped in try/catch (the spec allows it to throw when
-   *  rate-limited or called outside a genuine user gesture) — it forces the
-   *  picker open unconditionally on engines that support it, where `.focus()`
-   *  alone would not (see schedule-add-block-overlay.ts's identical split
-   *  and ADR-0017's corrections for the desktop history this mirrors). */
+  /** `.pill-button`'s click handler — asks the host to push ecosee's own
+   *  time-picker Overlay on top (ADR-0018); the write itself happens at the
+   *  host level once the picker confirms (see the class doc comment). */
   private _openTimePicker(): void {
-    const input = this._timeInput;
-    if (!input) return;
-    input.focus();
-    if (typeof input.showPicker !== 'function') return;
-    try {
-      input.showPicker();
-    } catch {
-      // See doc comment above — no recovery needed.
-    }
-  }
-
-  private _onTimeChange(event: Event): void {
-    const value = (event.target as HTMLInputElement).value; // "HH:MM"
-    const match = /^(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return;
-    const minutes = snapToSlot(Number(match[1]) * 60 + Number(match[2]));
-    if (minutes === this.startMinutes) return;
     this.dispatchEvent(
-      new CustomEvent('ecosee-schedule-time-confirm', {
-        detail: { minutes },
+      new CustomEvent('ecosee-time-picker-open', {
+        detail: { target: 'schedule-start-time' },
         bubbles: true,
         composed: true,
       }),
@@ -233,15 +169,6 @@ export class EcoseeScheduleStartTimeOverlay extends LitElement {
           >
             ${value}
           </button>
-          <input
-            class="time-native"
-            type="time"
-            step="1800"
-            tabindex="-1"
-            aria-hidden="true"
-            .value=${value}
-            @change=${this._onTimeChange}
-          />
         </div>
         ${
           this.canRemove
@@ -258,7 +185,6 @@ declare global {
     'ecosee-schedule-start-time-overlay': EcoseeScheduleStartTimeOverlay;
   }
   interface HTMLElementEventMap {
-    'ecosee-schedule-time-confirm': CustomEvent<{ minutes: number }>;
     'ecosee-schedule-block-remove': CustomEvent<void>;
     'ecosee-schedule-day-select': CustomEvent<{ dayIndex: number }>;
     'ecosee-schedule-block-select': CustomEvent<{ blockIndex: number }>;

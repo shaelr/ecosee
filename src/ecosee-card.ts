@@ -13,7 +13,7 @@ import { toComfortSettingModel } from './climate/comfort-setting';
 import { toComfortSetpointsModel } from './climate/comfort-setpoint';
 import { toFanModel } from './climate/fan';
 import { resumeProgramCall } from './climate/resume-schedule';
-import { toFurnaceFilterModel } from './climate/furnace-filter';
+import { toFurnaceFilterModel, setLastChangedDateCall } from './climate/furnace-filter';
 import { toTabBarModel, TAB_SECTIONS, type TabBarModel, type TabTarget } from './menu/tab-bar';
 import { InactivityTimer, inactivityTimeoutMs, standbyReturnMs } from './overlays/inactivity-timer';
 import type { SystemSelectTarget } from './overlays/system-overlay';
@@ -68,6 +68,8 @@ import './overlays/schedule-copy-overlay';
 import './overlays/comfort-setpoints-overlay';
 import './overlays/comfort-setpoint-overlay';
 import './overlays/furnace-filter-overlay';
+import './overlays/date-picker-overlay';
+import './overlays/time-picker-overlay';
 import { EDITOR_TYPE } from './editor/ecosee-card-editor';
 import './editor/ecosee-card-editor';
 
@@ -79,7 +81,12 @@ import './editor/ecosee-card-editor';
  *  `schedule-start-time`, `schedule-add-block`, and `schedule-copy` are
  *  Schedule's own pickers (ADR-0014); `setpoint-adjust` is Comfort Setpoints'
  *  own picker (ADR-0015) — all reached the same way `system-mode`/
- *  `comfort-setting` are reached from `system`. */
+ *  `comfort-setting` are reached from `system`. `date-picker`/`time-picker` are
+ *  ecosee's own custom pickers (ADR-0018, replacing native `<input type="date">`/
+ *  `<input type="time">`), reached the same way — pushed on top of whichever
+ *  screen owns the field being edited (`filter` for the date picker;
+ *  `schedule-add-block` or `schedule-start-time` for the time picker, tracked by
+ *  `_timePickerTarget`). */
 type OverlayKind =
   | 'temperature'
   | 'system-mode'
@@ -94,7 +101,9 @@ type OverlayKind =
   | 'schedule-copy'
   | 'setpoints'
   | 'setpoint-adjust'
-  | 'filter';
+  | 'filter'
+  | 'date-picker'
+  | 'time-picker';
 
 /**
  * One Overlay's wiring, gathered in a single place: whether it has anything to show
@@ -167,6 +176,30 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  ⇒ the picker has nothing to show, matching `_tempSetpoint`'s per-open-seed
    *  shape. Cleared on close (`_clearOverlaySeeds`). */
   @state() private _scheduleEditingBlockIndex?: number;
+
+  /** Whether the Furnace Filter Last Changed date picker (ADR-0018) has been
+   *  opened — its only edit target, so unlike the schedule/setpoint pickers
+   *  this doesn't need to carry *which* field, just whether it's open.
+   *  Cleared on close (`_clearOverlaySeeds`). */
+  @state() private _datePickerOpen = false;
+  /** Which field the time picker (ADR-0018) is currently editing — set right
+   *  before pushing `'time-picker'`, consumed by its own render entry and by
+   *  `_onTimePickerConfirm` to route the confirmed value back to the right
+   *  place. `undefined` ⇒ the picker has nothing to show, matching
+   *  `_scheduleEditingBlockIndex`'s per-open-seed shape. Cleared on close. */
+  @state() private _timePickerTarget?: 'add-block-start' | 'add-block-end' | 'schedule-start-time';
+  /** The in-progress "Add to Schedule" block's own Comfort Setting/Start/End.
+   *  Owned here, not by `schedule-add-block-overlay.ts` itself, because
+   *  tapping Start or End pushes the time picker on top of that screen —
+   *  and only the top-of-stack Overlay is ever mounted, so any state the
+   *  Add to Schedule component held locally would be lost the moment the
+   *  user picked a time and came back. Reset to fresh defaults each time
+   *  `schedule-add-block` is (re)opened (`_onScheduleAddBlockOpen`), not
+   *  just once, so a second visit doesn't inherit a previous, uncommitted
+   *  session. Cleared on close (`_clearOverlaySeeds`). */
+  @state() private _addBlockComfortSetting = '';
+  @state() private _addBlockStartMinutes = 8 * 60;
+  @state() private _addBlockEndMinutes = 10 * 60;
 
   /** Which Comfort Setpoints field the Setpoint Adjust picker is editing (a
    *  preset name + `'heat'`/`'cool'`), set when a Comfort Setpoints card's pill
@@ -343,6 +376,9 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         <ecosee-schedule-add-block-overlay
           .comfortSettings=${toComfortSettingModel(hass, config).options}
           .dayLabel=${dayName(this._scheduleDayIndex)}
+          .comfortSetting=${this._addBlockComfortSetting}
+          .startMinutes=${this._addBlockStartMinutes}
+          .endMinutes=${this._addBlockEndMinutes}
         ></ecosee-schedule-add-block-overlay>
       `,
     },
@@ -392,6 +428,58 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
           .resetEntity=${config.filter_reset_entity}
         ></ecosee-furnace-filter-overlay>
       `,
+    },
+    'date-picker': {
+      // Furnace Filter's Last Changed field is this picker's only edit
+      // target today, so `available` gates purely on whether it's been
+      // opened, not on *which* field (contrast `time-picker` below, which
+      // has three possible targets).
+      available: () => this._datePickerOpen,
+      render: (hass, config) => {
+        const model = toFurnaceFilterModel(hass, config);
+        if (!model.lastChanged) return nothing;
+        return html`
+          <ecosee-date-picker-overlay
+            .value=${model.lastChanged}
+            .max=${new Date()}
+            .label=${'Last Changed'}
+          ></ecosee-date-picker-overlay>
+        `;
+      },
+    },
+    'time-picker': {
+      available: () => this._timePickerTarget !== undefined,
+      render: (_hass, config) => {
+        const target = this._timePickerTarget;
+        if (target === 'add-block-start') {
+          return html`<ecosee-time-picker-overlay
+            .minutes=${this._addBlockStartMinutes}
+          ></ecosee-time-picker-overlay>`;
+        }
+        if (target === 'add-block-end') {
+          return html`<ecosee-time-picker-overlay
+            .minutes=${this._addBlockEndMinutes}
+          ></ecosee-time-picker-overlay>`;
+        }
+        if (target === 'schedule-start-time') {
+          // Live-recomputed from the same source `'schedule-start-time'`'s
+          // own render entry reads from — not a separate seed — matching
+          // that entry's own pattern.
+          const index = this._scheduleEditingBlockIndex;
+          if (index === undefined) return nothing;
+          const blocks = toScheduleBlocks(
+            this._scheduleEvents,
+            this._scheduleSelectedDate(),
+            config,
+          );
+          const block = blocks[index];
+          if (!block) return nothing;
+          return html`<ecosee-time-picker-overlay
+            .minutes=${block.startMinutes}
+          ></ecosee-time-picker-overlay>`;
+        }
+        return nothing;
+      },
     },
   };
 
@@ -811,13 +899,17 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
         @ecosee-tab-select=${this._onTabSelect}
         @ecosee-schedule-day-select=${this._onScheduleDaySelect}
         @ecosee-schedule-block-select=${this._onScheduleBlockSelect}
-        @ecosee-schedule-time-confirm=${this._onScheduleTimeConfirm}
         @ecosee-schedule-block-remove=${this._onScheduleBlockRemove}
         @ecosee-schedule-add-block-open=${this._onScheduleAddBlockOpen}
         @ecosee-schedule-copy-open=${this._onScheduleCopyOpen}
         @ecosee-schedule-add-block-confirm=${this._onScheduleAddBlockConfirm}
+        @ecosee-schedule-add-block-comfort-change=${this._onScheduleAddBlockComfortChange}
         @ecosee-schedule-copy-confirm=${this._onScheduleCopyConfirm}
         @ecosee-comfort-setpoint-select=${this._onComfortSetpointSelect}
+        @ecosee-date-picker-open=${this._onDatePickerOpen}
+        @ecosee-date-picker-confirm=${this._onDatePickerConfirm}
+        @ecosee-time-picker-open=${this._onTimePickerOpen}
+        @ecosee-time-picker-confirm=${this._onTimePickerConfirm}
         @pointerdown=${this._onOverlayActivity}
         @pointermove=${this._onOverlayActivity}
         @keydown=${this._onOverlayActivity}
@@ -959,19 +1051,6 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     this._open('schedule-start-time', 'push');
   };
 
-  /** Apply a Start Time picker confirmation: build the `calendar/event/update`
-   *  websocket write (schedule.ts's `moveBlockStart` — growing the edited block's
-   *  own footprint, or extending its predecessor's when shrinking; see
-   *  schedule.ts's module doc), send it, re-fetch the day, and pop back to the
-   *  Schedule sub-screen. A `null` write (a no-op move, or no in-day predecessor
-   *  to shrink into) still returns to Schedule — there is nothing to apply, but
-   *  the picker has served its purpose. */
-  private _onScheduleTimeConfirm = (event: CustomEvent<{ minutes: number }>): void => {
-    void this._applyScheduleWrite((entityId, blocks, index, day) =>
-      moveBlockStart(entityId, blocks, index, day, event.detail.minutes),
-    );
-  };
-
   /** Apply a Start Time picker's "Remove from schedule": build the merge-into-
    *  predecessor write (schedule.ts's `removeBlock`), send it, re-fetch, and pop
    *  back to the Schedule sub-screen. */
@@ -981,6 +1060,19 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     );
   };
 
+  /** Shared by the "Remove from schedule" action and the time picker's
+   *  `'schedule-start-time'` confirm branch: build the `calendar/event/update`
+   *  websocket write (schedule.ts's `moveBlockStart`/`removeBlock` — growing
+   *  the edited block's own footprint, or extending its predecessor's when
+   *  shrinking; see schedule.ts's module doc), send it, re-fetch the day, and
+   *  pop back to the Schedule sub-screen. A `null` write (a no-op move, or no
+   *  in-day predecessor to shrink into) still returns to Schedule — there is
+   *  nothing to apply, but the picker has served its purpose. Closes via
+   *  `_closeToSchedule()`, not `_closeOverlay()` — Remove is called from a
+   *  2-deep stack (`['schedule', 'schedule-start-time']`) where either would
+   *  behave the same, but the time-picker confirm path is 3-deep
+   *  (`[..., 'schedule-start-time', 'time-picker']`), and `_closeToSchedule`
+   *  is the one that's correct at both depths. */
   private async _applyScheduleWrite(
     build: (
       entityId: string,
@@ -997,13 +1089,33 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     const message = build(entityId, blocks, index, day);
     if (message) await this._sendScheduleUpdate(message);
     await this._loadSchedule();
-    this._closeOverlay();
+    this._closeToSchedule();
   }
 
   /** Open the "+" Add to Schedule picker (hub-and-picker, mirroring
-   *  `_onScheduleBlockSelect`). */
+   *  `_onScheduleBlockSelect`). Also (re)seeds the in-progress block's own
+   *  Comfort Setting/Start/End to fresh defaults — this state lives on the
+   *  card, not on `schedule-add-block-overlay.ts` itself (see `_addBlockComfortSetting`'s
+   *  own doc comment for why), so a *second* visit needs an explicit reset
+   *  rather than relying on the component re-initializing itself on mount. */
   private _onScheduleAddBlockOpen = (): void => {
+    this._addBlockComfortSetting =
+      this.hass && this._config
+        ? (toComfortSettingModel(this.hass, this._config).options[0]?.preset ?? '')
+        : '';
+    this._addBlockStartMinutes = 8 * 60;
+    this._addBlockEndMinutes = 10 * 60;
     this._open('schedule-add-block', 'push');
+  };
+
+  /** Comfort Setting's own `<select>` still lives entirely on
+   *  `schedule-add-block-overlay.ts` (no picker involved — see that
+   *  component's own class doc comment), but the *value* is now card-owned
+   *  state like Start/End, so its change routes up here the same way. */
+  private _onScheduleAddBlockComfortChange = (
+    event: CustomEvent<{ comfortSetting: string }>,
+  ): void => {
+    this._addBlockComfortSetting = event.detail.comfortSetting;
   };
 
   /** Open the "Copy schedule to another day" picker. */
@@ -1079,6 +1191,72 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
       // either way, so there is nothing further to degrade to here.
     }
   }
+
+  /** Open Furnace Filter's Last Changed date picker (ADR-0018, hub-and-picker,
+   *  mirroring `_onScheduleBlockSelect`). Its only edit target, so there's
+   *  nothing to seed beyond the flag itself — the picker's own render entry
+   *  reads the current value live from `toFurnaceFilterModel`. */
+  private _onDatePickerOpen = (): void => {
+    this._datePickerOpen = true;
+    this._open('date-picker', 'push');
+  };
+
+  /** Apply the date picker's confirmation: build the write
+   *  (`setLastChangedDateCall`, unchanged from before this component owned
+   *  no native input at all), send it, and pop back to the Furnace Filter
+   *  section. Mirrors `_onScheduleAddBlockConfirm`'s write-then-pop shape —
+   *  an ordinary service call, not the schedule's websocket path. */
+  private _onDatePickerConfirm = (event: CustomEvent<{ date: Date }>): void => {
+    void this._applyDatePickerWrite(event.detail.date);
+  };
+
+  private async _applyDatePickerWrite(date: Date): Promise<void> {
+    const entityId = this._config?.filter_last_changed_entity;
+    if (!this.hass || !entityId) return;
+    const call = setLastChangedDateCall(entityId, date);
+    if (call) await this.hass.callService(call.domain, call.service, call.data);
+    this._closeOverlay();
+  }
+
+  /** Open the time picker (ADR-0018, hub-and-picker) for whichever field
+   *  asked for it — Add to Schedule's Start/End, or a schedule block's own
+   *  Start Time. `target` (carried on the open event) is stashed so both the
+   *  picker's own render entry and its eventual confirm know which field to
+   *  route back into. */
+  private _onTimePickerOpen = (
+    event: CustomEvent<{ target: 'add-block-start' | 'add-block-end' | 'schedule-start-time' }>,
+  ): void => {
+    this._timePickerTarget = event.detail.target;
+    this._open('time-picker', 'push');
+  };
+
+  /** Apply the time picker's confirmation, routed by which field opened it.
+   *  Add to Schedule's Start/End write straight into the card's own buffered
+   *  `_addBlockStartMinutes`/`_addBlockEndMinutes` (no entity write yet — the
+   *  new block isn't submitted until its own "Add to Schedule" button is
+   *  tapped) and pop one level, back to that screen. Editing an existing
+   *  block's Start Time instead applies the real write immediately, exactly
+   *  as `_onScheduleTimeConfirm` used to (now folded in here, since
+   *  `schedule-start-time-overlay.ts` no longer emits its own confirm event
+   *  directly — it pushes this picker instead). */
+  private _onTimePickerConfirm = (event: CustomEvent<{ minutes: number }>): void => {
+    const target = this._timePickerTarget;
+    if (target === 'add-block-start') {
+      this._addBlockStartMinutes = event.detail.minutes;
+      this._closeOverlay();
+      return;
+    }
+    if (target === 'add-block-end') {
+      this._addBlockEndMinutes = event.detail.minutes;
+      this._closeOverlay();
+      return;
+    }
+    if (target === 'schedule-start-time') {
+      void this._applyScheduleWrite((entityId, blocks, index, day) =>
+        moveBlockStart(entityId, blocks, index, day, event.detail.minutes),
+      );
+    }
+  };
 
   /** Route a Comfort Setpoints card pill to its Setpoint Adjust picker
    *  (hub-and-picker, mirroring `_onScheduleBlockSelect`). */
@@ -1161,6 +1339,21 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
     this._clearOverlaySeeds();
   };
 
+  /** Pop back to the Schedule sub-screen specifically, rather than one level
+   *  relative to wherever the call happened to originate — used by
+   *  `_applyScheduleWrite`, whose caller may be 2 deep
+   *  (`['schedule', 'schedule-start-time']`, the Remove action) or 3 deep
+   *  (`[..., 'schedule-start-time', 'time-picker']`, an edited block's Start
+   *  Time confirming through the nested time picker, ADR-0018) depending on
+   *  how it was reached. `slice(0, -1)` would land on the wrong screen in
+   *  the 3-deep case; finding `'schedule'` by name is correct at either
+   *  depth. */
+  private _closeToSchedule(): void {
+    const index = this._nav.indexOf('schedule');
+    this._nav = index === -1 ? [] : this._nav.slice(0, index + 1);
+    this._clearOverlaySeeds();
+  }
+
   /** Auto-revert (issue #13): collapse any open Overlay all the way back to the
    *  bare Home Screen and drop per-open state, exactly as a manual dismiss leaves
    *  it. Driven by the inactivity timer on expiry. */
@@ -1172,17 +1365,26 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
 
   /** Clear per-open Overlay state so a later open starts fresh: the Temperature
    *  Adjust seed, the Weather forecast, which Schedule block the Start Time
-   *  picker was editing, and which Comfort Setpoints field the Setpoint Adjust
-   *  picker was editing. Deliberately does NOT clear `_scheduleDayIndex` /
-   *  `_scheduleEvents` — the selected day and its last-fetched blocks are kept
-   *  across a close so reopening Schedule shows them immediately rather than a
-   *  blank "Loading…" flash while a fresh fetch lands. */
+   *  picker was editing, which Comfort Setpoints field the Setpoint Adjust
+   *  picker was editing, and the two ADR-0018 pickers' own open flags/target.
+   *  Deliberately does NOT clear `_scheduleDayIndex` / `_scheduleEvents` — the
+   *  selected day and its last-fetched blocks are kept across a close so
+   *  reopening Schedule shows them immediately rather than a blank "Loading…"
+   *  flash while a fresh fetch lands. Also deliberately does NOT clear
+   *  `_addBlockComfortSetting`/`_addBlockStartMinutes`/`_addBlockEndMinutes` —
+   *  those belong to Add to Schedule itself, not to whichever picker was just
+   *  dismissed on top of it (closing the time picker back to the Add to
+   *  Schedule screen must not wipe the very values it just set); they're
+   *  reset explicitly on each `schedule-add-block` open instead
+   *  (`_onScheduleAddBlockOpen`). */
   private _clearOverlaySeeds(): void {
     this._tempSeed = undefined;
     this._tempSetpoint = undefined;
     this._weatherForecasts = undefined;
     this._scheduleEditingBlockIndex = undefined;
     this._setpointSelection = undefined;
+    this._datePickerOpen = false;
+    this._timePickerTarget = undefined;
   }
 
   /** Any interaction within an open Overlay (tap, drag start, key) postpones

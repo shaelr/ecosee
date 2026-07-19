@@ -540,3 +540,246 @@ describe('ecosee-card wiring — pickers close on selection (issues #38/#39)', (
     expect(overlayPresent(card, 'ecosee-system-mode-overlay')).toBe(false);
   });
 });
+
+// ecosee's own date/time pickers (ADR-0018), replacing native <input
+// type="date">/<input type="time"> everywhere. These are the most
+// architecturally novel part of that change: the time picker is reached
+// from three different screens, at two different nav depths, with two
+// different close behaviors depending on which one opened it — exactly the
+// kind of routing a pure component test can't exercise, since it lives
+// entirely in the card's own event wiring.
+describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
+  /** Today's date, at local midnight, as an ISO-ish date-only string — the
+   *  Schedule sub-screen always opens on today's day-of-week
+   *  (`_scheduleDayIndex`'s own default), so a calendar event fixture has to
+   *  be anchored to "today," not a hardcoded date, to land in the fetched
+   *  window regardless of when this test happens to run. */
+  function todayDateString(): string {
+    const now = new Date();
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  it('Furnace Filter: opens the date picker, applies the write, and pops one level back to Furnace Filter', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat', { hvac_modes: ['off', 'heat', 'cool'] }),
+        { entity_id: 'date.filter', state: '2025-01-01', attributes: {} },
+      ],
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      filter_last_changed_entity: 'date.filter',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-tab-select', {
+        detail: { target: 'filter' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(true);
+
+    const filterOverlay = card.shadowRoot!.querySelector(
+      'ecosee-furnace-filter-overlay',
+    ) as LitElement;
+    await filterOverlay.updateComplete;
+    (filterOverlay.shadowRoot!.querySelector('.pill-button') as HTMLButtonElement).click();
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-date-picker-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(false);
+
+    const datePicker = card.shadowRoot!.querySelector('ecosee-date-picker-overlay') as LitElement;
+    await datePicker.updateComplete;
+    const someDay = datePicker.shadowRoot!.querySelector('.day') as HTMLButtonElement;
+    someDay.click();
+    // The write is async (await this.hass.callService(...)) — let it and the
+    // subsequent close settle before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await card.updateComplete;
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ domain: 'date', service: 'set_value' });
+    // One level popped: back to Furnace Filter, not further.
+    expect(overlayPresent(card, 'ecosee-furnace-filter-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-date-picker-overlay')).toBe(false);
+  });
+
+  it('Add to Schedule: opens the time picker for Start, applies the value locally, and pops one level back to Add to Schedule (no entity write yet)', async () => {
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat_cool', {
+          hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+          preset_modes: ['home', 'away'],
+          preset_mode: 'home',
+        }),
+        { entity_id: 'calendar.sched', state: 'off', attributes: {} },
+      ],
+      response: { response: { 'calendar.sched': { events: [] } } },
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      schedule_entity: 'calendar.sched',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-tab-select', {
+        detail: { target: 'schedule' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-schedule-overlay')).toBe(true);
+
+    card
+      .shadowRoot!.querySelector('ecosee-overlay')!
+      .dispatchEvent(
+        new CustomEvent('ecosee-schedule-add-block-open', { bubbles: true, composed: true }),
+      );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
+
+    const addBlock = card.shadowRoot!.querySelector(
+      'ecosee-schedule-add-block-overlay',
+    ) as LitElement;
+    await addBlock.updateComplete;
+    const startPill = addBlock
+      .shadowRoot!.querySelectorAll('.field-row')[1]!
+      .querySelector('.pill-button') as HTMLButtonElement;
+    expect(startPill.textContent?.trim()).toBe('08:00'); // the card's own seeded default
+    startPill.click();
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(false);
+
+    // Opening Schedule already fired its own calendar.get_events fetch; the
+    // count from here on is what matters — picking a time must add nothing.
+    const callsBeforeConfirm = calls.length;
+    const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
+    await timePicker.updateComplete;
+    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
+    await card.updateComplete;
+
+    // Add to Schedule isn't submitted by picking a time — no entity write yet.
+    expect(calls).toHaveLength(callsBeforeConfirm);
+    // One level popped: back to Add to Schedule, not all the way to Schedule.
+    expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
+    // The seeded 08:00 default survived the round trip through the picker
+    // unaffected (Confirm without picking a row keeps the seeded value) —
+    // proof the card's own buffered state, not local component state, is
+    // what the field reflects after the picker unmounted and remounted it.
+    const startPillAfter = card
+      .shadowRoot!.querySelector('ecosee-schedule-add-block-overlay')!
+      .shadowRoot!.querySelectorAll('.field-row')[1]!
+      .querySelector('.pill-button');
+    expect(startPillAfter?.textContent?.trim()).toBe('08:00');
+  });
+
+  it('Schedule Start Time: opens the time picker for an existing block, applies the write, and pops TWO levels straight back to Schedule (not the Start Time screen)', async () => {
+    const today = todayDateString();
+    const { hass, calls } = fakeHass({
+      entities: [
+        climateEntity('heat_cool', { hvac_modes: ['off', 'heat', 'cool', 'heat_cool'] }),
+        { entity_id: 'calendar.sched', state: 'off', attributes: {} },
+      ],
+      response: {
+        response: {
+          'calendar.sched': {
+            events: [
+              { uid: 'e1', start: `${today}T08:00:00`, end: `${today}T17:00:00`, summary: 'Home' },
+            ],
+          },
+        },
+      },
+    });
+    // hass.connection is required for the actual moveBlockStart websocket
+    // write; a minimal stub is enough to let it resolve without throwing —
+    // this test's real focus is the nav-stack depth, not the write payload.
+    (hass as unknown as { connection: unknown }).connection = {
+      sendMessagePromise: async () => ({}),
+    };
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      schedule_entity: 'calendar.sched',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-tab-select', {
+        detail: { target: 'schedule' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    // Let the async calendar.get_events fetch (fired from the schedule
+    // descriptor's onOpen) resolve and re-render before reading blocks.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await card.updateComplete;
+
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-schedule-block-select', {
+        detail: { blockIndex: 0 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(true);
+
+    const startTime = card.shadowRoot!.querySelector(
+      'ecosee-schedule-start-time-overlay',
+    ) as LitElement;
+    await startTime.updateComplete;
+    (startTime.shadowRoot!.querySelector('.pill-button') as HTMLButtonElement).click();
+    await card.updateComplete;
+
+    // Three deep now: schedule -> schedule-start-time -> time-picker.
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(false);
+
+    const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
+    await timePicker.updateComplete;
+    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
+    await card.updateComplete;
+    // The write is async (calendar/event/update over the websocket
+    // connection) — let it and the subsequent re-fetch/close settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await card.updateComplete;
+
+    // Lands directly on Schedule — NOT the Start Time screen it was pushed
+    // from, and not still on the time picker either. This is the one
+    // genuinely new piece of nav logic ADR-0018 introduced (_closeToSchedule,
+    // pop-by-name rather than pop-one) — the whole reason this test exists.
+    expect(overlayPresent(card, 'ecosee-schedule-overlay')).toBe(true);
+    expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(false);
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
+    void calls; // the exact write payload is schedule.test.ts's concern; this test is about nav depth.
+  });
+});
