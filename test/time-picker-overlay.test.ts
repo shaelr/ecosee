@@ -1,22 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import '../src/overlays/time-picker-overlay';
-import { loopScrollTop, TIME_CONFIRM_MS } from '../src/overlays/time-picker-overlay';
+import { loopScrollTop } from '../src/overlays/time-picker-overlay';
 import type { EcoseeTimePickerOverlay } from '../src/overlays/time-picker-overlay';
 
 // ecosee's own time picker (ADR-0018): two independent scrollable columns
-// (Hour 00-23, Minute 00/30), replacing the browser's native
-// <input type="time"> picker everywhere ecosee edits a time value. No
-// explicit Confirm button — tapping either column holds the optimistic pick
-// and auto-confirms TIME_CONFIRM_MS after the last tap in either column
-// (owner request: make every picker in the app behave the same way), a
-// longer version of the "correction tap re-points and restarts the beat"
-// contract every other picker uses (PICKER_CONFIRM_MS, overlay-dismiss.ts),
-// generalized across two independent columns instead of one list. Both
-// columns loop — each renders its values repeated 5x back to back, and
-// scrolling into the first/last copy silently wraps back toward the middle
-// (the standard infinite-carousel trick, since every copy is identical
-// content).
+// (Hour 00-23, Minute 00/30) plus an explicit Confirm button, replacing the
+// browser's native <input type="time"> picker everywhere ecosee edits a time
+// value. Both columns loop — each renders its values repeated 5x back to
+// back, and scrolling into the first/last copy silently wraps back toward
+// the middle (the standard infinite-carousel trick, since every copy is
+// identical content).
 
 async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
   const el = document.createElement('ecosee-time-picker-overlay') as EcoseeTimePickerOverlay;
@@ -26,9 +20,7 @@ async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
   return el;
 }
 
-beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
 afterEach(() => {
-  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 
@@ -124,8 +116,8 @@ describe('Time Picker overlay — selection', () => {
   });
 });
 
-describe('Time Picker overlay — auto-confirm (no Confirm button)', () => {
-  it('auto-confirms the combined hour+minute value TIME_CONFIRM_MS after the last tap', async () => {
+describe('Time Picker overlay — confirm', () => {
+  it('emits ecosee-time-picker-confirm with the combined hour+minute value when Confirm is tapped', async () => {
     const el = await mount(8 * 60);
     let detail: { minutes: number } | undefined;
     el.addEventListener('ecosee-time-picker-confirm', (event) => {
@@ -140,70 +132,21 @@ describe('Time Picker overlay — auto-confirm (no Confirm button)', () => {
       .find((o) => o.textContent?.trim() === '30')!
       .click();
     await el.updateComplete;
+    (el.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
 
-    expect(detail).toBeUndefined(); // not yet — the confirm beat is still running
-    vi.advanceTimersByTime(TIME_CONFIRM_MS);
     expect(detail).toEqual({ minutes: 17 * 60 + 30 });
   });
 
-  // The whole reason there's no Confirm button anymore: tapping Hour then
-  // Minute (or vice versa) must not confirm-and-close after only the first
-  // tap — a tap in either column restarts the wait, mirroring every other
-  // picker's "correction tap re-points and restarts the beat" contract
-  // (System Mode, picker-overlays.test.ts) generalized across two columns.
-  it('a tap in the other column before the beat elapses restarts the wait, confirming once with both picks', async () => {
-    const el = await mount(8 * 60);
-    let fireCount = 0;
-    let detail: { minutes: number } | undefined;
-    el.addEventListener('ecosee-time-picker-confirm', (event) => {
-      fireCount += 1;
-      detail = (event as CustomEvent).detail;
-    });
-
-    hourOptions(el)
-      .find((o) => o.textContent?.trim() === '17')!
-      .click();
-    await el.updateComplete;
-    vi.advanceTimersByTime(TIME_CONFIRM_MS - 1); // right before the hour tap's own beat would fire
-    minuteOptions(el)
-      .find((o) => o.textContent?.trim() === '30')!
-      .click();
-    await el.updateComplete;
-
-    // The earlier deadline (from the hour tap) does not fire…
-    vi.advanceTimersByTime(1);
-    expect(fireCount).toBe(0);
-    // …it confirms once, one full beat after the minute tap.
-    vi.advanceTimersByTime(TIME_CONFIRM_MS - 1);
-    expect(fireCount).toBe(1);
-    expect(detail).toEqual({ minutes: 17 * 60 + 30 });
-  });
-
-  it('taking no action at all confirms nothing, even after the beat would have elapsed', async () => {
+  it('confirms the seeded value unchanged if the user taps Confirm without picking anything', async () => {
     const el = await mount(6 * 60 + 30);
-    let fired = false;
-    el.addEventListener('ecosee-time-picker-confirm', () => (fired = true));
-
-    vi.advanceTimersByTime(TIME_CONFIRM_MS * 4);
-
-    expect(fired).toBe(false);
-  });
-
-  it('confirms only the changed column’s pick combined with the seeded value for the untouched one', async () => {
-    const el = await mount(6 * 60 + 30); // seeded 06:30
     let detail: { minutes: number } | undefined;
     el.addEventListener('ecosee-time-picker-confirm', (event) => {
       detail = (event as CustomEvent).detail;
     });
 
-    // Only the hour is tapped — the minute is left at its seeded value.
-    hourOptions(el)
-      .find((o) => o.textContent?.trim() === '09')!
-      .click();
-    await el.updateComplete;
-    vi.advanceTimersByTime(TIME_CONFIRM_MS);
+    (el.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
 
-    expect(detail).toEqual({ minutes: 9 * 60 + 30 });
+    expect(detail).toEqual({ minutes: 6 * 60 + 30 });
   });
 });
 

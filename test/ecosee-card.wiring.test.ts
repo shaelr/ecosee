@@ -8,7 +8,6 @@ import '../src/ecosee-card';
 import type { EcoseeCard } from '../src/ecosee-card';
 import type { HomeAssistant } from '../src/types/hass';
 import { PICKER_CONFIRM_MS } from '../src/overlays/overlay-dismiss';
-import { TIME_CONFIRM_MS } from '../src/overlays/time-picker-overlay';
 import { fakeHass, climateEntity } from './helpers/fake-hass';
 
 // Wiring tests: these mount the real <ecosee-card> and drive it through the
@@ -677,16 +676,7 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     const callsBeforeConfirm = calls.length;
     const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
     await timePicker.updateComplete;
-    // No Confirm button anymore — tap the already-seeded hour row (08, still
-    // selected) to reconfirm it unchanged, then let the auto-confirm beat
-    // elapse (TIME_CONFIRM_MS, time-picker-overlay.ts).
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    (
-      [...timePicker.shadowRoot!.querySelectorAll('.option')].find(
-        (o) => o.textContent?.trim() === '08',
-      ) as HTMLButtonElement
-    ).click();
-    vi.advanceTimersByTime(TIME_CONFIRM_MS);
+    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
     await card.updateComplete;
 
     // Add to Schedule isn't submitted by picking a time — no entity write yet.
@@ -695,8 +685,8 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
     expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
     // The seeded 08:00 default survived the round trip through the picker
-    // unaffected (reconfirming the same seeded value is a no-op) — proof the
-    // card's own buffered state, not local component state, is what the
+    // unaffected (Confirm without picking a row keeps the seeded value) —
+    // proof the card's own buffered state, not local component state, is what the
     // field reflects after the picker unmounted and remounted it.
     const startPillAfter = card
       .shadowRoot!.querySelector('ecosee-schedule-add-block-overlay')!
@@ -776,17 +766,7 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
 
     const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
     await timePicker.updateComplete;
-    // No Confirm button anymore — tap the already-seeded hour row (08, still
-    // selected) to reconfirm it unchanged, then let the auto-confirm beat
-    // elapse (TIME_CONFIRM_MS, time-picker-overlay.ts).
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    (
-      [...timePicker.shadowRoot!.querySelectorAll('.option')].find(
-        (o) => o.textContent?.trim() === '08',
-      ) as HTMLButtonElement
-    ).click();
-    vi.advanceTimersByTime(TIME_CONFIRM_MS);
-    vi.useRealTimers();
+    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
     await card.updateComplete;
     // The write is async (calendar/event/update over the websocket
     // connection) — let it and the subsequent re-fetch/close settle.

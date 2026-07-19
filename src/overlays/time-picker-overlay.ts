@@ -53,28 +53,17 @@ export function loopScrollTop(
   return scrollTop;
 }
 
-/** How long to hold a not-yet-settled pick before auto-confirming — longer
- *  than `PICKER_CONFIRM_MS`'s brief "flash" beat (`overlay-dismiss.ts`, used
- *  by every single-column picker: System Mode, Comfort Setting, …) because
- *  this picker holds two independent decisions (Hour *and* Minute); a tap in
- *  either column restarts the wait, so picking Hour then scrolling to and
- *  tapping Minute — the natural couple of seconds that takes — doesn't
- *  confirm-and-close after only the first tap. */
-export const TIME_CONFIRM_MS = 1200;
-
 /**
  * `<ecosee-time-picker-overlay>` — ecosee's own time picker (ADR-0018), replacing
  * the browser's native `<input type="time">` picker everywhere ecosee edits a
  * time value (Schedule's Start/End when adding a block, and a block's own Start
  * Time when editing it). Two independent scrollable columns — Hour (00–23) and
- * Minute (00/30, matching the schedule's own 30-minute grid). No explicit
- * Confirm button (owner request: make every picker in the app behave the
- * same way) — tapping either column holds the optimistic pick, exactly like
- * every other picker, and auto-confirms `TIME_CONFIRM_MS` after the *last*
- * tap in either column, generalizing the single-column "correction tap
- * re-points and restarts the beat" contract (System Mode, `overlay-dismiss.ts`)
- * across two independent columns instead of one list. Taking no action at
- * all and dismissing via ✕ confirms nothing, same as every other picker.
+ * Minute (00/30, matching the schedule's own 30-minute grid) — plus an explicit
+ * Confirm button: two independent selections can't cleanly auto-confirm on a
+ * single tap the way a one-column picker (System Mode, Comfort Setting) can,
+ * since picking only the hour or only the minute isn't yet a complete value
+ * (owner correction: a brief auto-confirm-after-tap experiment made it too
+ * easy to close the picker after adjusting only one of the two columns).
  *
  * Both columns loop (owner request, following up on the ADR-0018 pickers
  * shipping): scrolling past the last hour wraps to the first and vice versa,
@@ -104,10 +93,6 @@ export class EcoseeTimePickerOverlay extends LitElement {
 
   @query('.list-hour') private _hourList?: HTMLElement;
   @query('.list-minute') private _minuteList?: HTMLElement;
-
-  /** Handle for the pending auto-confirm, cancelled if the overlay is torn
-   *  down first (e.g. dismissed via ✕ before it fires). */
-  private _confirmTimer?: ReturnType<typeof setTimeout>;
 
   static override styles = css`
     :host {
@@ -161,14 +146,22 @@ export class EcoseeTimePickerOverlay extends LitElement {
     /* The scrollable column itself — the same cyan-outlined, vertically-clipped
        list comfort-setting-overlay.ts's own picker uses, narrowed to fit two
        side by side. overflow: hidden auto (not a bare overflow-y) pins the
-       x-axis so a column never grows a horizontal scrollbar of its own. */
+       x-axis so a column never grows a horizontal scrollbar of its own.
+       scrollbar-width/::-webkit-scrollbar hide the *track* (still scrollable
+       by touch/wheel/drag either way) — a visible OS scrollbar reads as
+       browser chrome bleeding through the device's own squircle silhouette,
+       not a physical wheel-picker groove. */
     .list {
       width: 28cqw;
-      max-height: 62cqw;
+      max-height: 58cqw;
       overflow: hidden auto;
       border: 0.6cqw solid var(--ecosee-accent, #62cfe9);
       border-radius: 6cqw;
       pointer-events: auto;
+      scrollbar-width: none;
+    }
+    .list::-webkit-scrollbar {
+      display: none;
     }
     .option {
       appearance: none;
@@ -202,6 +195,21 @@ export class EcoseeTimePickerOverlay extends LitElement {
       color: var(--ecosee-chip-ink, #0a0d10);
       cursor: default;
     }
+
+    .confirm {
+      appearance: none;
+      background: var(--ecosee-accent, #62cfe9);
+      color: var(--ecosee-chip-ink, #0a0d10);
+      border: none;
+      margin-top: auto;
+      padding: 2.2cqw 8cqw;
+      border-radius: 100cqw;
+      font: inherit;
+      font-size: 5cqw;
+      font-weight: 600;
+      cursor: pointer;
+      pointer-events: auto;
+    }
   `;
 
   override connectedCallback(): void {
@@ -212,11 +220,6 @@ export class EcoseeTimePickerOverlay extends LitElement {
     // Setting default, etc.).
     this._hour = Math.floor(this.minutes / 60);
     this._minute = this.minutes % 60;
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    if (this._confirmTimer !== undefined) clearTimeout(this._confirmTimer);
   }
 
   /** Centers both columns on their seeded value, in the middle copy
@@ -250,22 +253,10 @@ export class EcoseeTimePickerOverlay extends LitElement {
 
   private _selectHour(hour: number): void {
     this._hour = hour;
-    this._scheduleConfirm();
   }
 
   private _selectMinute(minute: number): void {
     this._minute = minute;
-    this._scheduleConfirm();
-  }
-
-  /** (Re)schedule the auto-confirm: cancel any beat already running, then hold
-   *  the optimistic pick for `TIME_CONFIRM_MS` before confirming — a tap in
-   *  either column restarts the wait, so tapping Hour then Minute (or vice
-   *  versa) confirms once, with both picks, rather than closing after only
-   *  the first. */
-  private _scheduleConfirm(): void {
-    if (this._confirmTimer !== undefined) clearTimeout(this._confirmTimer);
-    this._confirmTimer = setTimeout(() => this._confirm(), TIME_CONFIRM_MS);
   }
 
   private _confirm(): void {
@@ -330,6 +321,7 @@ export class EcoseeTimePickerOverlay extends LitElement {
             </div>
           </div>
         </div>
+        <button class="confirm" @click=${this._confirm}>Confirm</button>
       </div>
     `;
   }
