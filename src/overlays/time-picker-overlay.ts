@@ -274,12 +274,29 @@ export class EcoseeTimePickerOverlay extends LitElement {
    *  stops, so a long fling can't outrun it mid-gesture. A wrap also nudges
    *  `_hourCopy` by ±1 (its own doc comment) — forward (scrollTop increases)
    *  advances it, backward retreats it — so the "selected" highlight keeps
-   *  following the same visual row through the teleport. */
+   *  following the same visual row through the teleport.
+   *
+   *  The highlight itself is moved via `_shiftSelectedRow` *before* updating
+   *  `_hourCopy`/`_minuteCopy` and the `scrollTop` jump, both synchronously
+   *  in this same tick — not by letting the `@state` update trigger Lit's
+   *  own (async, microtask-batched) re-render. Reacting through `@state`
+   *  alone visibly flickered on mobile: the wrap teleport is an immediate,
+   *  same-frame scrollTop write, but Lit's DOM update for the class change
+   *  landed a frame later, so for one paint the highlight sat on a row that
+   *  had already scrolled away from its expected screen position. Minute's
+   *  short 2-value cycle wraps on almost every scroll event during a drag,
+   *  making the gap between "scrolled" and "re-rendered" easy to see. The
+   *  `@state` assignment still runs (so an unrelated future full re-render —
+   *  e.g. a tap in the other column — computes the right row from scratch);
+   *  it's just no longer the *only* path keeping the highlight in sync. */
   private _onHourScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
     const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    if (next > list.scrollTop) this._hourCopy += 1;
-    else if (next < list.scrollTop) this._hourCopy -= 1;
+    if (next > list.scrollTop) {
+      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, 1);
+    } else if (next < list.scrollTop) {
+      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, -1);
+    }
     list.scrollTop = next;
   }
 
@@ -287,9 +304,38 @@ export class EcoseeTimePickerOverlay extends LitElement {
   private _onMinuteScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
     const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    if (next > list.scrollTop) this._minuteCopy += 1;
-    else if (next < list.scrollTop) this._minuteCopy -= 1;
+    if (next > list.scrollTop) {
+      this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, 1);
+    } else if (next < list.scrollTop) {
+      this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, -1);
+    }
     list.scrollTop = next;
+  }
+
+  /** Moves the `.selected`/`aria-selected` DOM state from `oldCopy` to the
+   *  next copy over, `direction` steps away — see `_onHourScroll`'s own doc
+   *  comment for why this must be a direct, synchronous DOM update rather
+   *  than a `@state`-driven re-render. Returns the new copy index (still
+   *  unbounded — `mod()`'d only at comparison time, matching
+   *  `_hourCopy`/`_minuteCopy`'s own doc comment). */
+  private _shiftSelectedRow(
+    list: HTMLElement,
+    values: readonly number[],
+    value: number,
+    oldCopy: number,
+    direction: 1 | -1,
+  ): number {
+    const newCopy = oldCopy + direction;
+    const valueIndex = values.indexOf(value);
+    if (valueIndex !== -1) {
+      const oldRow = list.children[mod(oldCopy, LOOP_COPIES) * values.length + valueIndex];
+      const newRow = list.children[mod(newCopy, LOOP_COPIES) * values.length + valueIndex];
+      oldRow?.classList.remove('selected');
+      oldRow?.setAttribute('aria-selected', 'false');
+      newRow?.classList.add('selected');
+      newRow?.setAttribute('aria-selected', 'true');
+    }
+    return newCopy;
   }
 
   private _selectHour(hour: number, copy: number): void {
