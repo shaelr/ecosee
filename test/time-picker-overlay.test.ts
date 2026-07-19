@@ -85,19 +85,25 @@ describe('Time Picker overlay — selection', () => {
     expect(fired).toBe(false);
   });
 
-  // Every copy of the current value carries .selected (not just the one
-  // tapped) — intentional, since only one copy is ever in view at a time
-  // once the loop keeps the scroll position away from the true edges.
-  it('marks every copy of the selected hour, not just the one tapped', async () => {
+  // Regression guard: with the loop rendering every value's row LOOP_COPIES
+  // times, marking .selected purely by *value* (the original approach) lit
+  // every repeat at once — harmless for Hour (24 values, repeats are far
+  // apart), but the Minute column has only 2 values, so two different
+  // copies of the same value can both sit inside the same 3-row viewport
+  // and both light up. Selection is tracked per *copy* (`_hourCopy`/
+  // `_minuteCopy`) instead, so exactly one physical row is ever marked,
+  // regardless of how many other rows happen to share its value.
+  it('marks exactly the tapped copy of a value as selected, not every repeat of it', async () => {
     const el = await mount(8 * 60);
-    hourOptions(el)
-      .find((o) => o.textContent?.trim() === '17')!
-      .click();
+    const seventeens = hourOptions(el).filter((o) => o.textContent?.trim() === '17');
+    expect(seventeens.length).toBeGreaterThan(1); // several repeats exist in the DOM
+
+    seventeens[0]!.click();
     await el.updateComplete;
 
     const selected = hourOptions(el).filter((o) => o.classList.contains('selected'));
-    expect(selected).toHaveLength(5); // LOOP_COPIES
-    for (const option of selected) expect(option.textContent?.trim()).toBe('17');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toBe(seventeens[0]);
   });
 
   it('only ever one *distinct* hour value is selected at a time', async () => {
@@ -113,6 +119,16 @@ describe('Time Picker overlay — selection', () => {
         .map((o) => o.textContent?.trim()),
     );
     expect(selectedValues).toEqual(new Set(['17']));
+  });
+
+  // The Minute column's own reported case: only 2 distinct values, so every
+  // *other* row in the DOM shares a value with some other row — exactly one
+  // must still ever be marked selected.
+  it('marks exactly one Minute row as selected, even though every other row shares one of only 2 values', async () => {
+    const el = await mount(8 * 60); // seeded 08:00
+    const selected = minuteOptions(el).filter((o) => o.classList.contains('selected'));
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.textContent?.trim()).toBe('00');
   });
 });
 

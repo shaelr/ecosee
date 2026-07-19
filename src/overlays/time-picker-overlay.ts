@@ -20,6 +20,13 @@ function repeated(values: readonly number[]): number[] {
 const HOUR_ROWS = repeated(HOURS);
 const MINUTE_ROWS = repeated(MINUTES);
 
+/** Positive modulo (JS's `%` can return negative) — used to fold an unbounded
+ *  "which loop iteration" counter (`_hourCopy`/`_minuteCopy`, see their own
+ *  doc comment) back into a real `[0, LOOP_COPIES)` copy index. */
+function mod(n: number, m: number): number {
+  return ((n % m) + m) % m;
+}
+
 /** Pure decision logic behind the loop: given a list's current `scrollTop`,
  *  its total `scrollHeight`, and its visible `clientHeight` (`copies`
  *  back-to-back identical copies of the same content), returns the
@@ -90,6 +97,23 @@ export class EcoseeTimePickerOverlay extends LitElement {
 
   @state() private _hour = 0;
   @state() private _minute = 0;
+
+  /** Which *physical* copy (of the `LOOP_COPIES` back-to-back repeats) is
+   *  the one currently carrying the "selected" highlight — not just which
+   *  value is selected. Both columns render every repeat of a value's row,
+   *  so with only 2 Minute values a 3-row viewport can show two different
+   *  copies of the same value at once; marking every row with a matching
+   *  *value* as selected (the original approach) highlighted both. Tracking
+   *  a specific copy instead — the one actually tapped, or `CENTER_COPY`
+   *  where `_centerOn` starts every seeded value — keeps exactly one row lit
+   *  at a time. Deliberately unbounded (not clamped to `[0, LOOP_COPIES)`):
+   *  `_onListScroll` nudges it by ±1 on every wrap so it keeps tracking the
+   *  same *visual* row across any number of wraps in either direction (a
+   *  forward wrap re-backs a given screen position with the next copy over,
+   *  so the tracked index must follow); `mod()` folds it back into a real
+   *  copy index only at comparison time (render). */
+  @state() private _hourCopy = CENTER_COPY;
+  @state() private _minuteCopy = CENTER_COPY;
 
   @query('.list-hour') private _hourList?: HTMLElement;
   @query('.list-minute') private _minuteList?: HTMLElement;
@@ -188,8 +212,10 @@ export class EcoseeTimePickerOverlay extends LitElement {
     }
     /* Selected row: filled cyan with dark text, matching every other picker's
        selected-row treatment (system-mode-overlay.ts, comfort-setting-overlay.ts).
-       Every one of the LOOP_COPIES repeats of the current value gets this class
-       — harmless, since the loop keeps at most one of them in view at a time. */
+       Applied to exactly one of the LOOP_COPIES repeats of the current value
+       — the one _hourCopy/_minuteCopy tracks (its own doc comment) — not
+       every repeat, or a short-cycling column (Minute: just 00/30) could
+       show two lit rows at once within the same viewport. */
     .option.selected {
       background: var(--ecosee-accent, #62cfe9);
       color: var(--ecosee-chip-ink, #0a0d10);
@@ -245,18 +271,35 @@ export class EcoseeTimePickerOverlay extends LitElement {
   /** The loop itself: hands the list's current scroll position to
    *  `loopScrollTop` (the pure decision logic) and applies whatever it
    *  returns. Runs on every `scroll` event rather than only once the user
-   *  stops, so a long fling can't outrun it mid-gesture. */
-  private _onListScroll(event: Event): void {
+   *  stops, so a long fling can't outrun it mid-gesture. A wrap also nudges
+   *  `_hourCopy` by ±1 (its own doc comment) — forward (scrollTop increases)
+   *  advances it, backward retreats it — so the "selected" highlight keeps
+   *  following the same visual row through the teleport. */
+  private _onHourScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
-    list.scrollTop = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
+    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
+    if (next > list.scrollTop) this._hourCopy += 1;
+    else if (next < list.scrollTop) this._hourCopy -= 1;
+    list.scrollTop = next;
   }
 
-  private _selectHour(hour: number): void {
+  /** Same as `_onHourScroll`, for the Minute column's own `_minuteCopy`. */
+  private _onMinuteScroll(event: Event): void {
+    const list = event.currentTarget as HTMLElement;
+    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
+    if (next > list.scrollTop) this._minuteCopy += 1;
+    else if (next < list.scrollTop) this._minuteCopy -= 1;
+    list.scrollTop = next;
+  }
+
+  private _selectHour(hour: number, copy: number): void {
     this._hour = hour;
+    this._hourCopy = copy;
   }
 
-  private _selectMinute(minute: number): void {
+  private _selectMinute(minute: number, copy: number): void {
     this._minute = minute;
+    this._minuteCopy = copy;
   }
 
   private _confirm(): void {
@@ -280,21 +323,23 @@ export class EcoseeTimePickerOverlay extends LitElement {
               class="list list-hour"
               role="listbox"
               aria-label="Hour"
-              @scroll=${this._onListScroll}
+              @scroll=${this._onHourScroll}
             >
-              ${HOUR_ROWS.map(
-                (hour) => html`
+              ${HOUR_ROWS.map((hour, i) => {
+                const copy = Math.floor(i / HOURS.length);
+                const selected = hour === this._hour && copy === mod(this._hourCopy, LOOP_COPIES);
+                return html`
                   <button
                     type="button"
-                    class="option ${hour === this._hour ? 'selected' : ''}"
+                    class="option ${selected ? 'selected' : ''}"
                     role="option"
-                    aria-selected=${hour === this._hour}
-                    @click=${() => this._selectHour(hour)}
+                    aria-selected=${selected}
+                    @click=${() => this._selectHour(hour, copy)}
                   >
                     ${String(hour).padStart(2, '0')}
                   </button>
-                `,
-              )}
+                `;
+              })}
             </div>
           </div>
           <div class="column">
@@ -303,21 +348,24 @@ export class EcoseeTimePickerOverlay extends LitElement {
               class="list list-minute"
               role="listbox"
               aria-label="Minute"
-              @scroll=${this._onListScroll}
+              @scroll=${this._onMinuteScroll}
             >
-              ${MINUTE_ROWS.map(
-                (minute) => html`
+              ${MINUTE_ROWS.map((minute, i) => {
+                const copy = Math.floor(i / MINUTES.length);
+                const selected =
+                  minute === this._minute && copy === mod(this._minuteCopy, LOOP_COPIES);
+                return html`
                   <button
                     type="button"
-                    class="option ${minute === this._minute ? 'selected' : ''}"
+                    class="option ${selected ? 'selected' : ''}"
                     role="option"
-                    aria-selected=${minute === this._minute}
-                    @click=${() => this._selectMinute(minute)}
+                    aria-selected=${selected}
+                    @click=${() => this._selectMinute(minute, copy)}
                   >
                     ${String(minute).padStart(2, '0')}
                   </button>
-                `,
-              )}
+                `;
+              })}
             </div>
           </div>
         </div>
