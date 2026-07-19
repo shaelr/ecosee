@@ -1,18 +1,19 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '../src/overlays/time-picker-overlay';
-import { loopScrollTop, LOOP_COPIES, SCROLL_SETTLE_MS } from '../src/overlays/time-picker-overlay';
+import { loopScrollTop, LOOP_COPIES } from '../src/overlays/time-picker-overlay';
 import type { EcoseeTimePickerOverlay } from '../src/overlays/time-picker-overlay';
 
 // ecosee's own time picker (ADR-0018): two independent scrollable columns
 // (Hour 00-23, Minute 00/30) plus an explicit Confirm button, replacing the
 // browser's native <input type="time"> picker everywhere ecosee edits a time
 // value. Both columns loop — each renders its values repeated LOOP_COPIES
-// times back to back, and once a scroll gesture settles (SCROLL_SETTLE_MS —
-// not on every scroll event; a mobile-flicker fix, since correcting mid-
-// animation fights the browser's own native touch-scroll physics) silently
-// wraps back toward the middle (the standard infinite-carousel trick, since
-// every copy is identical content).
+// times back to back, and once per animation frame during an active scroll
+// (not synchronously inside the scroll handler itself — a mobile-flicker
+// fix, since a same-frame scrollTop/scrollTo write from inside a scroll
+// event's own call stack competes with the browser's own scroll/compositor
+// pipeline) silently wraps back toward the middle (the standard
+// infinite-carousel trick, since every copy is identical content).
 
 async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
   const el = document.createElement('ecosee-time-picker-overlay') as EcoseeTimePickerOverlay;
@@ -24,9 +25,9 @@ async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
 
 /** Overrides a scroll container's scrollHeight/clientHeight/scrollTop with
  *  fixed values — happy-dom, unlike a real layout engine, always reports 0
- *  for these, so the settle-debounce tests (which only care about *timing*,
- *  not real layout) need a container that looks like it actually has
- *  content to scroll. */
+ *  for these, so the correction-timing tests (which only care about *when*
+ *  the loop corrects, not real layout) need a container that looks like it
+ *  actually has content to scroll. */
 function stubScrollGeometry(
   list: Element,
   geometry: { scrollHeight: number; clientHeight: number; scrollTop: number },
@@ -190,79 +191,102 @@ describe('Time Picker overlay — confirm', () => {
   });
 });
 
-// The mobile-flicker fix: correcting the scroll loop only once a gesture
-// settles, not on every scroll event, so the correction never fights a
-// still-animating native touch-scroll. Real scrollHeight/clientHeight/
-// scrollTop are stubbed (stubScrollGeometry) since happy-dom always reports
-// 0 for them — these tests only care about *when* scrollTo is called
-// relative to scroll events and fake-timer advances, not real layout.
-describe('Time Picker overlay — scroll-loop settle debounce', () => {
-  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+// The mobile-flicker fix: correcting the scroll loop on the next animation
+// frame, never synchronously inside the scroll event itself. Real
+// scrollHeight/clientHeight/scrollTop are stubbed (stubScrollGeometry)
+// since happy-dom always reports 0 for them — these tests only care about
+// *when* scrollTo is called relative to scroll events and animation
+// frames, not real layout.
+describe('Time Picker overlay — scroll-loop correction timing', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['requestAnimationFrame'] }));
   afterEach(() => vi.useRealTimers());
 
-  it('does not correct scrollTop on the scroll event itself — only once the gesture settles', async () => {
+  it('does not correct scrollTop synchronously inside the scroll event — only on the next animation frame', async () => {
     const el = await mount(0);
     const list = el.shadowRoot!.querySelector('.list-minute')!;
-    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 }); // deep in copy 0
+    stubScrollGeometry(list, { scrollHeight: 140, clientHeight: 40, scrollTop: 5 }); // deep in copy 0
     const scrollToSpy = vi.spyOn(list, 'scrollTo');
 
     list.dispatchEvent(new Event('scroll'));
-    expect(scrollToSpy).not.toHaveBeenCalled();
+    expect(scrollToSpy).not.toHaveBeenCalled(); // still nothing — same tick as the event
 
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
-    expect(scrollToSpy).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1);
+    vi.advanceTimersByTime(16); // one animation frame
     expect(scrollToSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('a further scroll event before the gesture settles restarts the wait, not stacking a second correction', async () => {
+  it('a burst of scroll events before the frame runs queues only one correction, not one per event', async () => {
     const el = await mount(0);
     const list = el.shadowRoot!.querySelector('.list-minute')!;
-    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 });
+    stubScrollGeometry(list, { scrollHeight: 140, clientHeight: 40, scrollTop: 5 });
     const scrollToSpy = vi.spyOn(list, 'scrollTo');
 
     list.dispatchEvent(new Event('scroll'));
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
-    list.dispatchEvent(new Event('scroll')); // still scrolling — resets the wait
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
-    expect(scrollToSpy).not.toHaveBeenCalled(); // would already have fired without the reset
+    list.dispatchEvent(new Event('scroll'));
+    list.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(16);
 
-    vi.advanceTimersByTime(1);
     expect(scrollToSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('does not call scrollTo at all once settled if the final position needs no correction', async () => {
+  it('reads the scroll position current as of the frame, not as of whichever event queued it', async () => {
+    const el = await mount(0);
+    const list = el.shadowRoot!.querySelector('.list-minute')!;
+    stubScrollGeometry(list, { scrollHeight: 140, clientHeight: 40, scrollTop: 5 });
+
+    list.dispatchEvent(new Event('scroll')); // queues the frame at scrollTop 5
+    list.scrollTop = 50; // now safely mid-range (safe zone here is [20, 80])
+    const scrollToSpy = vi.spyOn(list, 'scrollTo');
+    vi.advanceTimersByTime(16);
+
+    // No correction needed for 90 (comfortably inside the middle copies) —
+    // proof the frame callback re-reads scrollTop rather than using a stale
+    // value captured when the scroll event fired.
+    expect(scrollToSpy).not.toHaveBeenCalled();
+  });
+
+  it('queues another correction for the next scroll event after a frame has run', async () => {
+    const el = await mount(0);
+    const list = el.shadowRoot!.querySelector('.list-minute')!;
+    stubScrollGeometry(list, { scrollHeight: 140, clientHeight: 40, scrollTop: 5 });
+    const scrollToSpy = vi.spyOn(list, 'scrollTo');
+
+    list.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(16);
+    expect(scrollToSpy).toHaveBeenCalledTimes(1);
+
+    list.scrollTop = 5; // deep in copy 0 again
+    list.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(16);
+    expect(scrollToSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not call scrollTo when the frame runs if the position needs no correction', async () => {
     const el = await mount(0);
     const list = el.shadowRoot!.querySelector('.list-minute')!;
     // Comfortably inside the middle copies — nothing to correct.
-    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 100 });
+    stubScrollGeometry(list, { scrollHeight: 140, clientHeight: 40, scrollTop: 60 });
     const scrollToSpy = vi.spyOn(list, 'scrollTo');
 
     list.dispatchEvent(new Event('scroll'));
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS);
+    vi.advanceTimersByTime(16);
 
     expect(scrollToSpy).not.toHaveBeenCalled();
   });
 
-  it('the Hour and Minute columns settle independently of one another', async () => {
+  it('the Hour and Minute columns queue independent corrections', async () => {
     const el = await mount(0);
     const hourList = el.shadowRoot!.querySelector('.list-hour')!;
     const minuteList = el.shadowRoot!.querySelector('.list-minute')!;
-    stubScrollGeometry(hourList, { scrollHeight: 2640, clientHeight: 40, scrollTop: 5 });
-    stubScrollGeometry(minuteList, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 });
+    stubScrollGeometry(hourList, { scrollHeight: 1680, clientHeight: 40, scrollTop: 5 });
+    stubScrollGeometry(minuteList, { scrollHeight: 140, clientHeight: 40, scrollTop: 5 });
     const hourSpy = vi.spyOn(hourList, 'scrollTo');
     const minuteSpy = vi.spyOn(minuteList, 'scrollTo');
 
     hourList.dispatchEvent(new Event('scroll'));
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2);
-    minuteList.dispatchEvent(new Event('scroll')); // starts its own, later wait
+    minuteList.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(16);
 
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2); // Hour's wait elapses; Minute's doesn't yet
     expect(hourSpy).toHaveBeenCalledTimes(1);
-    expect(minuteSpy).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2);
     expect(minuteSpy).toHaveBeenCalledTimes(1);
   });
 });
