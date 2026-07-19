@@ -1,16 +1,18 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '../src/overlays/time-picker-overlay';
-import { loopScrollTop } from '../src/overlays/time-picker-overlay';
+import { loopScrollTop, LOOP_COPIES, SCROLL_SETTLE_MS } from '../src/overlays/time-picker-overlay';
 import type { EcoseeTimePickerOverlay } from '../src/overlays/time-picker-overlay';
 
 // ecosee's own time picker (ADR-0018): two independent scrollable columns
 // (Hour 00-23, Minute 00/30) plus an explicit Confirm button, replacing the
 // browser's native <input type="time"> picker everywhere ecosee edits a time
-// value. Both columns loop — each renders its values repeated 5x back to
-// back, and scrolling into the first/last copy silently wraps back toward
-// the middle (the standard infinite-carousel trick, since every copy is
-// identical content).
+// value. Both columns loop — each renders its values repeated LOOP_COPIES
+// times back to back, and once a scroll gesture settles (SCROLL_SETTLE_MS —
+// not on every scroll event; a mobile-flicker fix, since correcting mid-
+// animation fights the browser's own native touch-scroll physics) silently
+// wraps back toward the middle (the standard infinite-carousel trick, since
+// every copy is identical content).
 
 async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
   const el = document.createElement('ecosee-time-picker-overlay') as EcoseeTimePickerOverlay;
@@ -18,6 +20,27 @@ async function mount(minutes = 0): Promise<EcoseeTimePickerOverlay> {
   document.body.appendChild(el);
   await el.updateComplete;
   return el;
+}
+
+/** Overrides a scroll container's scrollHeight/clientHeight/scrollTop with
+ *  fixed values — happy-dom, unlike a real layout engine, always reports 0
+ *  for these, so the settle-debounce tests (which only care about *timing*,
+ *  not real layout) need a container that looks like it actually has
+ *  content to scroll. */
+function stubScrollGeometry(
+  list: Element,
+  geometry: { scrollHeight: number; clientHeight: number; scrollTop: number },
+): void {
+  let scrollTop = geometry.scrollTop;
+  Object.defineProperty(list, 'scrollHeight', { value: geometry.scrollHeight, configurable: true });
+  Object.defineProperty(list, 'clientHeight', { value: geometry.clientHeight, configurable: true });
+  Object.defineProperty(list, 'scrollTop', {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = value;
+    },
+  });
 }
 
 afterEach(() => {
@@ -45,12 +68,13 @@ describe('Time Picker overlay — seeding', () => {
     expect(selectedMinute?.textContent?.trim()).toBe('30');
   });
 
-  // The looping columns render each value 5x back to back (LOOP_COPIES), not
-  // once — the row count and distinct-value set are what's worth asserting.
-  it('renders each hour/minute value 5x (LOOP_COPIES) to support looping', async () => {
+  // The looping columns render each value LOOP_COPIES times back to back,
+  // not once — the row count and distinct-value set are what's worth
+  // asserting.
+  it('renders each hour/minute value LOOP_COPIES times to support looping', async () => {
     const el = await mount();
-    expect(hourOptions(el)).toHaveLength(24 * 5);
-    expect(minuteOptions(el)).toHaveLength(2 * 5);
+    expect(hourOptions(el)).toHaveLength(24 * LOOP_COPIES);
+    expect(minuteOptions(el)).toHaveLength(2 * LOOP_COPIES);
     const distinctHours = new Set(hourOptions(el).map((o) => o.textContent?.trim()));
     expect(distinctHours.size).toBe(24);
     const distinctMinutes = new Set(minuteOptions(el).map((o) => o.textContent?.trim()));
@@ -163,6 +187,83 @@ describe('Time Picker overlay — confirm', () => {
     (el.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
 
     expect(detail).toEqual({ minutes: 6 * 60 + 30 });
+  });
+});
+
+// The mobile-flicker fix: correcting the scroll loop only once a gesture
+// settles, not on every scroll event, so the correction never fights a
+// still-animating native touch-scroll. Real scrollHeight/clientHeight/
+// scrollTop are stubbed (stubScrollGeometry) since happy-dom always reports
+// 0 for them — these tests only care about *when* scrollTo is called
+// relative to scroll events and fake-timer advances, not real layout.
+describe('Time Picker overlay — scroll-loop settle debounce', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+  afterEach(() => vi.useRealTimers());
+
+  it('does not correct scrollTop on the scroll event itself — only once the gesture settles', async () => {
+    const el = await mount(0);
+    const list = el.shadowRoot!.querySelector('.list-minute')!;
+    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 }); // deep in copy 0
+    const scrollToSpy = vi.spyOn(list, 'scrollTo');
+
+    list.dispatchEvent(new Event('scroll'));
+    expect(scrollToSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
+    expect(scrollToSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(scrollToSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a further scroll event before the gesture settles restarts the wait, not stacking a second correction', async () => {
+    const el = await mount(0);
+    const list = el.shadowRoot!.querySelector('.list-minute')!;
+    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 });
+    const scrollToSpy = vi.spyOn(list, 'scrollTo');
+
+    list.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
+    list.dispatchEvent(new Event('scroll')); // still scrolling — resets the wait
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS - 1);
+    expect(scrollToSpy).not.toHaveBeenCalled(); // would already have fired without the reset
+
+    vi.advanceTimersByTime(1);
+    expect(scrollToSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call scrollTo at all once settled if the final position needs no correction', async () => {
+    const el = await mount(0);
+    const list = el.shadowRoot!.querySelector('.list-minute')!;
+    // Comfortably inside the middle copies — nothing to correct.
+    stubScrollGeometry(list, { scrollHeight: 220, clientHeight: 40, scrollTop: 100 });
+    const scrollToSpy = vi.spyOn(list, 'scrollTo');
+
+    list.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS);
+
+    expect(scrollToSpy).not.toHaveBeenCalled();
+  });
+
+  it('the Hour and Minute columns settle independently of one another', async () => {
+    const el = await mount(0);
+    const hourList = el.shadowRoot!.querySelector('.list-hour')!;
+    const minuteList = el.shadowRoot!.querySelector('.list-minute')!;
+    stubScrollGeometry(hourList, { scrollHeight: 2640, clientHeight: 40, scrollTop: 5 });
+    stubScrollGeometry(minuteList, { scrollHeight: 220, clientHeight: 40, scrollTop: 5 });
+    const hourSpy = vi.spyOn(hourList, 'scrollTo');
+    const minuteSpy = vi.spyOn(minuteList, 'scrollTo');
+
+    hourList.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2);
+    minuteList.dispatchEvent(new Event('scroll')); // starts its own, later wait
+
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2); // Hour's wait elapses; Minute's doesn't yet
+    expect(hourSpy).toHaveBeenCalledTimes(1);
+    expect(minuteSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS / 2);
+    expect(minuteSpy).toHaveBeenCalledTimes(1);
   });
 });
 

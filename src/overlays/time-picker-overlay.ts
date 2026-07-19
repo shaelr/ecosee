@@ -5,13 +5,27 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = [0, 30];
 
 /** How many back-to-back copies of a column's values to render so it can
- *  loop: scrolling past the last copy silently jumps back one loop's worth
- *  (`_onListScroll`), landing on identical content, so the wrap is
- *  imperceptible. 5 keeps the visible window comfortably inside copies 2–4
- *  (`CENTER_COPY`), so a user has to scroll roughly two full loops in one
- *  direction before ever approaching a real edge. */
-const LOOP_COPIES = 5;
+ *  loop: scrolling past the last copy silently jumps back one loop's worth,
+ *  landing on identical content, so the wrap is imperceptible. Deliberately
+ *  generous (not the smallest value that technically works): the actual
+ *  reset only happens once scrolling *settles* (`SCROLL_SETTLE_MS`, this
+ *  file's own mobile-flicker fix below), not on every scroll tick, so the
+ *  buffer has to survive a full drag-plus-momentum gesture in one go rather
+ *  than just the distance between two scroll events. 11 keeps the visible
+ *  window comfortably inside copies 3–7 (`CENTER_COPY`) even on Minute's
+ *  short 2-value cycle, where a single real fling can otherwise span several
+ *  of its short "loops" at once. */
+export const LOOP_COPIES = 11;
 const CENTER_COPY = Math.floor(LOOP_COPIES / 2);
+
+/** How long to wait, after the *last* scroll event, before treating a scroll
+ *  gesture as settled and safe to correct for the loop (`_onHourScroll`'s
+ *  own doc comment for why). Long enough that a real drag/momentum gesture's
+ *  in-between events (which fire well under 100ms apart) never look settled
+ *  mid-gesture; short enough that the correction — invisible either way,
+ *  since it only ever jumps by whole copies of identical content — never
+ *  reads as a deliberate delay. */
+export const SCROLL_SETTLE_MS = 120;
 
 function repeated(values: readonly number[]): number[] {
   return Array.from({ length: values.length * LOOP_COPIES }, (_, i) => values[i % values.length]!);
@@ -95,14 +109,15 @@ export function loopScrollTop(
  * shipping): scrolling past the last hour wraps to the first and vice versa,
  * like a wheel. A plain `overflow: auto` list has no native "loop" behavior,
  * so each column renders its values repeated `LOOP_COPIES` times back to
- * back and `_onListScroll` silently resets `scrollTop` by one loop's worth
- * whenever the user scrolls into the first or last copy — since every copy
- * is identical content, the reset is imperceptible, and the visible window
- * stays put while the underlying scroll position "teleports" back toward
- * the middle. This is the standard infinite-carousel trick, not a real
- * infinite list — `LOOP_COPIES` just needs to be large enough that a single
- * scroll gesture can't outrun the reset, which 5 comfortably covers for a
- * touch/wheel-driven picker.
+ * back and, once a scroll gesture *settles* (`SCROLL_SETTLE_MS` — not on
+ * every scroll event; see `_onHourScroll`'s own doc comment for why),
+ * silently resets `scrollTop` by however many loop-heights are needed
+ * whenever the user has scrolled into the first or last copy — since every
+ * copy is identical content, the reset is imperceptible, and the visible
+ * window stays put while the underlying scroll position "teleports" back
+ * toward the middle. This is the standard infinite-carousel trick, not a
+ * real infinite list — `LOOP_COPIES`' own doc comment covers why it's more
+ * generous than the bare minimum.
  *
  * Purely presentational: it owns no schedule-editing logic itself and emits
  * `ecosee-time-picker-confirm` for the host to apply. There is no cancel
@@ -136,6 +151,11 @@ export class EcoseeTimePickerOverlay extends LitElement {
 
   @query('.list-hour') private _hourList?: HTMLElement;
   @query('.list-minute') private _minuteList?: HTMLElement;
+
+  /** Pending "gesture settled" checks (`SCROLL_SETTLE_MS`), cancelled and
+   *  restarted on every scroll event of their own column. */
+  private _hourSettleTimer?: ReturnType<typeof setTimeout>;
+  private _minuteSettleTimer?: ReturnType<typeof setTimeout>;
 
   static override styles = css`
     :host {
@@ -267,6 +287,12 @@ export class EcoseeTimePickerOverlay extends LitElement {
     this._minute = this.minutes % 60;
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._hourSettleTimer !== undefined) clearTimeout(this._hourSettleTimer);
+    if (this._minuteSettleTimer !== undefined) clearTimeout(this._minuteSettleTimer);
+  }
+
   /** Centers both columns on their seeded value, in the middle copy
    *  (`CENTER_COPY`) of the repeated list — not just "somewhere the value
    *  appears" — so there's equal room to scroll in either direction before
@@ -287,53 +313,66 @@ export class EcoseeTimePickerOverlay extends LitElement {
     list.scrollTop = rowHeight * targetRow - (list.clientHeight - rowHeight) / 2;
   }
 
-  /** The loop itself: hands the list's current scroll position to
-   *  `loopScrollTop` (the pure decision logic) and applies whatever it
-   *  returns. Runs on every `scroll` event rather than only once the user
-   *  stops, so a long fling can't outrun it mid-gesture. A wrap also shifts
-   *  `_hourCopy` by however many `loopHeight`s `loopScrollTop` actually
-   *  corrected — derived from the jump distance, not assumed to always be
-   *  exactly one (`loopScrollTop`'s own doc comment: mobile can batch enough
-   *  scroll distance into one event to need several steps, especially on
-   *  Minute's short cycle) — so the "selected" highlight keeps following the
-   *  same visual row through the teleport regardless of its size.
+  /** The loop's trigger: (re)schedules a "gesture settled" check
+   *  `SCROLL_SETTLE_MS` after the *last* scroll event, cancelling any check
+   *  already pending — so a continuous drag or momentum glide, whose events
+   *  fire far more often than that, never actually runs the correction
+   *  mid-gesture.
    *
-   *  The highlight itself is moved via `_shiftSelectedRow` *before* updating
-   *  `_hourCopy`/`_minuteCopy` and the `scrollTop` jump, both synchronously
-   *  in this same tick — not by letting the `@state` update trigger Lit's
-   *  own (async, microtask-batched) re-render. Reacting through `@state`
-   *  alone visibly flickered on mobile: the wrap teleport is an immediate,
-   *  same-frame scrollTop write, but Lit's DOM update for the class change
-   *  landed a frame later, so for one paint the highlight sat on a row that
-   *  had already scrolled away from its expected screen position. The
-   *  `@state` assignment still runs (so an unrelated future full re-render —
-   *  e.g. a tap in the other column — computes the right row from scratch);
-   *  it's just no longer the *only* path keeping the highlight in sync. */
+   *  This — not correcting on every scroll event, as an earlier version of
+   *  this fix did — is what actually stops the flicker reported on mobile:
+   *  writing `scrollTop` (or even calling `scrollTo`) while a touch-driven
+   *  scroll is still animating fights the browser's own native scroll
+   *  physics, which run on a separate thread from JS on iOS Safari in
+   *  particular. Two correct-looking scrollTop values a JS-timed frame apart
+   *  can still show a visible glitch when one of them lands mid-animation;
+   *  deferring the correction until nothing is animating avoids that
+   *  category of conflict entirely, not just the render-timing race the
+   *  earlier version of this fix addressed (which was real, but not the
+   *  whole story). `LOOP_COPIES`'s own doc comment covers the follow-on
+   *  cost: settling only at the end means the buffer has to survive a whole
+   *  gesture, not just the gap between two events. */
   private _onHourScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
-    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
-    if (steps !== 0) {
-      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, steps);
-    }
-    list.scrollTop = next;
+    if (this._hourSettleTimer !== undefined) clearTimeout(this._hourSettleTimer);
+    this._hourSettleTimer = setTimeout(() => this._settleHourScroll(list), SCROLL_SETTLE_MS);
   }
 
-  /** Same as `_onHourScroll`, for the Minute column's own `_minuteCopy`. */
+  /** Same as `_onHourScroll`, for the Minute column's own `_minuteSettleTimer`. */
   private _onMinuteScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
+    if (this._minuteSettleTimer !== undefined) clearTimeout(this._minuteSettleTimer);
+    this._minuteSettleTimer = setTimeout(() => this._settleMinuteScroll(list), SCROLL_SETTLE_MS);
+  }
+
+  /** Runs once the Hour column's scroll gesture has settled
+   *  (`_onHourScroll`'s own doc comment): hands the list's current,
+   *  now-static scroll position to `loopScrollTop` (the pure decision
+   *  logic) and, if a correction is needed, moves the "selected" highlight
+   *  via `_shiftSelectedRow` and applies the corrected position in the same
+   *  synchronous tick — both still matter even though the write no longer
+   *  races live scroll animation: the highlight must move in lockstep with
+   *  the jump regardless of when it happens, and `scrollTo({behavior:
+   *  'instant'})` (not a bare `scrollTop =`) makes the jump itself an
+   *  explicit, non-animated write rather than one that could inherit an
+   *  ambient smooth-scroll behavior. */
+  private _settleHourScroll(list: HTMLElement): void {
+    this._hourSettleTimer = undefined;
     const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
     const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
-    if (steps !== 0) {
-      this._minuteCopy = this._shiftSelectedRow(
-        list,
-        MINUTES,
-        this._minute,
-        this._minuteCopy,
-        steps,
-      );
-    }
-    list.scrollTop = next;
+    if (steps === 0) return;
+    this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, steps);
+    list.scrollTo({ top: next, behavior: 'instant' });
+  }
+
+  /** Same as `_settleHourScroll`, for the Minute column's own `_minuteCopy`. */
+  private _settleMinuteScroll(list: HTMLElement): void {
+    this._minuteSettleTimer = undefined;
+    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
+    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
+    if (steps === 0) return;
+    this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, steps);
+    list.scrollTo({ top: next, behavior: 'instant' });
   }
 
   /** How many whole `loopHeight`s `loopScrollTop` just corrected by —
