@@ -263,4 +263,43 @@ describe('loopScrollTop', () => {
       expect(result + CLIENT_HEIGHT).toBeLessThanOrEqual(SCROLL_HEIGHT);
     }
   });
+
+  // Regression guard for the reported flicker: a single native `scroll`
+  // event can span more distance than one loopHeight covers when the
+  // browser throttles/batches dispatches (routine on mobile, especially for
+  // a short-cycling column like Minute where loopHeight itself is small). A
+  // single-step correction used to under-shoot in that case, leaving the
+  // scrollTop — and the tracked "selected" copy derived from it — briefly
+  // wrong until later events caught up, visible as the highlight hopping
+  // across rows.
+  it('corrects a drift spanning several loop heights in one call, not just one step', () => {
+    // Three loopHeights *before* the trigger threshold — as if a throttled
+    // scroll event delivered a big jump in one go. A single-step correction
+    // (5 - 3*200 = -595, +200 once = -395) would still land nowhere near
+    // safe; only repeated correction reaches the safe zone in one call.
+    const scrollTop = 5 - 3 * LOOP_HEIGHT;
+    const result = loopScrollTop(scrollTop, SCROLL_HEIGHT, CLIENT_HEIGHT, COPIES);
+    expect(result).toBeGreaterThanOrEqual(LOOP_HEIGHT);
+    expect(result + CLIENT_HEIGHT).toBeLessThanOrEqual(SCROLL_HEIGHT - LOOP_HEIGHT);
+    // Same visual content either way — the correction is always a whole
+    // number of loopHeights.
+    expect((result - scrollTop) % LOOP_HEIGHT).toBe(0);
+  });
+
+  it('corrects a large drift in the backward direction the same way', () => {
+    // Three loopHeights *past* the trigger threshold on the bottom edge.
+    const scrollTop = SCROLL_HEIGHT - CLIENT_HEIGHT - 5 + 3 * LOOP_HEIGHT;
+    const result = loopScrollTop(scrollTop, SCROLL_HEIGHT, CLIENT_HEIGHT, COPIES);
+    expect(result).toBeGreaterThanOrEqual(LOOP_HEIGHT);
+    expect(result + CLIENT_HEIGHT).toBeLessThanOrEqual(SCROLL_HEIGHT - LOOP_HEIGHT);
+    expect((scrollTop - result) % LOOP_HEIGHT).toBe(0);
+  });
+
+  it('never loops forever on a degenerate config with no safe position', () => {
+    // clientHeight bigger than the whole scrollable range: no scrollTop can
+    // ever satisfy both edge conditions. The iteration cap must still return
+    // a finite number, not hang.
+    expect(() => loopScrollTop(5, 100, 1000, COPIES)).not.toThrow();
+    expect(Number.isFinite(loopScrollTop(5, 100, 1000, COPIES))).toBe(true);
+  });
 });

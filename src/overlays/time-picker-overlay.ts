@@ -44,9 +44,20 @@ function mod(n: number, m: number): number {
  *  a fixed "half a loop height past `scrollTop` 0" threshold sat beyond the
  *  scrollable range entirely — the down-loop could never trigger, only up).
  *  Comparing edges keeps the trigger reachable regardless of how few rows a
- *  column has relative to its visible window. A non-positive `scrollHeight`
- *  (no real layout, e.g. an untested/detached element) is a no-op rather
- *  than a division by zero. */
+ *  column has relative to its visible window.
+ *
+ *  Corrects by as many `loopHeight`s as needed in one call, not just one —
+ *  mobile browsers throttle/batch `scroll` dispatches, so a single event can
+ *  span more scroll distance than one `loopHeight` covers. That's rare for
+ *  Hour (24 rows per copy) but routine for Minute (just 2), which is why the
+ *  flicker this fixes was Minute-only: a single-step correction under-shot,
+ *  leaving the tracked "selected" copy briefly wrong until later events
+ *  caught it up — visible as the highlight hopping across rows. The
+ *  iteration cap is defensive only (a real drift never needs more than a
+ *  handful of steps); it keeps a degenerate config (`clientHeight` too large
+ *  for any position to ever be "safe") from looping forever. A non-positive
+ *  `scrollHeight` (no real layout, e.g. an untested/detached element) is a
+ *  no-op rather than a division by zero. */
 export function loopScrollTop(
   scrollTop: number,
   scrollHeight: number,
@@ -55,9 +66,17 @@ export function loopScrollTop(
 ): number {
   const loopHeight = scrollHeight / copies;
   if (loopHeight <= 0) return scrollTop;
-  if (scrollTop < loopHeight) return scrollTop + loopHeight;
-  if (scrollTop + clientHeight > scrollHeight - loopHeight) return scrollTop - loopHeight;
-  return scrollTop;
+  let next = scrollTop;
+  const maxSteps = copies * 2;
+  for (let steps = 0; next < loopHeight && steps < maxSteps; steps++) next += loopHeight;
+  for (
+    let steps = 0;
+    next + clientHeight > scrollHeight - loopHeight && steps < maxSteps;
+    steps++
+  ) {
+    next -= loopHeight;
+  }
+  return next;
 }
 
 /**
@@ -271,10 +290,13 @@ export class EcoseeTimePickerOverlay extends LitElement {
   /** The loop itself: hands the list's current scroll position to
    *  `loopScrollTop` (the pure decision logic) and applies whatever it
    *  returns. Runs on every `scroll` event rather than only once the user
-   *  stops, so a long fling can't outrun it mid-gesture. A wrap also nudges
-   *  `_hourCopy` by ±1 (its own doc comment) — forward (scrollTop increases)
-   *  advances it, backward retreats it — so the "selected" highlight keeps
-   *  following the same visual row through the teleport.
+   *  stops, so a long fling can't outrun it mid-gesture. A wrap also shifts
+   *  `_hourCopy` by however many `loopHeight`s `loopScrollTop` actually
+   *  corrected — derived from the jump distance, not assumed to always be
+   *  exactly one (`loopScrollTop`'s own doc comment: mobile can batch enough
+   *  scroll distance into one event to need several steps, especially on
+   *  Minute's short cycle) — so the "selected" highlight keeps following the
+   *  same visual row through the teleport regardless of its size.
    *
    *  The highlight itself is moved via `_shiftSelectedRow` *before* updating
    *  `_hourCopy`/`_minuteCopy` and the `scrollTop` jump, both synchronously
@@ -283,19 +305,16 @@ export class EcoseeTimePickerOverlay extends LitElement {
    *  alone visibly flickered on mobile: the wrap teleport is an immediate,
    *  same-frame scrollTop write, but Lit's DOM update for the class change
    *  landed a frame later, so for one paint the highlight sat on a row that
-   *  had already scrolled away from its expected screen position. Minute's
-   *  short 2-value cycle wraps on almost every scroll event during a drag,
-   *  making the gap between "scrolled" and "re-rendered" easy to see. The
+   *  had already scrolled away from its expected screen position. The
    *  `@state` assignment still runs (so an unrelated future full re-render —
    *  e.g. a tap in the other column — computes the right row from scratch);
    *  it's just no longer the *only* path keeping the highlight in sync. */
   private _onHourScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
     const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    if (next > list.scrollTop) {
-      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, 1);
-    } else if (next < list.scrollTop) {
-      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, -1);
+    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
+    if (steps !== 0) {
+      this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, steps);
     }
     list.scrollTop = next;
   }
@@ -304,28 +323,42 @@ export class EcoseeTimePickerOverlay extends LitElement {
   private _onMinuteScroll(event: Event): void {
     const list = event.currentTarget as HTMLElement;
     const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    if (next > list.scrollTop) {
-      this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, 1);
-    } else if (next < list.scrollTop) {
-      this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, -1);
+    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
+    if (steps !== 0) {
+      this._minuteCopy = this._shiftSelectedRow(
+        list,
+        MINUTES,
+        this._minute,
+        this._minuteCopy,
+        steps,
+      );
     }
     list.scrollTop = next;
   }
 
-  /** Moves the `.selected`/`aria-selected` DOM state from `oldCopy` to the
-   *  next copy over, `direction` steps away — see `_onHourScroll`'s own doc
-   *  comment for why this must be a direct, synchronous DOM update rather
-   *  than a `@state`-driven re-render. Returns the new copy index (still
-   *  unbounded — `mod()`'d only at comparison time, matching
+  /** How many whole `loopHeight`s `loopScrollTop` just corrected by —
+   *  `Math.round`, not a division left as a float, since floating-point
+   *  drift could otherwise land a hair off an exact integer. */
+  private _loopSteps(next: number, prevScrollTop: number, scrollHeight: number): number {
+    const loopHeight = scrollHeight / LOOP_COPIES;
+    if (loopHeight <= 0) return 0;
+    return Math.round((next - prevScrollTop) / loopHeight);
+  }
+
+  /** Moves the `.selected`/`aria-selected` DOM state from `oldCopy` to
+   *  `oldCopy + steps` — see `_onHourScroll`'s own doc comment for why this
+   *  must be a direct, synchronous DOM update rather than a `@state`-driven
+   *  re-render, and why `steps` isn't always ±1. Returns the new copy index
+   *  (still unbounded — `mod()`'d only at comparison time, matching
    *  `_hourCopy`/`_minuteCopy`'s own doc comment). */
   private _shiftSelectedRow(
     list: HTMLElement,
     values: readonly number[],
     value: number,
     oldCopy: number,
-    direction: 1 | -1,
+    steps: number,
   ): number {
-    const newCopy = oldCopy + direction;
+    const newCopy = oldCopy + steps;
     const valueIndex = values.indexOf(value);
     if (valueIndex !== -1) {
       const oldRow = list.children[mod(oldCopy, LOOP_COPIES) * values.length + valueIndex];
