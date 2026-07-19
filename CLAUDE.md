@@ -39,7 +39,7 @@ Bump `version` in `package.json` and merge to `main`; the Release workflow build
 
 ## Architecture
 
-ecosee is a Home Assistant custom Lovelace card (Lit + TypeScript) that emulates the ecobee Smart Thermostat Premium's on-wall UI over _any_ `climate` entity — see `CONTEXT.md` for the full domain glossary (Card/Skin/Screen/Overlay vocabulary, terms to avoid) and `docs/adr/` for why things are the way they are. It's a **generic thermostat card wearing an ecobee skin** (ADR-0001): full ecobee fidelity when rich data is present, graceful degradation to a simpler face when it isn't. Read `CONTEXT.md` and any relevant ADRs before naming a new domain concept or overriding an existing decision.
+ecosee is a Home Assistant custom Lovelace card (Lit + TypeScript) that emulates the ecobee Smart Thermostat Premium's on-wall UI over _any_ `climate` entity — see `CONTEXT.md` for the full domain glossary (Card/Skin/Screen/Overlay vocabulary, terms to avoid) and `docs/adr/` for why things are the way they are. It's a **generic thermostat card wearing an ecobee skin** (ADR-0001): full ecobee fidelity when rich data is present, graceful degradation to a simpler face when it isn't. Read `CONTEXT.md` and any relevant ADRs before naming a new domain concept or overriding an existing decision — and when an ADR has "Correction (post-ship)" sections, read all of them, not just the original decision: several interaction patterns that look needlessly convoluted (e.g. a hidden `<input>` behind a styled `<button>` instead of the input directly) exist specifically because a simpler version was already tried and broke on a real device. Reverting to the "obvious" version without reading the corrections first has shipped real regressions (ADR-0017).
 
 ### Data flow: seams, Models/Views, dumb rendering
 
@@ -62,6 +62,10 @@ The entire Card is laid out **once** at a fixed `460×460` canvas (`--ecosee-bas
 ### Typography
 
 The device face is Gotham, which can't ship with the card; Montserrat is the closest freely-licensed alternative, bundled and registered at runtime (`src/styles/bundled-font.ts`, ADR-0007/0008) so every install renders correctly with zero configuration. `src/styles/font-probe.ts` quarantines a dashboard-supplied `Montserrat` with broken metrics (issue #85) — it splits a DOM-dependent canvas-measuring function from pure, unit-tested decision logic, a pattern reused in `src/styles/resolve-css-color.ts`/`theme-contrast.ts`.
+
+### Native form-control pickers (date/time/select)
+
+Editable date/time fields (Furnace Filter's Last Changed, Schedule's Start/End and Start Time) trigger their platform picker via a real `<button>` calling both `input.focus()` and `input.showPicker()` on a paired hidden `<input>` — not a directly-tappable visible/transparent input. Both calls matter and are not redundant: iOS WebKit doesn't implement `showPicker()` for `date`/`time` inputs at all (WebKit bug 261703, a documented engine gap, not a bug in this code) but does open its native picker sheet from real `.focus()`, from any source; desktop Chrome/Firefox/Safari need the explicit `showPicker()` call to force the picker open regardless of where in the pill a tap lands, and to dodge a Chrome bug where a directly-tapped, focused date input bleeds its own native value/highlight through the styled pill while its picker is open. `<select>` elements don't share any of this — a plain `opacity: 0` full-cover `<select>` (`fan-overlay.ts`'s runtime dropdown, Comfort Setting, Interval) is the correct, simpler pattern there. See ADR-0017's correction history for the full trail.
 
 ### Config and the visual editor
 
