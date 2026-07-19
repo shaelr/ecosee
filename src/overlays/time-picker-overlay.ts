@@ -6,30 +6,35 @@ const MINUTES = [0, 30];
 
 /** How many back-to-back copies of a column's values to render so it can
  *  loop: scrolling past the last copy silently jumps back one loop's worth,
- *  landing on identical content, so the wrap is imperceptible. 7 keeps the
- *  visible window comfortably inside copies 2–5 (`CENTER_COPY`) between
- *  correction passes, which now run on every animation frame during an
- *  active scroll (`_onHourScroll`'s own doc comment) rather than only once
- *  a gesture settles — an earlier version of this fix deferred correction
- *  until settle-time specifically to dodge a mobile flicker, but that traded
- *  it for two worse problems: a long, fast mobile fling could out-run this
- *  same buffer before the deferred correction ever ran (scrolling would
- *  just stop dead at a real edge), and even on desktop, holding off any
- *  correction until the gesture paused read as a visible stall right at the
- *  loop boundary — worse than the flicker it replaced. */
-export const LOOP_COPIES = 7;
-const CENTER_COPY = Math.floor(LOOP_COPIES / 2);
+ *  landing on identical content, so the wrap is imperceptible. Deliberately
+ *  *not* the same number for both columns: the buffer that actually matters
+ *  is the *pixel* distance between the visible window and a real DOM edge
+ *  (one copy's height × how many copies sit on either side of center), and
+ *  Hour's own copy — 24 rows — is already 12× taller than Minute's 2-row
+ *  copy. The same copy count therefore gives Minute a fraction of Hour's
+ *  actual buffer even though they look symmetric on paper; iOS can defer a
+ *  queued `requestAnimationFrame` correction well past one frame during an
+ *  active momentum scroll (`_onHourScroll`'s own doc comment), so however
+ *  far the list can drift before that deferred correction finally runs has
+ *  to fit inside the buffer — and a fast fling outran Minute's undersized
+ *  one before this. `MINUTE_LOOP_COPIES` is scaled up to give Minute a
+ *  comparable *pixel* buffer to Hour's, not just a comparable copy count. */
+export const HOUR_LOOP_COPIES = 5;
+export const MINUTE_LOOP_COPIES = 51;
+const HOUR_CENTER_COPY = Math.floor(HOUR_LOOP_COPIES / 2);
+const MINUTE_CENTER_COPY = Math.floor(MINUTE_LOOP_COPIES / 2);
 
-function repeated(values: readonly number[]): number[] {
-  return Array.from({ length: values.length * LOOP_COPIES }, (_, i) => values[i % values.length]!);
+function repeated(values: readonly number[], copies: number): number[] {
+  return Array.from({ length: values.length * copies }, (_, i) => values[i % values.length]!);
 }
 
-const HOUR_ROWS = repeated(HOURS);
-const MINUTE_ROWS = repeated(MINUTES);
+const HOUR_ROWS = repeated(HOURS, HOUR_LOOP_COPIES);
+const MINUTE_ROWS = repeated(MINUTES, MINUTE_LOOP_COPIES);
 
 /** Positive modulo (JS's `%` can return negative) — used to fold an unbounded
  *  "which loop iteration" counter (`_hourCopy`/`_minuteCopy`, see their own
- *  doc comment) back into a real `[0, LOOP_COPIES)` copy index. */
+ *  doc comment) back into a real `[0, copies)` copy index, for whichever
+ *  column's own copy count (`HOUR_LOOP_COPIES`/`MINUTE_LOOP_COPIES`). */
 function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
@@ -69,7 +74,7 @@ export function loopScrollTop(
   scrollTop: number,
   scrollHeight: number,
   clientHeight: number,
-  copies = LOOP_COPIES,
+  copies: number,
 ): number {
   const loopHeight = scrollHeight / copies;
   if (loopHeight <= 0) return scrollTop;
@@ -101,16 +106,16 @@ export function loopScrollTop(
  * Both columns loop (owner request, following up on the ADR-0018 pickers
  * shipping): scrolling past the last hour wraps to the first and vice versa,
  * like a wheel. A plain `overflow: auto` list has no native "loop" behavior,
- * so each column renders its values repeated `LOOP_COPIES` times back to
- * back and, once per animation frame while the user has scrolled into the
- * first or last copy, silently resets `scrollTop` by however many
- * loop-heights are needed — since every copy is identical content, the
- * reset is imperceptible, and the visible window stays put while the
- * underlying scroll position "teleports" back toward the middle. This is
- * the standard infinite-carousel trick, not a real infinite list. Deferred
- * to `requestAnimationFrame` rather than run synchronously inside the
- * `scroll` handler itself (`_onHourScroll`'s own doc comment) — a mobile
- * flicker fix.
+ * so each column renders its values repeated `HOUR_LOOP_COPIES`/
+ * `MINUTE_LOOP_COPIES` times back to back and, once per animation frame
+ * while the user has scrolled into the first or last copy, silently resets
+ * `scrollTop` by however many loop-heights are needed — since every copy is
+ * identical content, the reset is imperceptible, and the visible window
+ * stays put while the underlying scroll position "teleports" back toward
+ * the middle. This is the standard infinite-carousel trick, not a real
+ * infinite list. Deferred to `requestAnimationFrame` rather than run
+ * synchronously inside the `scroll` handler itself (`_onHourScroll`'s own
+ * doc comment) — a mobile flicker fix.
  *
  * Purely presentational: it owns no schedule-editing logic itself and emits
  * `ecosee-time-picker-confirm` for the host to apply. There is no cancel
@@ -125,22 +130,24 @@ export class EcoseeTimePickerOverlay extends LitElement {
   @state() private _hour = 0;
   @state() private _minute = 0;
 
-  /** Which *physical* copy (of the `LOOP_COPIES` back-to-back repeats) is
-   *  the one currently carrying the "selected" highlight — not just which
-   *  value is selected. Both columns render every repeat of a value's row,
-   *  so with only 2 Minute values a 3-row viewport can show two different
-   *  copies of the same value at once; marking every row with a matching
-   *  *value* as selected (the original approach) highlighted both. Tracking
-   *  a specific copy instead — the one actually tapped, or `CENTER_COPY`
-   *  where `_centerOn` starts every seeded value — keeps exactly one row lit
-   *  at a time. Deliberately unbounded (not clamped to `[0, LOOP_COPIES)`):
-   *  `_onListScroll` nudges it by ±1 on every wrap so it keeps tracking the
-   *  same *visual* row across any number of wraps in either direction (a
-   *  forward wrap re-backs a given screen position with the next copy over,
-   *  so the tracked index must follow); `mod()` folds it back into a real
-   *  copy index only at comparison time (render). */
-  @state() private _hourCopy = CENTER_COPY;
-  @state() private _minuteCopy = CENTER_COPY;
+  /** Which *physical* copy (of the `HOUR_LOOP_COPIES`/`MINUTE_LOOP_COPIES`
+   *  back-to-back repeats) is the one currently carrying the "selected"
+   *  highlight — not just which value is selected. Both columns render
+   *  every repeat of a value's row, so with only 2 Minute values a 3-row
+   *  viewport can show two different copies of the same value at once;
+   *  marking every row with a matching *value* as selected (the original
+   *  approach) highlighted both. Tracking a specific copy instead — the one
+   *  actually tapped, or `HOUR_CENTER_COPY`/`MINUTE_CENTER_COPY` where
+   *  `_centerOn` starts every seeded value — keeps exactly one row lit at a
+   *  time. Deliberately unbounded (not clamped to `[0, copies)`):
+   *  `_onHourScroll`/`_onMinuteScroll` nudge it by however many loop-heights
+   *  a correction pass covers so it keeps tracking the same *visual* row
+   *  across any number of wraps in either direction (a forward wrap
+   *  re-backs a given screen position with the next copy over, so the
+   *  tracked index must follow); `mod()` folds it back into a real copy
+   *  index only at comparison time (render). */
+  @state() private _hourCopy = HOUR_CENTER_COPY;
+  @state() private _minuteCopy = MINUTE_CENTER_COPY;
 
   @query('.list-hour') private _hourList?: HTMLElement;
   @query('.list-minute') private _minuteList?: HTMLElement;
@@ -287,23 +294,30 @@ export class EcoseeTimePickerOverlay extends LitElement {
     if (this._minuteRafId !== undefined) cancelAnimationFrame(this._minuteRafId);
   }
 
-  /** Centers both columns on their seeded value, in the middle copy
-   *  (`CENTER_COPY`) of the repeated list — not just "somewhere the value
-   *  appears" — so there's equal room to scroll in either direction before
-   *  `_onListScroll` ever needs to wrap. Only on first render; a later
-   *  selection re-renders the highlighted row but must not re-scroll the
-   *  user's own in-progress scroll position. */
+  /** Centers both columns on their seeded value, in each one's own middle
+   *  copy (`HOUR_CENTER_COPY`/`MINUTE_CENTER_COPY`) of its repeated list —
+   *  not just "somewhere the value appears" — so there's equal room to
+   *  scroll in either direction before a correction pass ever needs to
+   *  wrap. Only on first render; a later selection re-renders the
+   *  highlighted row but must not re-scroll the user's own in-progress
+   *  scroll position. */
   protected override firstUpdated(): void {
-    this._centerOn(this._hourList, HOURS, this._hour);
-    this._centerOn(this._minuteList, MINUTES, this._minute);
+    this._centerOn(this._hourList, HOURS, this._hour, HOUR_LOOP_COPIES, HOUR_CENTER_COPY);
+    this._centerOn(this._minuteList, MINUTES, this._minute, MINUTE_LOOP_COPIES, MINUTE_CENTER_COPY);
   }
 
-  private _centerOn(list: HTMLElement | undefined, values: readonly number[], value: number): void {
+  private _centerOn(
+    list: HTMLElement | undefined,
+    values: readonly number[],
+    value: number,
+    copies: number,
+    centerCopy: number,
+  ): void {
     if (!list) return;
     const index = values.indexOf(value);
     if (index === -1) return;
-    const rowHeight = list.scrollHeight / (values.length * LOOP_COPIES);
-    const targetRow = CENTER_COPY * values.length + index;
+    const rowHeight = list.scrollHeight / (values.length * copies);
+    const targetRow = centerCopy * values.length + index;
     list.scrollTop = rowHeight * targetRow - (list.clientHeight - rowHeight) / 2;
   }
 
@@ -322,11 +336,23 @@ export class EcoseeTimePickerOverlay extends LitElement {
    *  without introducing a *visible* delay the way waiting for the gesture
    *  to fully settle did (an earlier version of this fix, reverted — that
    *  traded the flicker for the scroll stopping early on a long mobile
-   *  fling and a visible stall on desktop, both worse). By the time the
-   *  frame callback runs, `list.scrollTop` reflects wherever the scroll
-   *  actually is *then*, not wherever it was when the event fired — so a
-   *  burst of events between frames still only produces one correction,
-   *  already accounting for however far the list moved in the meantime. */
+   *  fling and a visible stall on desktop, both worse).
+   *
+   *  Even so, iOS can defer an already-*queued* `requestAnimationFrame`
+   *  callback well past one frame while its own momentum-scroll animation
+   *  is running (the callback isn't skipped, just delayed) — a further
+   *  mobile report after the settle-vs-frame fix above: the flicker was
+   *  gone, but a fast fling could still out-run `MINUTE_LOOP_COPIES`'s
+   *  buffer before the deferred frame finally ran. `MINUTE_LOOP_COPIES`'s
+   *  own doc comment covers why Minute specifically needed a much bigger
+   *  buffer than Hour to make that gap survivable, rather than trying to
+   *  force the frame to run any sooner (not something JS can control).
+   *
+   *  By the time the frame callback runs, `list.scrollTop` reflects
+   *  wherever the scroll actually is *then*, not wherever it was when the
+   *  event fired — so a burst of events between frames still only produces
+   *  one correction, already accounting for however far the list moved in
+   *  the meantime (whether that's one frame's worth or more). */
   private _onHourScroll(event: Event): void {
     if (this._hourRafId !== undefined) return;
     const list = event.currentTarget as HTMLElement;
@@ -351,28 +377,57 @@ export class EcoseeTimePickerOverlay extends LitElement {
    *  ambient smooth-scroll behavior. */
   private _correctHourScroll(list: HTMLElement): void {
     this._hourRafId = undefined;
-    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
+    const next = loopScrollTop(
+      list.scrollTop,
+      list.scrollHeight,
+      list.clientHeight,
+      HOUR_LOOP_COPIES,
+    );
+    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight, HOUR_LOOP_COPIES);
     if (steps === 0) return;
-    this._hourCopy = this._shiftSelectedRow(list, HOURS, this._hour, this._hourCopy, steps);
+    this._hourCopy = this._shiftSelectedRow(
+      list,
+      HOURS,
+      this._hour,
+      this._hourCopy,
+      steps,
+      HOUR_LOOP_COPIES,
+    );
     list.scrollTo({ top: next, behavior: 'instant' });
   }
 
   /** Same as `_correctHourScroll`, for the Minute column's own `_minuteCopy`. */
   private _correctMinuteScroll(list: HTMLElement): void {
     this._minuteRafId = undefined;
-    const next = loopScrollTop(list.scrollTop, list.scrollHeight, list.clientHeight);
-    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight);
+    const next = loopScrollTop(
+      list.scrollTop,
+      list.scrollHeight,
+      list.clientHeight,
+      MINUTE_LOOP_COPIES,
+    );
+    const steps = this._loopSteps(next, list.scrollTop, list.scrollHeight, MINUTE_LOOP_COPIES);
     if (steps === 0) return;
-    this._minuteCopy = this._shiftSelectedRow(list, MINUTES, this._minute, this._minuteCopy, steps);
+    this._minuteCopy = this._shiftSelectedRow(
+      list,
+      MINUTES,
+      this._minute,
+      this._minuteCopy,
+      steps,
+      MINUTE_LOOP_COPIES,
+    );
     list.scrollTo({ top: next, behavior: 'instant' });
   }
 
   /** How many whole `loopHeight`s `loopScrollTop` just corrected by —
    *  `Math.round`, not a division left as a float, since floating-point
    *  drift could otherwise land a hair off an exact integer. */
-  private _loopSteps(next: number, prevScrollTop: number, scrollHeight: number): number {
-    const loopHeight = scrollHeight / LOOP_COPIES;
+  private _loopSteps(
+    next: number,
+    prevScrollTop: number,
+    scrollHeight: number,
+    copies: number,
+  ): number {
+    const loopHeight = scrollHeight / copies;
     if (loopHeight <= 0) return 0;
     return Math.round((next - prevScrollTop) / loopHeight);
   }
@@ -389,12 +444,13 @@ export class EcoseeTimePickerOverlay extends LitElement {
     value: number,
     oldCopy: number,
     steps: number,
+    copies: number,
   ): number {
     const newCopy = oldCopy + steps;
     const valueIndex = values.indexOf(value);
     if (valueIndex !== -1) {
-      const oldRow = list.children[mod(oldCopy, LOOP_COPIES) * values.length + valueIndex];
-      const newRow = list.children[mod(newCopy, LOOP_COPIES) * values.length + valueIndex];
+      const oldRow = list.children[mod(oldCopy, copies) * values.length + valueIndex];
+      const newRow = list.children[mod(newCopy, copies) * values.length + valueIndex];
       oldRow?.classList.remove('selected');
       oldRow?.setAttribute('aria-selected', 'false');
       newRow?.classList.add('selected');
@@ -438,7 +494,8 @@ export class EcoseeTimePickerOverlay extends LitElement {
             >
               ${HOUR_ROWS.map((hour, i) => {
                 const copy = Math.floor(i / HOURS.length);
-                const selected = hour === this._hour && copy === mod(this._hourCopy, LOOP_COPIES);
+                const selected =
+                  hour === this._hour && copy === mod(this._hourCopy, HOUR_LOOP_COPIES);
                 return html`
                   <button
                     type="button"
@@ -464,7 +521,7 @@ export class EcoseeTimePickerOverlay extends LitElement {
               ${MINUTE_ROWS.map((minute, i) => {
                 const copy = Math.floor(i / MINUTES.length);
                 const selected =
-                  minute === this._minute && copy === mod(this._minuteCopy, LOOP_COPIES);
+                  minute === this._minute && copy === mod(this._minuteCopy, MINUTE_LOOP_COPIES);
                 return html`
                   <button
                     type="button"
