@@ -12,9 +12,13 @@ import { icons } from '../icons';
 import { emitServiceCall } from './service-call-event';
 import { emitOverlayDismiss } from './overlay-dismiss';
 
-/** Neighbors shown on each side of the selected value in the scrubber, matching
- *  the Temperature Adjust overlay's own scrubber. */
-const SCRUBBER_RADIUS = 2;
+/** Neighbors shown on each side of the selected value in the scrubber — just 1
+ *  (not the Temperature Adjust overlay's 2): this screen also carries a
+ *  title/subtitle header above the scrubber, so a shorter ladder (smaller
+ *  overall, at the same "big centered bubble + inline ± buttons" look) keeps
+ *  the whole composition comfortably centered in the remaining space instead
+ *  of competing with the header for room (owner request). */
+const SCRUBBER_RADIUS = 1;
 
 /** Vertical drag distance (px) that scrubs one step — same feel as the
  *  Temperature Adjust overlay's scrubber. */
@@ -118,13 +122,21 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
 
     /* Two columns: vertical scrubber (center) | ± nudge buttons (right) — the
        Temperature Adjust overlay's own grid, minus its setpoint-chip column
-       (there's nothing to switch between here). */
+       (there's nothing to switch between here). align-content: center is the
+       actual fix for this screen's own reported "not centered" bug: with a
+       header sibling above it eating fixed space, .adjust's single implicit
+       row doesn't fill its flex-grown box on its own the way it does in the
+       Temperature Adjust overlay (which has no header competing for room);
+       without an explicit align-content, that row — and the bubble/±
+       buttons in it — sat at the box's block-start instead, leaving dead
+       space below before the tab bar. */
     .adjust {
       flex: 1;
       width: 100%;
       display: grid;
       grid-template-columns: 1fr max-content;
       align-items: center;
+      align-content: center;
       gap: calc(3 * var(--ecosee-u, 4.6px));
     }
 
@@ -132,11 +144,11 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 14cqw;
+      gap: 10cqw;
     }
     .nudge button {
-      width: 12cqw;
-      height: 12cqw;
+      width: 10cqw;
+      height: 10cqw;
     }
     .adjust.cool .nudge button {
       color: var(--ecosee-cool, #49b6ea);
@@ -150,7 +162,7 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
       display: grid;
       grid-template-rows: 1fr auto 1fr;
       justify-items: center;
-      gap: 3cqw;
+      gap: 2.5cqw;
       touch-action: none;
       cursor: ns-resize;
     }
@@ -163,7 +175,7 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4cqw;
+      gap: 3cqw;
     }
     .stack.above {
       align-self: end;
@@ -171,24 +183,23 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
     .stack.below {
       align-self: start;
     }
+    /* Just the one immediate neighbor per side (SCRUBBER_RADIUS = 1, its own
+       doc comment) — unlike the Temperature Adjust overlay's ladder, there's
+       no second, dimmer "far" ring here at all. */
     .neighbor {
-      font-size: 11cqw;
+      font-size: 9cqw;
       font-weight: 300;
       color: var(--ecosee-muted, #6f96a3);
       opacity: 0.85;
     }
-    .neighbor.far {
-      font-size: 9cqw;
-      opacity: 0.5;
-    }
     .bubble {
-      width: 36cqw;
-      height: 36cqw;
+      width: 30cqw;
+      height: 30cqw;
       border-radius: 28%;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 15cqw;
+      font-size: 13cqw;
       font-weight: 200;
       color: var(--ecosee-fg, #d4eff9);
     }
@@ -329,10 +340,11 @@ export class EcoseeComfortSetpointOverlay extends LitElement {
     const values = scrubberWindow(edit, SCRUBBER_RADIUS);
     const above = values.filter((v) => v > edit.value).reverse();
     const below = values.filter((v) => v < edit.value).reverse();
-    const neighbor = (v: number): TemplateResult => {
-      const far = Math.abs(v - edit.value) > edit.step * 1.5;
-      return html`<div class="neighbor ${far ? 'far' : ''}">${formatSetpointValue(v)}</div>`;
-    };
+    // No "far" tier here — SCRUBBER_RADIUS = 1 means every neighbor is the
+    // immediate one (unlike the Temperature Adjust overlay's own two-ring
+    // ladder).
+    const neighbor = (v: number): TemplateResult =>
+      html`<div class="neighbor">${formatSetpointValue(v)}</div>`;
     return html`
       <div
         class="scrubber"
