@@ -8,6 +8,7 @@ import '../src/ecosee-card';
 import type { EcoseeCard } from '../src/ecosee-card';
 import type { HomeAssistant } from '../src/types/hass';
 import { PICKER_CONFIRM_MS } from '../src/overlays/overlay-dismiss';
+import { TIME_CONFIRM_MS } from '../src/overlays/time-picker-overlay';
 import { fakeHass, climateEntity } from './helpers/fake-hass';
 
 // Wiring tests: these mount the real <ecosee-card> and drive it through the
@@ -676,7 +677,16 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     const callsBeforeConfirm = calls.length;
     const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
     await timePicker.updateComplete;
-    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
+    // No Confirm button anymore — tap the already-seeded hour row (08, still
+    // selected) to reconfirm it unchanged, then let the auto-confirm beat
+    // elapse (TIME_CONFIRM_MS, time-picker-overlay.ts).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    (
+      [...timePicker.shadowRoot!.querySelectorAll('.option')].find(
+        (o) => o.textContent?.trim() === '08',
+      ) as HTMLButtonElement
+    ).click();
+    vi.advanceTimersByTime(TIME_CONFIRM_MS);
     await card.updateComplete;
 
     // Add to Schedule isn't submitted by picking a time — no entity write yet.
@@ -685,9 +695,9 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     expect(overlayPresent(card, 'ecosee-schedule-add-block-overlay')).toBe(true);
     expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
     // The seeded 08:00 default survived the round trip through the picker
-    // unaffected (Confirm without picking a row keeps the seeded value) —
-    // proof the card's own buffered state, not local component state, is
-    // what the field reflects after the picker unmounted and remounted it.
+    // unaffected (reconfirming the same seeded value is a no-op) — proof the
+    // card's own buffered state, not local component state, is what the
+    // field reflects after the picker unmounted and remounted it.
     const startPillAfter = card
       .shadowRoot!.querySelector('ecosee-schedule-add-block-overlay')!
       .shadowRoot!.querySelectorAll('.field-row')[1]!
@@ -766,7 +776,17 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
 
     const timePicker = card.shadowRoot!.querySelector('ecosee-time-picker-overlay') as LitElement;
     await timePicker.updateComplete;
-    (timePicker.shadowRoot!.querySelector('.confirm') as HTMLButtonElement).click();
+    // No Confirm button anymore — tap the already-seeded hour row (08, still
+    // selected) to reconfirm it unchanged, then let the auto-confirm beat
+    // elapse (TIME_CONFIRM_MS, time-picker-overlay.ts).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    (
+      [...timePicker.shadowRoot!.querySelectorAll('.option')].find(
+        (o) => o.textContent?.trim() === '08',
+      ) as HTMLButtonElement
+    ).click();
+    vi.advanceTimersByTime(TIME_CONFIRM_MS);
+    vi.useRealTimers();
     await card.updateComplete;
     // The write is async (calendar/event/update over the websocket
     // connection) — let it and the subsequent re-fetch/close settle.
@@ -781,6 +801,86 @@ describe('ecosee-card wiring — date/time pickers (ADR-0018)', () => {
     expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(false);
     expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
     void calls; // the exact write payload is schedule.test.ts's concern; this test is about nav depth.
+  });
+
+  // Regression guard: dismissing the nested time picker via ✕ (not
+  // confirming) used to blank the screen it pops back to. `_closeOverlay`'s
+  // blanket `_clearOverlaySeeds()` cleared `_scheduleEditingBlockIndex` on
+  // every dismiss, including a 1-level pop from 'time-picker' back to
+  // 'schedule-start-time' — but that screen's own `render` reads from the
+  // very same seed, so it immediately rendered nothing until the whole card
+  // was refreshed. `_scheduleEditingBlockIndex` must survive a dismiss that
+  // merely pops off a picker pushed on top of the screen that owns it,
+  // exactly like `_addBlockStartMinutes`/`_addBlockComfortSetting` already do
+  // for Add to Schedule.
+  it('Schedule Start Time: dismissing the nested time picker via ✕ (no confirm) pops back to a still-rendered Start Time screen, not blank', async () => {
+    const today = todayDateString();
+    const { hass } = fakeHass({
+      entities: [
+        climateEntity('heat_cool', { hvac_modes: ['off', 'heat', 'cool', 'heat_cool'] }),
+        { entity_id: 'calendar.sched', state: 'off', attributes: {} },
+      ],
+      response: {
+        response: {
+          'calendar.sched': {
+            events: [
+              { uid: 'e1', start: `${today}T08:00:00`, end: `${today}T17:00:00`, summary: 'Home' },
+            ],
+          },
+        },
+      },
+    });
+    const card = document.createElement('ecosee-card') as EcoseeCard;
+    card.setConfig({
+      type: 'custom:ecosee-card',
+      entity: 'climate.t',
+      schedule_entity: 'calendar.sched',
+    });
+    card.hass = hass;
+    document.body.appendChild(card);
+    await card.updateComplete;
+
+    fireAction(card, 'menu');
+    await card.updateComplete;
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-tab-select', {
+        detail: { target: 'schedule' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await card.updateComplete;
+
+    card.shadowRoot!.querySelector('ecosee-overlay')!.dispatchEvent(
+      new CustomEvent('ecosee-schedule-block-select', {
+        detail: { blockIndex: 0 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(true);
+
+    const startTime = card.shadowRoot!.querySelector(
+      'ecosee-schedule-start-time-overlay',
+    ) as LitElement;
+    await startTime.updateComplete;
+    (startTime.shadowRoot!.querySelector('.pill-button') as HTMLButtonElement).click();
+    await card.updateComplete;
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(true);
+
+    // ✕ — not a confirm — pops exactly one level.
+    fireDismiss(card);
+    await card.updateComplete;
+
+    expect(overlayPresent(card, 'ecosee-time-picker-overlay')).toBe(false);
+    // The bug: this used to render nothing (blank) because the seed it
+    // reads from had just been wiped.
+    expect(overlayPresent(card, 'ecosee-schedule-start-time-overlay')).toBe(true);
+    const startTimeAfter = card.shadowRoot!.querySelector('ecosee-schedule-start-time-overlay')!;
+    expect(startTimeAfter.shadowRoot!.querySelector('.pill-button')).not.toBeNull();
   });
 });
 

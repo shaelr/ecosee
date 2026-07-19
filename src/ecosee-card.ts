@@ -187,7 +187,11 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  (an index into `toScheduleBlocks`'s result, stable across a write since a
    *  move never reorders blocks — only grows/shrinks adjacent ones). `undefined`
    *  ⇒ the picker has nothing to show, matching `_tempSetpoint`'s per-open-seed
-   *  shape. Cleared on close (`_clearOverlaySeeds`). */
+   *  shape. NOT cleared on close (`_clearOverlaySeeds`) — it belongs to the
+   *  Schedule Start Time screen itself, not to the time picker that may be
+   *  pushed on top of it, so dismissing that nested picker can't wipe the
+   *  very index Start Time still needs to keep rendering. Set fresh on each
+   *  `_onScheduleBlockSelect` instead. */
   @state() private _scheduleEditingBlockIndex?: number;
 
   /** Whether the Furnace Filter Last Changed date picker (ADR-0018) has been
@@ -209,7 +213,8 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
    *  user picked a time and came back. Reset to fresh defaults each time
    *  `schedule-add-block` is (re)opened (`_onScheduleAddBlockOpen`), not
    *  just once, so a second visit doesn't inherit a previous, uncommitted
-   *  session. Cleared on close (`_clearOverlaySeeds`). */
+   *  session. NOT cleared on close (`_clearOverlaySeeds`) — closing a picker
+   *  pushed on top of Add to Schedule must not wipe the values it just set. */
   @state() private _addBlockComfortSetting = '';
   @state() private _addBlockStartMinutes = 8 * 60;
   @state() private _addBlockEndMinutes = 10 * 60;
@@ -1436,24 +1441,28 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
   }
 
   /** Clear per-open Overlay state so a later open starts fresh: the Temperature
-   *  Adjust seed, the Weather forecast, which Schedule block the Start Time
-   *  picker was editing, which Comfort Setpoints field the Setpoint Adjust
-   *  picker was editing, and the two ADR-0018 pickers' own open flags/target.
-   *  Deliberately does NOT clear `_scheduleDayIndex` / `_scheduleEvents` — the
-   *  selected day and its last-fetched blocks are kept across a close so
-   *  reopening Schedule shows them immediately rather than a blank "Loading…"
-   *  flash while a fresh fetch lands. Also deliberately does NOT clear
-   *  `_addBlockComfortSetting`/`_addBlockStartMinutes`/`_addBlockEndMinutes` —
-   *  those belong to Add to Schedule itself, not to whichever picker was just
-   *  dismissed on top of it (closing the time picker back to the Add to
-   *  Schedule screen must not wipe the very values it just set); they're
-   *  reset explicitly on each `schedule-add-block` open instead
-   *  (`_onScheduleAddBlockOpen`). */
+   *  Adjust seed, the Weather forecast, which Comfort Setpoints field the
+   *  Setpoint Adjust picker was editing, and the two ADR-0018 pickers' own
+   *  open flags/target. Deliberately does NOT clear `_scheduleDayIndex` /
+   *  `_scheduleEvents` — the selected day and its last-fetched blocks are kept
+   *  across a close so reopening Schedule shows them immediately rather than
+   *  a blank "Loading…" flash while a fresh fetch lands. Also deliberately
+   *  does NOT clear `_addBlockComfortSetting`/`_addBlockStartMinutes`/
+   *  `_addBlockEndMinutes`/`_scheduleEditingBlockIndex` — those belong to
+   *  Add to Schedule / Schedule Start Time themselves, not to whichever
+   *  picker was just dismissed on top of them (closing the nested time
+   *  picker back to either screen must not wipe the very seed it renders
+   *  from — clearing `_scheduleEditingBlockIndex` here previously did exactly
+   *  that: X-ing the time picker while editing an existing block's Start
+   *  Time popped back to a Start Time screen whose own `available`/`render`
+   *  had just lost the block index it needs, rendering blank until a
+   *  refresh). `_scheduleEditingBlockIndex` is instead set fresh on each
+   *  `_onScheduleBlockSelect`, mirroring how the Add to Schedule seeds are
+   *  reset explicitly on each `_onScheduleAddBlockOpen`. */
   private _clearOverlaySeeds(): void {
     this._tempSeed = undefined;
     this._tempSetpoint = undefined;
     this._weatherForecasts = undefined;
-    this._scheduleEditingBlockIndex = undefined;
     this._setpointSelection = undefined;
     this._datePickerOpen = false;
     this._timePickerTarget = undefined;
