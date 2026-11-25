@@ -34,7 +34,8 @@ The default Card view: large **current** temperature, humidity, an Equipment Sta
 indicator, the setpoint ovals (when setpoints are active), a weather icon, a fan
 affordance (a shortcut into the Fan Overlay, shown only when the entity exposes fan
 control — this is a Card addition, not on the physical device), and a menu
-affordance. The
+affordance. It can also carry an opt-in **sensor row** beneath the big number — the
+remote sensors the owner flagged `show_on_home` (ADR-0019), a Card addition. The
 Premium uses a flat **squircle** motif (big number + rounded-square bubbles), NOT a
 circular dial/ring — do not add a ring.
 _Avoid_: main view, dashboard, face, dial, ring.

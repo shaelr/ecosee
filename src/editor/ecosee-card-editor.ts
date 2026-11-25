@@ -8,6 +8,7 @@ import {
   normalizeEditorConfig,
   SENSOR_NAME_PREFIX,
   SENSOR_OCCUPANCY_PREFIX,
+  SENSOR_HOME_PREFIX,
   type EditorField,
 } from './editor';
 
@@ -73,7 +74,7 @@ export class EcoseeCardEditor extends LitElement {
 
   // `ha-form` hands each schema entry back to these callbacks; ours carry the
   // device-vocabulary label/helper (CONTEXT.md) alongside the selector. The
-  // per-sensor display-name and occupancy-entity fields get their label enriched
+  // per-sensor display-name, occupancy-entity and Home Screen fields get their label enriched
   // with the sensor's friendly name here (the pure schema in editor.ts only knows
   // the entity id).
   private readonly _computeLabel = (field: EditorField): string => {
@@ -86,6 +87,11 @@ export class EcoseeCardEditor extends LitElement {
       const entityId = field.name.slice(SENSOR_OCCUPANCY_PREFIX.length);
       const friendly = this.hass?.states?.[entityId]?.attributes?.friendly_name;
       return `Occupancy entity — ${typeof friendly === 'string' && friendly ? friendly : entityId}`;
+    }
+    if (field.name.startsWith(SENSOR_HOME_PREFIX)) {
+      const entityId = field.name.slice(SENSOR_HOME_PREFIX.length);
+      const friendly = this.hass?.states?.[entityId]?.attributes?.friendly_name;
+      return `Show on Home Screen — ${typeof friendly === 'string' && friendly ? friendly : entityId}`;
     }
     return field.label;
   };

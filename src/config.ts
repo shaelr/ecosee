@@ -18,6 +18,10 @@ export interface SensorConfig {
    *  config. Set this only to override that (e.g. a different binary source). If
    *  nothing resolves either way, the badge is simply not shown. */
   occupancy_entity?: string;
+  /** Opt this sensor into the Home Screen's compact sensor row, beneath the big
+   *  current-temperature number (ADR-0019). Absent/`false` ⇒ Sensors screen only.
+   *  The row renders only when at least one flagged sensor has a usable reading. */
+  show_on_home?: boolean;
 }
 
 /** One Comfort Setting's Heat/Cool temperature targets (distinct from the live
@@ -477,7 +481,7 @@ function parseComfortSetpoint(item: unknown, index: number): ComfortSetpointConf
 }
 
 /** Parse the optional `sensors:` list. Each item is either a bare entity-id
- *  string (shorthand) or a `{ entity, name?, occupancy_entity? }` object. Returns
+ *  string (shorthand) or a `{ entity, name?, occupancy_entity?, show_on_home? }` object. Returns
  *  `undefined` when the key is absent so the rest of the Card can treat "no
  *  sensors configured" uniformly. Throws user-facing errors for malformed input. */
 function parseSensors(raw: unknown): SensorConfig[] | undefined {
@@ -510,5 +514,14 @@ function parseSensor(item: unknown, index: number): SensorConfig {
     }
     return value;
   };
-  return { entity, name: optional('name'), occupancy_entity: optional('occupancy_entity') };
+  const showOnHome = item.show_on_home;
+  if (showOnHome !== undefined && typeof showOnHome !== 'boolean') {
+    throw new Error(`ecosee: \`sensors[${index}].show_on_home\` must be true or false.`);
+  }
+  return {
+    entity,
+    name: optional('name'),
+    occupancy_entity: optional('occupancy_entity'),
+    show_on_home: showOnHome,
+  };
 }

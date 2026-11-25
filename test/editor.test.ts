@@ -5,6 +5,7 @@ import {
   composeEditorSchema,
   sensorNameKey,
   sensorOccupancyKey,
+  sensorHomeKey,
   sensorEntityKey,
   comfortSetpointPresetKey,
   comfortSetpointHeatKey,
@@ -187,17 +188,21 @@ describe('composeEditorSchema — per-sensor rows', () => {
     const schema = composeEditorSchema(config);
     const names = schema.map((field) => field.name);
     const sensorsAt = names.indexOf(sensorEntityKey(0));
-    // entity picker → its name field → its occupancy field → entity picker → its
-    // name field → its occupancy field → add picker.
-    expect(names.slice(sensorsAt, sensorsAt + 7)).toEqual([
+    // entity picker → its name field → its occupancy field → its Home Screen
+    // checkbox → next sensor's four → add picker.
+    expect(names.slice(sensorsAt, sensorsAt + 9)).toEqual([
       sensorEntityKey(0),
       sensorNameKey('sensor.hallway'),
       sensorOccupancyKey('sensor.hallway'),
+      sensorHomeKey('sensor.hallway'),
       sensorEntityKey(1),
       sensorNameKey('sensor.kitchen'),
       sensorOccupancyKey('sensor.kitchen'),
+      sensorHomeKey('sensor.kitchen'),
       sensorEntityKey(2),
     ]);
+    const homeField = schema.find((field) => field.name === sensorHomeKey('sensor.hallway'));
+    expect(homeField?.selector).toEqual({ boolean: {} });
     const nameField = schema.find((field) => field.name === sensorNameKey('sensor.hallway'));
     expect(nameField?.selector).toEqual({ text: {} });
     expect(nameField?.required).toBeFalsy();
@@ -318,6 +323,15 @@ describe('toEditorData', () => {
       sensors: [{ entity: 'sensor.hallway', occupancy_entity: 'binary_sensor.hall' }],
     });
     expect(data[sensorOccupancyKey('sensor.hallway')]).toBe('binary_sensor.hall');
+  });
+
+  it('reflects each sensor’s show_on_home flag in its checkbox (unset ⇒ unchecked)', () => {
+    const data = toEditorData({
+      ...base,
+      sensors: [{ entity: 'sensor.hallway', show_on_home: true }, 'sensor.kitchen'],
+    });
+    expect(data[sensorHomeKey('sensor.hallway')]).toBe(true);
+    expect(data[sensorHomeKey('sensor.kitchen')]).toBe(false);
   });
 
   it('spreads comfort_setpoints rows across the per-index preset/heat/cool fields', () => {
@@ -674,5 +688,55 @@ describe('normalizeEditorConfig — optional-config-key hygiene', () => {
     expect(config.comfort_setpoints).toEqual([
       { preset: 'Home', heat_entity: 'number.home_heat', cool_entity: 'number.home_cool' },
     ]);
+  });
+});
+
+describe('normalizeEditorConfig — show_on_home', () => {
+  it('ticking the checkbox on a shorthand sensor writes object-form show_on_home: true', () => {
+    const prev = { ...base, sensors: ['sensor.hallway'] };
+    const next = normalizeEditorConfig(
+      { ...toEditorData(prev), [sensorHomeKey('sensor.hallway')]: true },
+      prev,
+    );
+    expect(next.sensors).toEqual([{ entity: 'sensor.hallway', show_on_home: true }]);
+    expect(parseConfig(next).sensors?.[0]?.show_on_home).toBe(true);
+  });
+
+  it('unticking drops the key instead of writing false (back to shorthand)', () => {
+    const prev = { ...base, sensors: [{ entity: 'sensor.hallway', show_on_home: true }] };
+    const next = normalizeEditorConfig(
+      { ...toEditorData(prev), [sensorHomeKey('sensor.hallway')]: false },
+      prev,
+    );
+    expect(next.sensors).toEqual(['sensor.hallway']);
+  });
+
+  it('keeps the flag alongside a name and occupancy override', () => {
+    const prev = {
+      ...base,
+      sensors: [
+        {
+          entity: 'sensor.hallway',
+          name: 'Hall',
+          occupancy_entity: 'binary_sensor.hall',
+          show_on_home: true,
+        },
+      ],
+    };
+    const next = normalizeEditorConfig({ ...toEditorData(prev), name: 'Den' }, prev);
+    expect(next.sensors).toEqual([
+      {
+        entity: 'sensor.hallway',
+        name: 'Hall',
+        occupancy_entity: 'binary_sensor.hall',
+        show_on_home: true,
+      },
+    ]);
+  });
+
+  it('preserves a stored flag when its checkbox is absent from the form value', () => {
+    const prev = { ...base, sensors: [{ entity: 'sensor.hallway', show_on_home: true }] };
+    const next = normalizeEditorConfig({ ...base, [sensorEntityKey(0)]: 'sensor.hallway' }, prev);
+    expect(next.sensors).toEqual([{ entity: 'sensor.hallway', show_on_home: true }]);
   });
 });

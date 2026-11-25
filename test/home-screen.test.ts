@@ -4,6 +4,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import '../src/screens/home-screen';
 import type { EcoseeHomeScreen, HomeActionDetail } from '../src/screens/home-screen';
 import type { HomeView } from '../src/climate/home-view';
+import type { SensorCard } from '../src/sensors/sensors';
 
 // Render tests for the Home Screen's setpoint ovals (issue #42): the device
 // presents active setpoints as amber Heat / blue Cool ovals — two side by side in
@@ -33,9 +34,10 @@ function view(overrides: Partial<HomeView> = {}): HomeView {
   };
 }
 
-async function mount(v: HomeView): Promise<EcoseeHomeScreen> {
+async function mount(v: HomeView, sensors?: SensorCard[]): Promise<EcoseeHomeScreen> {
   const el = document.createElement('ecosee-home-screen') as EcoseeHomeScreen;
   el.view = v;
+  if (sensors) el.sensors = sensors;
   document.body.appendChild(el);
   await el.updateComplete;
   return el;
@@ -610,5 +612,85 @@ describe('Home Screen — equipment-status class never collides with an unrelate
     const el = await mount(view({ equipment: null }));
     const classes = [...screenRoot(el).classList];
     expect(classes).toEqual(['screen']);
+  });
+});
+
+function sensor(key: string, name: string, temp: number): SensorCard {
+  return { key, name, temp, occupied: null, isThermostat: false };
+}
+
+describe('Home Screen sensor row (sensors[].show_on_home)', () => {
+  const row = (el: EcoseeHomeScreen) => el.shadowRoot!.querySelector('.sensors');
+  const chips = (el: EcoseeHomeScreen) =>
+    [...el.shadowRoot!.querySelectorAll('.sensor')] as HTMLButtonElement[];
+
+  it('renders nothing extra when no sensors are passed (the default Home Screen is unchanged)', async () => {
+    const el = await mount(view());
+    expect(row(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector('.cluster')!.classList.contains('with-sensors')).toBe(
+      false,
+    );
+  });
+
+  it('renders nothing extra for an empty list', async () => {
+    const el = await mount(view(), []);
+    expect(row(el)).toBeNull();
+  });
+
+  it('shows each sensor as a name + formatted temperature, in order, under the big number', async () => {
+    const el = await mount(view({ unit: '°F' }), [
+      sensor('sensor.bedroom', 'Bedroom', 70.4),
+      sensor('sensor.office', 'Office', 73),
+    ]);
+    expect(
+      chips(el).map((c) => [
+        c.querySelector('.sensor-name')!.textContent!.trim(),
+        c.querySelector('.sensor-temp')!.textContent!.trim(),
+      ]),
+    ).toEqual([
+      ['Bedroom', '70°'],
+      ['Office', '73°'],
+    ]);
+    // Sits after the big number and before the setpoint display.
+    const cluster = el.shadowRoot!.querySelector('.cluster')!;
+    const order = [...cluster.children].map((c) => c.className.split(' ')[0]);
+    expect(order.indexOf('sensors')).toBe(order.indexOf('temp') + 1);
+    expect(order.indexOf('setpoints')).toBe(order.indexOf('sensors') + 1);
+    expect(cluster.classList.contains('with-sensors')).toBe(true);
+    expect(cluster.classList.contains('two-rows')).toBe(false);
+  });
+
+  it('marks the cluster two-rows past four sensors, and caps at eight', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => sensor(`sensor.s${i}`, `S${i}`, 70 + i));
+    const el = await mount(view(), many);
+    expect(el.shadowRoot!.querySelector('.cluster')!.classList.contains('two-rows')).toBe(true);
+    expect(chips(el)).toHaveLength(8);
+  });
+
+  it('fires hass-more-info for the tapped sensor (bubbling, composed)', async () => {
+    const el = await mount(view(), [sensor('sensor.bedroom', 'Bedroom', 70)]);
+    let detail: unknown;
+    let composed = false;
+    document.body.addEventListener(
+      'hass-more-info',
+      (e) => {
+        detail = (e as CustomEvent).detail;
+        composed = e.composed;
+      },
+      { once: true },
+    );
+    chips(el)[0]!.click();
+    expect(detail).toEqual({ entityId: 'sensor.bedroom' });
+    expect(composed).toBe(true);
+  });
+
+  it('labels each chip for assistive tech with its name and reading', async () => {
+    const el = await mount(view({ unit: '°F' }), [sensor('sensor.bedroom', 'Bedroom', 70)]);
+    expect(chips(el)[0]!.getAttribute('aria-label')).toBe('Bedroom 70°, show history');
+  });
+
+  it('is not shown on the unavailable shell', async () => {
+    const el = await mount(view({ available: false }), [sensor('sensor.bedroom', 'Bedroom', 70)]);
+    expect(row(el)).toBeNull();
   });
 });

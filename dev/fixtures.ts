@@ -359,6 +359,104 @@ const ecobeeAirQuality: Fixture = {
   }),
 };
 
+// ADR-0019: the Home Screen's opt-in sensor row (sensors[].show_on_home). One
+// row: three of the four sensors opt in (Garage stays Sensors-screen-only).
+const homeSensorsRow = (n: number) =>
+  ['Bedroom', 'Office', 'Kitchen', 'Basement', 'Nursery', 'Guest Room', 'Garage', 'Sunroom'].slice(
+    0,
+    n,
+  );
+const homeSensorStates = (names: string[]): HassEntityBase[] =>
+  names.map((name, i) => ({
+    entity_id: `sensor.${name.toLowerCase().replace(/ /g, '_')}_temp`,
+    state: String(66 + ((i * 3) % 11)),
+    attributes: { friendly_name: name },
+  }));
+
+const homeSensorsOne: Fixture = {
+  label: 'Home sensors (one row)',
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    weather_entity: 'weather.home',
+    sensors: [
+      ...homeSensorStates(homeSensorsRow(3)).map((e) => ({
+        entity: e.entity_id,
+        show_on_home: true,
+      })),
+      { entity: 'sensor.garage_temp' },
+    ],
+  },
+  hass: makeHass({
+    weather: true,
+    climate: {
+      entity_id: 'climate.living_room',
+      state: 'heat_cool',
+      attributes: {
+        friendly_name: 'Living Room',
+        current_temperature: 72,
+        current_humidity: 45,
+        target_temp_low: 70,
+        target_temp_high: 75,
+        hvac_action: 'heating',
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+      },
+    },
+    extra: [
+      ...homeSensorStates(homeSensorsRow(3)),
+      { entity_id: 'sensor.garage_temp', state: '58', attributes: { friendly_name: 'Garage' } },
+    ],
+  }),
+};
+
+// ADR-0019's tallest combination, the one the shrink sizes are tuned against:
+// two full sensor rows (eight chips) + the combined range pill with "until" +
+// both foot gauges + humidity.
+const homeSensorsWorstCase: Fixture = {
+  label: 'Home sensors (two rows, tallest)',
+  config: {
+    type: 'custom:ecosee-card',
+    entity: 'climate.living_room',
+    weather_entity: 'weather.home',
+    resume_program: true,
+    air_quality_entity: 'sensor.air_quality_index',
+    uv_index_entity: 'sensor.uv_index',
+    sensors: homeSensorStates(homeSensorsRow(8)).map((e) => ({
+      entity: e.entity_id,
+      show_on_home: true,
+    })),
+  },
+  hass: makeHass({
+    weather: true,
+    climate: {
+      entity_id: 'climate.living_room',
+      state: 'heat_cool',
+      attributes: {
+        friendly_name: 'Living Room',
+        current_temperature: 72,
+        current_humidity: 45,
+        target_temp_low: 70,
+        target_temp_high: 75,
+        hvac_action: 'cooling',
+        hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+        preset_modes: ['Home', 'Away', 'Sleep'],
+        climate_mode: 'Home',
+        preset_mode: 'temp',
+        hold_end_time: '2026-07-18T23:00:00-04:00',
+      },
+    },
+    extra: [
+      ...homeSensorStates(homeSensorsRow(8)),
+      {
+        entity_id: 'sensor.air_quality_index',
+        state: '142',
+        attributes: { friendly_name: 'Air Quality', device_class: 'aqi' },
+      },
+      { entity_id: 'sensor.uv_index', state: '6', attributes: { friendly_name: 'UV Index' } },
+    ],
+  }),
+};
+
 const unavailable: Fixture = {
   label: 'Unavailable',
   config: { type: 'custom:ecosee-card', entity: 'climate.living_room' },
@@ -503,6 +601,8 @@ export const fixtures: Fixture[] = [
   ecobeeOff,
   ecobeeSensors,
   ecobeeAirQuality,
+  homeSensorsOne,
+  homeSensorsWorstCase,
   furnaceFilterOk,
   furnaceFilterOverdue,
   genericDegraded,

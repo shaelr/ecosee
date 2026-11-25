@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toSensorsModel } from '../src/sensors/sensors';
+import { toSensorsModel, toHomeSensors } from '../src/sensors/sensors';
 import type { EcoseeCardConfig } from '../src/config';
 import type { HassEntityBase, HomeAssistant } from '../src/types/hass';
 
@@ -446,5 +446,69 @@ describe('toSensorsModel — availability (gates the sub-screen)', () => {
       { ...baseConfig, sensors: [{ entity: 'sensor.hallway' }] },
     );
     expect(model.available).toBe(false);
+  });
+});
+
+describe('toHomeSensors — the Home Screen sensor row', () => {
+  const rooms = [
+    thermostat(72),
+    entity('sensor.hallway', '73', { friendly_name: 'Hallway' }),
+    entity('sensor.kitchen', '77', { friendly_name: 'Kitchen' }),
+    entity('sensor.garage', '64', { friendly_name: 'Garage' }),
+  ];
+
+  it('is empty when no sensor opts in (the Home Screen is unchanged)', () => {
+    expect(
+      toHomeSensors(hass(rooms), {
+        ...baseConfig,
+        sensors: [{ entity: 'sensor.hallway' }, { entity: 'sensor.kitchen', show_on_home: false }],
+      }),
+    ).toEqual([]);
+    expect(toHomeSensors(hass(rooms), baseConfig)).toEqual([]);
+  });
+
+  it('includes only sensors flagged show_on_home, in config order', () => {
+    const cards = toHomeSensors(hass(rooms), {
+      ...baseConfig,
+      sensors: [
+        { entity: 'sensor.kitchen', show_on_home: true },
+        { entity: 'sensor.hallway' },
+        { entity: 'sensor.garage', name: 'Shop', show_on_home: true },
+      ],
+    });
+    expect(cards.map((c) => [c.key, c.name, c.temp])).toEqual([
+      ['sensor.kitchen', 'Kitchen', 77],
+      ['sensor.garage', 'Shop', 64],
+    ]);
+  });
+
+  it('never includes the thermostat’s own card (the big number already shows it)', () => {
+    const cards = toHomeSensors(hass(rooms), {
+      ...baseConfig,
+      sensors: [{ entity: 'sensor.hallway', show_on_home: true }],
+    });
+    expect(cards.some((c) => c.isThermostat)).toBe(false);
+    expect(cards).toHaveLength(1);
+  });
+
+  it('drops a flagged sensor that is missing, unavailable, or non-numeric (ADR-0001)', () => {
+    const cards = toHomeSensors(
+      hass([
+        thermostat(72),
+        entity('sensor.hallway', 'unavailable'),
+        entity('sensor.kitchen', 'warm'),
+        entity('sensor.garage', '64'),
+      ]),
+      {
+        ...baseConfig,
+        sensors: [
+          { entity: 'sensor.hallway', show_on_home: true },
+          { entity: 'sensor.kitchen', show_on_home: true },
+          { entity: 'sensor.missing', show_on_home: true },
+          { entity: 'sensor.garage', show_on_home: true },
+        ],
+      },
+    );
+    expect(cards.map((c) => c.key)).toEqual(['sensor.garage']);
   });
 });

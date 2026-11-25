@@ -80,7 +80,8 @@ const SENSOR_ENTITY_FILTER: EntityFilter[] = [
  *  in the rendered schema, on the trailing "add a sensor" picker. */
 const SENSORS_HELPER =
   'Optional. Extra temperature entities for the Sensors sub-screen, hidden until you add one. ' +
-  'A display-name field and an optional occupancy-entity override sit beneath each sensor.';
+  'A display-name field, an optional occupancy-entity override and a "Show on Home Screen" ' +
+  'checkbox sit beneath each sensor.';
 
 /** Helper copy for the Comfort Setpoints block — on the base anchor field and,
  *  in the rendered schema, on the trailing "add a Comfort Setting" field. */
@@ -344,6 +345,17 @@ export function sensorOccupancyKey(entityId: string): string {
   return `${SENSOR_OCCUPANCY_PREFIX}${entityId}`;
 }
 
+/** Prefix for the synthetic per-sensor "Show on Home Screen" checkboxes, mirroring
+ *  SENSOR_NAME_PREFIX. Not a config key — `normalizeEditorConfig` folds these back
+ *  into `sensors[].show_on_home` (ADR-0019) and never writes the prefixed key into
+ *  the stored config. */
+export const SENSOR_HOME_PREFIX = 'sensor_home::';
+
+/** The form-data key carrying a sensor's Home Screen checkbox (prefix + its entity id). */
+export function sensorHomeKey(entityId: string): string {
+  return `${SENSOR_HOME_PREFIX}${entityId}`;
+}
+
 /** The entity filter for a sensor's occupancy-entity picker: a binary occupancy
  *  sensor. */
 const OCCUPANCY_ENTITY_FILTER: EntityFilter[] = [
@@ -388,6 +400,12 @@ export function sensorFields(config: Record<string, unknown>): EditorField[] {
         'Optional. Overrides the "Occupied" badge source for this sensor. Unset auto-pairs an ' +
         "occupancy binary_sensor sharing the sensor's device (e.g. ecobee remote sensors).",
       selector: { entity: { filter: OCCUPANCY_ENTITY_FILTER } },
+    });
+    fields.push({
+      name: sensorHomeKey(entity),
+      label: `Show on Home Screen — ${entity}`,
+      helper: 'Optional. Also shows this sensor in a small row beneath the main temperature.',
+      selector: { boolean: {} },
     });
   });
   // Trailing empty picker: choosing an entity here appends a new sensor row.
@@ -501,6 +519,7 @@ interface StoredSensor {
   entity: string;
   name?: string;
   occupancy_entity?: string;
+  show_on_home?: boolean;
 }
 
 /** Normalize a stored `sensors` value into `StoredSensor[]`, accepting shorthand
@@ -518,6 +537,7 @@ function readSensorObjects(value: unknown): StoredSensor[] {
       if (typeof item.name === 'string') sensor.name = item.name;
       if (typeof item.occupancy_entity === 'string')
         sensor.occupancy_entity = item.occupancy_entity;
+      if (item.show_on_home === true) sensor.show_on_home = true;
       out.push(sensor);
     }
   }
@@ -580,6 +600,8 @@ export function toEditorData(config: Record<string, unknown>): Record<string, un
       if (sensor.occupancy_entity !== undefined) {
         data[sensorOccupancyKey(sensor.entity)] = sensor.occupancy_entity;
       }
+      // Always set, so the checkbox renders its true state (unset ⇒ unchecked).
+      data[sensorHomeKey(sensor.entity)] = sensor.show_on_home === true;
     });
   }
   if (config.comfort_setpoints !== undefined) {
@@ -615,14 +637,14 @@ function readSensorPickerIds(formValue: Record<string, unknown>): string[] {
   return ids;
 }
 
-/** Fold the per-sensor entity pickers plus their display-name and occupancy-entity
- *  fields back into the config. An empty set drops the key (Sensors sub-screen
+/** Fold the per-sensor entity pickers plus their display-name, occupancy-entity and
+ *  Show-on-Home-Screen fields back into the config. An empty set drops the key (Sensors sub-screen
  *  hidden). For each selected sensor, its name and occupancy override come from
  *  their GUI fields (blank clears either → name defaults to the friendly name,
  *  occupancy defaults to the auto-paired sensor); when a field is absent from the
  *  form value we fall back to the stored value so nothing is silently lost. A
- *  sensor with neither a name nor an occupancy override collapses to a shorthand
- *  string. */
+ *  sensor with no name, no occupancy override and no Home Screen flag collapses to
+ *  a shorthand string. */
 function applySensors(
   next: Record<string, unknown>,
   prev: unknown,
@@ -649,10 +671,17 @@ function applySensors(
         ? typedOccupancy
         : undefined;
 
-    if (name === undefined && occupancy === undefined) return entity; // shorthand string
+    // Only a ticked box is written back — unticked drops the key rather than
+    // storing `false` (optional-config-key hygiene, same as every other toggle).
+    const homeKey = sensorHomeKey(entity);
+    const showOnHome =
+      (homeKey in formValue ? formValue[homeKey] : prevById.get(entity)?.show_on_home) === true;
+
+    if (name === undefined && occupancy === undefined && !showOnHome) return entity; // shorthand
     const object: StoredSensor = { entity };
     if (name !== undefined) object.name = name;
     if (occupancy !== undefined) object.occupancy_entity = occupancy;
+    if (showOnHome) object.show_on_home = true;
     return object;
   });
 }

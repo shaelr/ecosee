@@ -12,6 +12,12 @@ import { systemModeGlyph } from '../climate/system-mode';
 import type { CardShape } from '../config';
 import { icons, weatherIcon } from '../icons';
 import { renderShape, shapeStyles, equipmentClass } from '../styles/shape';
+import type { SensorCard } from '../sensors/sensors';
+
+/** The Home Screen sensor row's capacity: four chips per row, two rows at most
+ *  (ADR-0019). Past eight, the rest stay reachable on the Sensors screen. */
+const SENSORS_PER_ROW = 4;
+const MAX_HOME_SENSORS = SENSORS_PER_ROW * 2;
 
 /** Actions the Home Screen surfaces to the host card. `temperature` opens the
  *  Temperature Adjust overlay; `system-mode` / `weather` / `fan` / `menu` open later
@@ -55,6 +61,10 @@ export class EcoseeHomeScreen extends LitElement {
    *  `mode_color`). Absent ⇒ `false` — the indicator stays plain top-row white,
    *  unchanged from before this key existed. */
   @property({ attribute: false }) modeColor?: boolean;
+  /** The configured sensors opted into the Home Screen (`sensors[].show_on_home`,
+   *  ADR-0019), already degraded by `toHomeSensors`. Absent/empty ⇒ no sensor row,
+   *  and the Home Screen renders exactly as it did before the option existed. */
+  @property({ attribute: false }) sensors?: SensorCard[];
 
   static override styles = [
     // The shared superellipse surface (issue #76): positions the `.shape` SVG and
@@ -411,6 +421,60 @@ export class EcoseeHomeScreen extends LitElement {
         }
       }
 
+      /* The opt-in sensor row (sensors[].show_on_home, ADR-0019): a compact grid
+       of chips beneath the big number — reading on top, name beneath — four per
+       row, two rows at most. Stacked rather than an inline "Bedroom 70°" because
+       a fixed column width is what makes the row count (and so the space the
+       big number gives up, below) predictable from the sensor count alone; an
+       inline label's width would depend on each name's length. The reading is
+       a thin numeral, so it stays fixed white like .hum (ADR-0013's thin-numeral
+       correction); the name is ordinary copy and follows the theme text color. */
+      .sensors {
+        display: grid;
+        grid-template-columns: repeat(var(--ecosee-sensor-cols, 4), 21cqw);
+        justify-content: center;
+        gap: 1.4cqw 2cqw;
+      }
+      .sensor {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+        gap: 0.4cqw;
+        line-height: 1.1;
+        cursor: pointer;
+      }
+      .sensor-temp {
+        font-size: 6.4cqw;
+        font-weight: 300;
+        color: var(--ecosee-numeral, #ffffff);
+      }
+      .sensor-name {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 3.4cqw;
+        font-weight: 400;
+        color: var(--ecosee-text-muted, var(--ecosee-text, #f2f2f2));
+      }
+      /* Making room: the cluster's stack is fixed-size type, so the big number
+       is what gives up height while the row is present — less for one row,
+       more for two — and the cluster's own gaps tighten slightly. Without the
+       row (.with-sensors absent) none of this applies and the Home Screen is
+       unchanged. Sized so the tallest combination (two sensor rows + the
+       range pill with "until" + both foot gauges) still fits the canvas —
+       verified by screenshot, not just DOM measurement (ADR-0014's lesson). */
+      .cluster.with-sensors {
+        gap: 2cqw;
+      }
+      .cluster.with-sensors .temp {
+        font-size: 33cqw;
+      }
+      .cluster.with-sensors.two-rows .temp {
+        font-size: 23cqw;
+      }
+
       /* Setpoint ovals: one per active setpoint, matching the device — an amber
        Heat oval (♨ + temp) and a blue Cool oval (❄ + temp). Heat / Cool (Auto)
        shows both side by side (heat left, cool right); a single-setpoint mode
@@ -680,6 +744,53 @@ export class EcoseeHomeScreen extends LitElement {
     );
   }
 
+  /** The chips actually shown: the opted-in sensors, capped at two rows. Empty on
+   *  the unavailable shell — the row belongs with the live readout it sits under. */
+  private _homeSensors(view: HomeView): SensorCard[] {
+    if (!view.available) return [];
+    return (this.sensors ?? []).slice(0, MAX_HOME_SENSORS);
+  }
+
+  private _sensorClasses(view: HomeView): string {
+    const count = this._homeSensors(view).length;
+    if (count === 0) return '';
+    return count > SENSORS_PER_ROW ? 'with-sensors two-rows' : 'with-sensors';
+  }
+
+  /** The opt-in sensor row (ADR-0019). Each chip opens Home Assistant's own
+   *  more-info dialog for that sensor — the same `hass-more-info` event the
+   *  Sensors screen's cards fire — rather than any screen this Card renders. */
+  private _renderSensors(view: HomeView): TemplateResult | typeof nothing {
+    const sensors = this._homeSensors(view);
+    if (sensors.length === 0) return nothing;
+    const cols = Math.min(sensors.length, SENSORS_PER_ROW);
+    return html`
+      <div class="sensors" part="sensors" style="--ecosee-sensor-cols: ${cols}">
+        ${sensors.map((sensor) => {
+          const reading = `${formatTemp(sensor.temp, view.unit)}°`;
+          return html`<button
+            class="sensor"
+            aria-label="${sensor.name} ${reading}, show history"
+            @click=${() => this._showHistory(sensor)}
+          >
+            <span class="sensor-temp">${reading}</span>
+            <span class="sensor-name">${sensor.name}</span>
+          </button>`;
+        })}
+      </div>
+    `;
+  }
+
+  private _showHistory(sensor: SensorCard): void {
+    this.dispatchEvent(
+      new CustomEvent('hass-more-info', {
+        detail: { entityId: sensor.key },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   override render(): TemplateResult | typeof nothing {
     const view = this.view;
     if (!view) return nothing;
@@ -694,7 +805,7 @@ export class EcoseeHomeScreen extends LitElement {
         }
         ${this._renderTop(view)}
         <div class="body">
-          <div class="cluster">
+          <div class="cluster ${this._sensorClasses(view)}">
             ${
               view.available
                 ? html`
@@ -714,6 +825,7 @@ export class EcoseeHomeScreen extends LitElement {
                     >
                       ${formatTemp(view.currentTemp, view.unit)}
                     </button>
+                    ${this._renderSensors(view)}
                     ${view.resumeAvailable ? this._renderRange(view) : this._renderSetpoints(view)}
                   `
                 : html`<div class="unavailable">${view.name} unavailable</div>`

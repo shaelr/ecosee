@@ -17,7 +17,7 @@ import { toFurnaceFilterModel, setLastChangedDateCall } from './climate/furnace-
 import { toTabBarModel, TAB_SECTIONS, type TabBarModel, type TabTarget } from './menu/tab-bar';
 import { InactivityTimer, inactivityTimeoutMs, standbyReturnMs } from './overlays/inactivity-timer';
 import type { SystemSelectTarget } from './overlays/system-overlay';
-import { toSensorsModel } from './sensors/sensors';
+import { toSensorsModel, toHomeSensors } from './sensors/sensors';
 import {
   toWeatherModel,
   getForecastsCall,
@@ -915,6 +915,7 @@ export class EcoseeCard extends LitElement implements LovelaceCard {
                     .cornerStyle=${this._config.corner_style}
                     .equipmentGlow=${this._config.equipment_glow}
                     .modeColor=${this._config.mode_color}
+                    .sensors=${toHomeSensors(this.hass, this._config)}
                     @ecosee-action=${this._onAction}
                     @pointerdown=${this._onHomeActivity}
                     @mouseover=${this._onHomeActivity}

@@ -61,6 +61,24 @@ describe('parseConfig — sensors', () => {
       parseConfig({ ...base, sensors: [{ entity: 'sensor.hallway', occupancy_entity: 42 }] }),
     ).toThrow(/`sensors\[0\].occupancy_entity` must be a string/);
   });
+
+  it('accepts show_on_home as a boolean on the object form', () => {
+    const config = parseConfig({
+      ...base,
+      sensors: [
+        { entity: 'sensor.hallway', show_on_home: true },
+        { entity: 'sensor.kitchen', show_on_home: false },
+        'sensor.garage',
+      ],
+    });
+    expect(config.sensors?.map((s) => s.show_on_home)).toEqual([true, false, undefined]);
+  });
+
+  it('throws when show_on_home is not a boolean', () => {
+    expect(() =>
+      parseConfig({ ...base, sensors: [{ entity: 'sensor.hallway', show_on_home: 'yes' }] }),
+    ).toThrow(/`sensors\[0\].show_on_home` must be true or false/);
+  });
 });
 
 describe('parseConfig — comfort_setpoints', () => {

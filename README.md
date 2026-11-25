@@ -430,15 +430,16 @@ standby:
 `sensors` curates which temperature readings appear under the Sensors screen. The
 thermostat's own temperature is listed first automatically, so this is for the
 extra rooms you want alongside it. Each item is either a bare entity id or an
-object; `name` and `occupancy_entity` are both settable from the visual editor
-(each sensor's entity picker shows a name field and an occupancy-entity field
-beneath it) as well as in YAML.
+object; `name`, `occupancy_entity` and `show_on_home` are all settable from the
+visual editor (each sensor's entity picker shows a name field, an occupancy-entity
+field and a "Show on Home Screen" checkbox beneath it) as well as in YAML.
 
 | Field              | Required | Description                                                                                                                   |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `entity`           | yes      | A temperature entity (value in its state or `current_temperature`).                                                           |
 | `name`             | no       | Label override. Defaults to the entity's friendly name.                                                                       |
 | `occupancy_entity` | no       | A binary occupancy entity that backs an "Occupied" badge. Auto-detected for ecobee remote sensors; set this only to override. |
+| `show_on_home`     | no       | `true` to also show this sensor in a small row beneath the Home Screen's main temperature. Tap a reading to open its history. |
 
 Sensors that are missing, unavailable, or non-numeric are dropped. The
 "Occupied" / "Unoccupied" badge appears whenever an occupancy sensor can be found:
@@ -447,6 +448,18 @@ sensor to its temperature sensor because they share a device, so you get the bad
 with no extra config. Set `occupancy_entity` only to point at a specific binary
 sensor or to override that automatic pairing; a sensor with no occupancy source
 shows just its temperature.
+
+Sensors with `show_on_home: true` also appear on the Home Screen, in config order,
+as small readings beneath the big temperature (up to four per row, two rows at
+most — the first eight are shown). The big number shrinks to make room. The
+thermostat's own reading is never repeated there.
+
+```yaml
+sensors:
+  - entity: sensor.bedroom_temperature
+    show_on_home: true
+  - sensor.garage_temperature # Sensors screen only
+```
 
 Tapping a card opens Home Assistant's own more-info dialog for that entity —
 the same dialog you'd get tapping it anywhere else in your dashboard, History

@@ -147,3 +147,16 @@ export function toSensorsModel(hass: HomeAssistant, config: EcoseeCardConfig): S
   const cards = thermostat ? [thermostat, ...configured] : configured;
   return { unit, available: true, cards };
 }
+
+/** The Home Screen's compact sensor row (ADR-0019): each configured sensor that
+ *  opts in via `show_on_home`, in config order, degraded exactly like the Sensors
+ *  screen's own cards (missing / unavailable / non-numeric readings are dropped —
+ *  ADR-0001). The thermostat's own card is never included: the Home Screen's big
+ *  number already shows that reading. Empty ⇒ the row isn't rendered at all, so
+ *  the Home Screen is byte-for-byte unchanged for anyone who hasn't opted in. */
+export function toHomeSensors(hass: HomeAssistant, config: EcoseeCardConfig): SensorCard[] {
+  return (config.sensors ?? [])
+    .filter((sensor) => sensor.show_on_home === true)
+    .map((sensor) => toSensorCard(hass, sensor))
+    .filter((card): card is SensorCard => card !== null);
+}
